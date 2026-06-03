@@ -1,0 +1,177 @@
+{% extends "base_admin.html" %}
+{% load static %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+.chart-wrapper { position: relative; height: 260px; }
+.period-btn { padding:6px 14px; border-radius:20px; border:2px solid var(--cream); background:transparent; cursor:pointer; font-size:0.8rem; font-weight:600; color:var(--brown-mid); transition:all .2s; font-family:inherit; }
+.period-btn.active, .period-btn:hover { background:var(--brown-mid); color:var(--cream); border-color:var(--brown-mid); }
+.order-status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; }
+.dot-pending { background:#ffc107; }
+.dot-preparing { background:#0d6efd; }
+.dot-ready { background:#198754; }
+.dot-completed { background:#198754; }
+.dot-cancelled { background:#dc3545; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Stats Grid -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-label">Today's Sales</div>
+    <div class="stat-value">₱{{ daily_sales|floatformat:2 }}</div>
+    <div class="stat-sub">{{ daily_orders }} order{{ daily_orders|pluralize }} today</div>
+    <div class="stat-icon">☀️</div>
+  </div>
+  <div class="stat-card green">
+    <div class="stat-label">Weekly Sales</div>
+    <div class="stat-value">₱{{ weekly_sales|floatformat:2 }}</div>
+    <div class="stat-sub">{{ weekly_orders }} order{{ weekly_orders|pluralize }} this week</div>
+    <div class="stat-icon">📅</div>
+  </div>
+  <div class="stat-card blue">
+    <div class="stat-label">Monthly Sales</div>
+    <div class="stat-value">₱{{ monthly_sales|floatformat:2 }}</div>
+    <div class="stat-sub">{{ monthly_orders }} order{{ monthly_orders|pluralize }} this month</div>
+    <div class="stat-icon">📆</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total Revenue</div>
+    <div class="stat-value">₱{{ total_sales|floatformat:2 }}</div>
+    <div class="stat-sub">{{ total_orders }} total orders</div>
+    <div class="stat-icon">💰</div>
+  </div>
+</div>
+
+<!-- Quick Actions -->
+<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px">
+  <a href="{% url 'orders:pos' %}" class="btn btn-caramel"><span>🖥️</span> Open POS</a>
+  <a href="{% url 'orders:order_list' %}" class="btn btn-primary">
+    📋 Orders
+    {% if pending_count %}<span class="badge badge-pending" style="margin-left:4px">{{ pending_count }} pending</span>{% endif %}
+  </a>
+  {% if user.is_admin_user %}
+  <a href="{% url 'menu:product_create' %}" class="btn btn-outline">+ Add Product</a>
+  <a href="{% url 'reports:index' %}" class="btn btn-outline">📈 Reports</a>
+  {% endif %}
+</div>
+
+<!-- Charts + Recent Orders -->
+<div style="display:grid;grid-template-columns:1fr 360px;gap:24px;margin-bottom:24px">
+  <!-- Sales Chart -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Sales Overview</h3>
+      <div style="display:flex;gap:6px">
+        <button class="period-btn active" onclick="loadChart('week',this)">Week</button>
+        <button class="period-btn" onclick="loadChart('month',this)">Month</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="chart-wrapper">
+        <canvas id="sales-chart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Products -->
+  <div class="card">
+    <div class="card-header"><h3>🏆 Top Products</h3></div>
+    <div class="card-body" style="padding:0">
+      {% for p in top_products %}
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid var(--cream)">
+        <div>
+          <div style="font-weight:600;font-size:0.88rem">{{ p.product_name }}</div>
+          <div style="font-size:0.75rem;color:#aaa">{{ p.total_qty }} sold</div>
+        </div>
+        <div style="font-weight:700;color:var(--caramel)">₱{{ p.total_revenue|floatformat:2 }}</div>
+      </div>
+      {% empty %}
+      <div class="empty-state" style="padding:32px"><p>No sales data yet</p></div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Recent Orders + Low Stock -->
+<div style="display:grid;grid-template-columns:1fr 320px;gap:24px">
+  <!-- Recent Orders -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Recent Orders</h3>
+      <a href="{% url 'orders:order_list' %}" class="btn btn-sm btn-outline">View All</a>
+    </div>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr><th>Order #</th><th>Customer</th><th>Type</th><th>Total</th><th>Status</th><th>Time</th></tr>
+        </thead>
+        <tbody>
+          {% for order in recent_orders %}
+          <tr>
+            <td><a href="{% url 'orders:order_detail' order.pk %}" style="font-weight:700;color:var(--caramel)">{{ order.order_number }}</a></td>
+            <td>{{ order.customer_name }}</td>
+            <td><span class="badge badge-preparing">{{ order.get_order_type_display }}</span></td>
+            <td style="font-weight:700">₱{{ order.total|floatformat:2 }}</td>
+            <td>
+              <span class="badge badge-{{ order.status }}">
+                <span class="order-status-dot dot-{{ order.status }}"></span>
+                {{ order.get_status_display }}
+              </span>
+            </td>
+            <td style="color:#aaa;font-size:0.8rem">{{ order.created_at|timesince }} ago</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" style="text-align:center;color:#aaa;padding:32px">No orders yet</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Low Stock -->
+  <div class="card">
+    <div class="card-header">
+      <h3>⚠️ Low Stock</h3>
+      <a href="{% url 'inventory:list' %}" class="btn btn-sm btn-outline">Inventory</a>
+    </div>
+    <div class="card-body" style="padding:0">
+      {% for product in low_stock %}
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid var(--cream)">
+        <div>
+          <div style="font-weight:600;font-size:0.85rem">{{ product.name }}</div>
+          <div style="font-size:0.75rem;color:#aaa">{{ product.category.name }}</div>
+        </div>
+        <span class="badge {% if product.stock_quantity <= 5 %}badge-cancelled{% else %}badge-pending{% endif %}">
+          {{ product.stock_quantity }} left
+        </span>
+      </div>
+      {% empty %}
+      <div class="empty-state" style="padding:32px"><div class="empty-icon">✅</div><p>All items well-stocked</p></div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script>
+  // Initialize chart with server data
+  const labels = {{ chart_labels|safe }};
+  const data = {{ chart_data|safe }};
+  initSalesChart(labels, data);
+
+  async function loadChart(period, btn) {
+    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const r = await fetch(`/dashboard/chart-data/?period=${period}`);
+    const d = await r.json();
+    const canvas = document.getElementById('sales-chart');
+    if (canvas._chart) canvas._chart.destroy();
+    initSalesChart(d.labels, d.data);
+  }
+</script>
+{% endblock %}

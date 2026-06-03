@@ -1,0 +1,40 @@
+{% extends "base_admin.html" %}
+{% block page_title %}Staff Accounts{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div><h1 class="page-title">Staff Accounts</h1><p class="page-subtitle">Manage your team</p></div>
+  <a href="{% url 'accounts:staff_create' %}" class="btn btn-primary">+ Add Staff</a>
+</div>
+<div class="card">
+  <div class="table-wrapper">
+    <table>
+      <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Email</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for member in staff %}
+        <tr>
+          <td>{{ member.get_full_name|default:member.username }}</td>
+          <td>{{ member.username }}</td>
+          <td><span class="badge {% if member.role == 'admin' %}badge-ready{% else %}badge-preparing{% endif %}">{{ member.get_role_display }}</span></td>
+          <td>{{ member.email|default:"—" }}</td>
+          <td><span class="badge {% if member.is_active %}badge-paid{% else %}badge-cancelled{% endif %}">{% if member.is_active %}Active{% else %}Inactive{% endif %}</span></td>
+          <td>
+            <button onclick="toggleStaff({{ member.pk }})" class="btn btn-sm btn-outline">Toggle</button>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" style="text-align:center;color:#aaa;padding:32px">No staff accounts yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+async function toggleStaff(id) {
+  const r = await fetch(`/accounts/staff/${id}/toggle/`, {method:'POST',headers:{'X-CSRFToken':'{{ csrf_token }}'}});
+  const d = await r.json();
+  if(d.success){showToast(`Staff ${d.status}`, 'success'); setTimeout(()=>location.reload(),1000);}
+}
+</script>
+{% endblock %}

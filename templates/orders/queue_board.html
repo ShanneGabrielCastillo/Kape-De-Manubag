@@ -1,0 +1,263 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Order Queue — Kape De Manubag</title>
+  <link rel="icon" type="image/svg+xml" href="{% static 'images/favicon.svg' %}">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Sans:wght@400;600;700&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #1a0f0a;
+      --surface:   #2c1810;
+      --surface2:  #3a2218;
+      --gold:      #d4a853;
+      --orange:    #FF8C00;
+      --green:     #00C851;
+      --text:      #fefcf8;
+      --muted:     rgba(255,255,255,0.5);
+      --radius:    12px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      overflow: hidden;
+    }
+
+    .board-layout {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* ── Header ── */
+    .board-header {
+      background: var(--surface);
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px solid rgba(212,168,83,0.3);
+      flex-shrink: 0;
+    }
+    .board-brand {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.4rem;
+      color: var(--gold);
+    }
+    .board-brand span { font-size: 0.8rem; color: var(--muted); display: block; font-family: 'DM Sans', sans-serif; font-weight: 400; }
+    .waiting-badge {
+      background: rgba(212,168,83,0.15);
+      border: 1px solid rgba(212,168,83,0.4);
+      color: var(--gold);
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 0.9rem;
+      font-weight: 700;
+    }
+    .board-clock {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--text);
+      font-family: 'Playfair Display', serif;
+      min-width: 110px;
+      text-align: right;
+    }
+
+    /* ── Grid ── */
+    .board-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .board-column {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding: 20px;
+    }
+    .board-column.preparing { border-right: 2px solid rgba(255,140,0,0.2); }
+
+    .column-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid rgba(255,255,255,0.08);
+      flex-shrink: 0;
+    }
+    .column-title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      font-family: 'Playfair Display', serif;
+    }
+    .preparing .column-title { color: var(--orange); }
+    .ready     .column-title { color: var(--green); }
+    .column-count {
+      font-size: 0.8rem;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 20px;
+    }
+    .preparing .column-count { background: rgba(255,140,0,0.15); color: var(--orange); }
+    .ready     .column-count { background: rgba(0,200,81,0.15);  color: var(--green); }
+
+    /* ── Tiles ── */
+    .order-tiles {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 12px;
+      overflow-y: auto;
+      align-content: start;
+    }
+    .order-tile {
+      border-radius: var(--radius);
+      padding: 16px 12px;
+      text-align: center;
+      transition: transform 0.2s;
+    }
+    .preparing-tile {
+      background: rgba(255,140,0,0.1);
+      border: 2px solid rgba(255,140,0,0.35);
+    }
+    .ready-tile {
+      background: rgba(0,200,81,0.1);
+      border: 2px solid rgba(0,200,81,0.35);
+    }
+    .tile-number {
+      font-size: 2.8rem;
+      font-weight: 700;
+      font-family: 'Playfair Display', serif;
+      line-height: 1;
+    }
+    .preparing-tile .tile-number { color: var(--orange); }
+    .ready-tile     .tile-number { color: var(--green); }
+    .tile-name {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-top: 6px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tile-type {
+      font-size: 0.68rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .tile-new-ready {
+      animation: newReadyFlash 0.5s ease 4;
+    }
+    @keyframes newReadyFlash {
+      0%, 100% { filter: brightness(1); }
+      50%       { filter: brightness(1.6); }
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .empty-state .empty-icon { font-size: 2.5rem; margin-bottom: 10px; opacity: 0.4; }
+
+    /* ── Ticker ── */
+    .board-ticker {
+      background: var(--surface);
+      border-top: 1px solid rgba(255,255,255,0.06);
+      padding: 8px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+<div class="board-layout">
+
+  <!-- Header -->
+  <div class="board-header">
+    <div class="board-brand">
+      ☕ Kape De Manubag
+      <span>Order Queue Display</span>
+    </div>
+    <div id="waiting-count-badge" class="waiting-badge">⏳ Loading...</div>
+    <div class="board-clock" id="board-clock">--:-- --</div>
+  </div>
+
+  <!-- Grid -->
+  <div class="board-grid">
+
+    <!-- Preparing Column -->
+    <div class="board-column preparing">
+      <div class="column-header">
+        <div class="column-title">🍳 Now Preparing</div>
+        <div class="column-count"><span id="preparing-count">0</span> orders</div>
+      </div>
+      <div class="order-tiles" id="preparing-tiles">
+        {% for order in preparing_orders %}
+        <div class="order-tile preparing-tile">
+          <div class="tile-number">#{{ order.queue_number }}</div>
+          <div class="tile-name">{{ order.customer_name|truncatechars:12 }}</div>
+          <div class="tile-type">{% if order.order_type == 'dine_in' %}Dine-In{% else %}Take-Out{% endif %}</div>
+        </div>
+        {% empty %}
+        <div class="empty-state"><div class="empty-icon">🍳</div><p>No orders preparing</p></div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Ready Column -->
+    <div class="board-column ready">
+      <div class="column-header">
+        <div class="column-title">✅ Ready for Pickup</div>
+        <div class="column-count"><span id="ready-count">0</span> orders</div>
+      </div>
+      <div class="order-tiles" id="ready-tiles">
+        {% for order in ready_orders %}
+        <div class="order-tile ready-tile">
+          <div class="tile-number">#{{ order.queue_number }}</div>
+          <div class="tile-name">{{ order.customer_name|truncatechars:12 }}</div>
+          <div class="tile-type">{% if order.order_type == 'dine_in' %}Dine-In{% else %}Take-Out{% endif %}</div>
+        </div>
+        {% empty %}
+        <div class="empty-state"><div class="empty-icon">✅</div><p>No orders ready yet</p></div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Ticker -->
+  <div class="board-ticker">
+    <span>🔄 Auto-refreshes every 5 seconds</span>
+    <span id="last-updated-text">Loading...</span>
+  </div>
+
+</div>
+
+<script>
+window.BOARD_CONFIG = {
+  apiUrl:       '/orders/api/queue-board/',
+  pollInterval: 5000,
+};
+</script>
+<script src="{% static 'js/queue_board.js' %}"></script>
+</body>
+</html>

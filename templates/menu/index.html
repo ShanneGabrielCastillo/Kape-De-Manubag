@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Menu — Kape De Manubag{% endblock %}
+
+{% block body %}
+<!-- Navigation -->
+<nav style="background:var(--cream-white);padding:0 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid var(--cream);position:sticky;top:0;z-index:50;height:56px">
+  <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:1rem;color:var(--brown-dark)">☕ Kape De Manubag</div>
+  <div style="display:flex;align-items:center;gap:12px">
+    {% if user.is_authenticated %}
+      <a href="{% url 'dashboard:index' %}" class="btn btn-sm btn-outline">Dashboard</a>
+    {% else %}
+      <a href="{% url 'accounts:login' %}" class="btn btn-sm btn-outline">Staff Login</a>
+    {% endif %}
+    <a href="{% url 'orders:cart' %}" class="cart-fab" style="position:relative;width:42px;height:42px;font-size:1.1rem;bottom:unset;right:unset;box-shadow:var(--shadow)">
+      🛒
+      {% if cart_count %}<span class="badge-count">{{ cart_count }}</span>{% endif %}
+    </a>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div class="menu-hero">
+  <h1>Our Menu</h1>
+  <p>Fresh brewed coffee, milk teas, meals & more</p>
+</div>
+
+<!-- Category Filter Nav -->
+<div class="menu-nav">
+  <div class="menu-nav-inner">
+    <button class="menu-cat-btn active" data-cat="all">🍽️ All</button>
+    {% for cat in categories %}
+    <button class="menu-cat-btn" data-cat="{{ cat.slug }}">{{ cat.icon }} {{ cat.name }}</button>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Menu Content -->
+<div class="menu-container">
+  <!-- Search -->
+  <div class="menu-search-bar">
+    <input type="text" id="menu-search" class="menu-search-input" placeholder="🔍 Search menu...">
+  </div>
+
+  {% for cat in categories %}
+    {% with cat_products=cat.products.all %}
+    {% if cat_products %}
+    <div class="menu-section" data-cat="{{ cat.slug }}" id="cat-{{ cat.slug }}">
+      <h2 class="menu-section-title">{{ cat.icon }} {{ cat.name }}</h2>
+      <div class="products-grid">
+        {% for product in cat_products %}
+        {% if product.is_available %}
+        <div class="product-col">
+          <div class="product-card">
+            <div class="product-card-img">
+              {% if product.image %}<img src="{{ product.image.url }}" alt="{{ product.name }}" loading="lazy">{% else %}<span>{{ cat.icon }}</span>{% endif %}
+            </div>
+            <div class="product-card-body">
+              <div class="product-card-name">{{ product.name }}</div>
+              {% if product.description %}<div class="product-card-cat">{{ product.description|truncatechars:60 }}</div>{% endif %}
+              {% if product.has_sizes %}
+              <div style="margin-top:8px">
+                <select class="form-control size-selector" id="size-select-{{ product.pk }}" data-product-id="{{ product.pk }}" style="font-size:0.8rem;padding:6px 10px">
+                  <option value="none">Regular — ₱{{ product.price }}</option>
+                  {% if product.price_medium %}<option value="medium">Medium — ₱{{ product.price_medium }}</option>{% endif %}
+                  {% if product.price_large %}<option value="large">Large — ₱{{ product.price_large }}</option>{% endif %}
+                  {% if product.price_hot %}<option value="hot">Hot — ₱{{ product.price_hot }}</option>{% endif %}
+                </select>
+              </div>
+              {% endif %}
+            </div>
+            <div class="product-card-footer">
+              <span class="product-price" id="price-{{ product.pk }}">₱{{ product.price }}</span>
+              <form class="add-to-cart-form" action="{% url 'orders:add_to_cart' product.pk %}" method="post" style="display:inline">
+                {% csrf_token %}
+                <input type="hidden" name="quantity" value="1">
+                <input type="hidden" name="size" id="size-input-{{ product.pk }}" value="none">
+                {% if product.stock_quantity == 0 %}
+                <button type="button" class="add-btn" disabled style="background:#ccc;cursor:not-allowed" title="Out of stock">✕</button>
+                {% else %}
+                <button type="submit" class="add-btn" title="Add to cart">+</button>
+                {% endif %}
+              </form>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    {% endwith %}
+  {% empty %}
+  <div class="empty-state"><div class="empty-icon">☕</div><p>Menu is being updated. Check back soon!</p></div>
+  {% endfor %}
+</div>
+
+<!-- Floating Cart Button -->
+{% if cart_count %}
+<a href="{% url 'orders:cart' %}" class="cart-fab">
+  🛒
+  <span class="badge-count">{{ cart_count }}</span>
+</a>
+{% endif %}
+
+{% if messages %}
+<div class="messages-container">
+  {% for message in messages %}
+  <div class="alert alert-{{ message.tags }}">{{ message }}<button class="alert-dismiss">×</button></div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<script src="{% static 'js/main.js' %}"></script>
+<script>
+// Sync size selector with hidden input
+document.querySelectorAll('.size-selector').forEach(sel => {
+  sel.addEventListener('change', function() {
+    const productId = this.dataset.productId;
+    const sizeInput = document.getElementById(`size-input-${productId}`);
+    if (sizeInput) sizeInput.value = this.value;
+  });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,92 @@
+{% extends "base_admin.html" %}
+{% block page_title %}System Settings{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">System Settings</h1>
+    <p class="page-subtitle">Configure store-wide values like fees and thresholds</p>
+  </div>
+</div>
+
+{% if messages %}
+<div style="margin-bottom:20px">
+  {% for message in messages %}
+  <div class="alert alert-{{ message.tags }}">
+    {{ message }}
+    <button class="alert-dismiss">×</button>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<form method="post">
+  {% csrf_token %}
+  <div class="card" style="max-width:680px">
+    <div class="card-header">
+      <h3>⚙️ Configurable Settings</h3>
+    </div>
+    <div class="card-body" style="padding:0">
+
+      {% for setting in settings_list %}
+      <div style="padding:20px 24px;border-bottom:1px solid var(--cream);display:grid;grid-template-columns:1fr 180px;gap:20px;align-items:start">
+        <div>
+          <div style="font-weight:700;font-size:0.95rem;color:var(--brown-dark);margin-bottom:4px">
+            {% if setting.key == 'PACKAGING_FEE_PER_ITEM' %}
+              📦 Take-Out Packaging Fee
+            {% else %}
+              {{ setting.key }}
+            {% endif %}
+          </div>
+          {% if setting.description %}
+          <div style="font-size:0.8rem;color:#999;line-height:1.5">{{ setting.description }}</div>
+          {% endif %}
+          <div style="font-size:0.75rem;color:#bbb;margin-top:4px">Key: <code style="background:var(--cream);padding:1px 5px;border-radius:3px">{{ setting.key }}</code></div>
+        </div>
+        <div>
+          <label class="form-label" style="font-size:0.75rem">
+            {% if setting.key == 'PACKAGING_FEE_PER_ITEM' %}Value (₱){% else %}Value{% endif %}
+          </label>
+          <input
+            type="{% if setting.key == 'PACKAGING_FEE_PER_ITEM' %}number{% else %}text{% endif %}"
+            name="value_{{ setting.key }}"
+            value="{{ setting.value }}"
+            class="form-control"
+            {% if setting.key == 'PACKAGING_FEE_PER_ITEM' %}
+              step="0.01" min="0" placeholder="e.g. 6.00"
+            {% endif %}
+            required
+          >
+          <div style="font-size:0.72rem;color:#bbb;margin-top:4px">
+            Last updated: {{ setting.updated_at|date:"M d, Y g:i A" }}
+          </div>
+        </div>
+      </div>
+      {% empty %}
+      <div style="padding:40px;text-align:center;color:#aaa">
+        <div style="font-size:2rem;margin-bottom:8px">⚙️</div>
+        <p>No settings found. Run the seed script to initialize defaults.</p>
+      </div>
+      {% endfor %}
+
+    </div>
+    {% if settings_list %}
+    <div style="padding:16px 24px;border-top:2px solid var(--cream);display:flex;justify-content:flex-end;gap:12px">
+      <a href="{% url 'dashboard:index' %}" class="btn btn-outline">Cancel</a>
+      <button type="submit" class="btn btn-primary">💾 Save Changes</button>
+    </div>
+    {% endif %}
+  </div>
+</form>
+
+<div class="card" style="max-width:680px;margin-top:24px">
+  <div class="card-header"><h3>ℹ️ How Settings Work</h3></div>
+  <div class="card-body" style="font-size:0.88rem;color:#666;line-height:1.8">
+    <ul style="padding-left:20px">
+      <li><strong>Take-Out Packaging Fee</strong> — charged per eligible meal item (Burgers, Combos, Pastil, Snacks, Appetizers, Ala Carte) when a customer or cashier selects Take-Out. Beverages (Coffee, Milk Tea, Non-Coffee Drinks) are exempt.</li>
+      <li>Changes take effect immediately on the next order placed.</li>
+      <li>To mark a category as packaging-eligible, go to <a href="{% url 'menu:category_list' %}">Categories</a> and edit the category.</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}

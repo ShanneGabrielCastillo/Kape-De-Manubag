@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Order Placed! — Kape De Manubag{% endblock %}
+
+{% block body %}
+<div style="min-height:100vh;background:var(--cream-light);display:flex;align-items:center;justify-content:center;padding:20px">
+  <div class="success-page" style="max-width:560px;width:100%">
+    <div class="success-icon">✅</div>
+    <h1 class="success-number">Order Placed!</h1>
+    <div class="card" style="margin:24px 0;text-align:left">
+      <div class="card-body">
+        <div style="text-align:center;margin-bottom:20px">
+          <div style="font-size:0.85rem;color:#aaa">Order Number</div>
+          <div style="font-size:2rem;font-family:'Playfair Display',serif;font-weight:700;color:var(--caramel)">{{ order.order_number }}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+          <div style="background:var(--cream);border-radius:8px;padding:12px">
+            <div style="font-size:0.75rem;color:#aaa;font-weight:700;text-transform:uppercase">Customer</div>
+            <div style="font-weight:600">{{ order.customer_name }}</div>
+          </div>
+          <div style="background:var(--cream);border-radius:8px;padding:12px">
+            <div style="font-size:0.75rem;color:#aaa;font-weight:700;text-transform:uppercase">Order Type</div>
+            <div style="font-weight:600">{{ order.get_order_type_display }}</div>
+          </div>
+          {% if order.table_number %}
+          <div style="background:var(--cream);border-radius:8px;padding:12px">
+            <div style="font-size:0.75rem;color:#aaa;font-weight:700;text-transform:uppercase">Table</div>
+            <div style="font-weight:600">Table {{ order.table_number }}</div>
+          </div>
+          {% endif %}
+          <div style="background:var(--cream);border-radius:8px;padding:12px">
+            <div style="font-size:0.75rem;color:#aaa;font-weight:700;text-transform:uppercase">Total</div>
+            <div style="font-weight:700;color:var(--caramel)">₱{{ order.total|floatformat:2 }}</div>
+          </div>
+        </div>
+        <div style="border-top:2px solid var(--cream);padding-top:16px">
+          {% for item in order.items.all %}
+          <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:0.9rem">
+            <span>{{ item.quantity }}× {{ item.product_name }}{% if item.size != 'none' %} ({{ item.get_size_display }}){% endif %}</span>
+            <span style="font-weight:600">₱{{ item.subtotal|floatformat:2 }}</span>
+          </div>
+          {% endfor %}
+          {% if order.packaging_fee and order.packaging_fee > 0 %}
+          <div style="display:flex;justify-content:space-between;font-size:0.88rem;padding:6px 0;color:#888">
+            <span>📦 Packaging Fee</span>
+            <span>₱{{ order.packaging_fee|floatformat:2 }}</span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <p style="color:#888;font-size:0.9rem;margin-bottom:24px">
+      🎉 Your order has been received! Please wait while we prepare it. Payment will be collected at the counter.
+    </p>
+    <div style="margin:0 0 20px">
+      <a href="{% url 'orders:order_tracker' order.order_number %}" class="btn btn-caramel btn-block btn-lg">📱 Track Your Order Live</a>
+      <p style="font-size:0.75rem;color:#aaa;text-align:center;margin-top:8px">Auto-refreshes — no need to reload</p>
+    </div>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+      <a href="{% url 'menu:index' %}" class="btn btn-primary">Order More</a>
+    </div>
+  </div>
+</div>
+<script src="{% static 'js/main.js' %}"></script>
+{% endblock %}

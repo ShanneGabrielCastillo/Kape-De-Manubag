@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block body %}
+<div class="app-layout">
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-name">☕ Kape De Manubag</span>
+      <span class="brand-sub">Management System</span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section-title">Overview</div>
+      <a href="{% url 'dashboard:index' %}" class="sidebar-link {% if request.resolver_match.app_name == 'dashboard' %}active{% endif %}">
+        <span class="nav-icon">📊</span> Dashboard
+      </a>
+
+      <div class="nav-section-title">Orders</div>
+      <a href="{% url 'orders:order_list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'orders' and 'pos' not in request.path %}active{% endif %}">
+        <span class="nav-icon">📋</span> Order Management
+        {% with count=pending_count %}{% if count %}<span class="badge badge-pending" style="margin-left:auto">{{ count }}</span>{% endif %}{% endwith %}
+      </a>
+      <a href="{% url 'orders:pos' %}" class="sidebar-link {% if 'pos' in request.path %}active{% endif %}">
+        <span class="nav-icon">🖥️</span> POS Terminal
+      </a>
+
+      {% if user.is_admin_user %}
+      <div class="nav-section-title">Menu</div>
+      <a href="{% url 'menu:product_list' %}" class="sidebar-link">
+        <span class="nav-icon">🍽️</span> Products
+      </a>
+      <a href="{% url 'menu:category_list' %}" class="sidebar-link">
+        <span class="nav-icon">🏷️</span> Categories
+      </a>
+
+      <div class="nav-section-title">Stock & Reports</div>
+      <a href="{% url 'inventory:list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'inventory' %}active{% endif %}">
+        <span class="nav-icon">📦</span> Inventory
+      </a>
+      <a href="{% url 'reports:index' %}" class="sidebar-link {% if request.resolver_match.app_name == 'reports' %}active{% endif %}">
+        <span class="nav-icon">📈</span> Sales Reports
+      </a>
+      <a href="{% url 'accounts:staff_list' %}" class="sidebar-link {% if 'staff' in request.path %}active{% endif %}">
+        <span class="nav-icon">👥</span> Staff Accounts
+      </a>
+
+      <div class="nav-section-title">System</div>
+      <a href="{% url 'dashboard:system_settings' %}" class="sidebar-link {% if 'settings' in request.path %}active{% endif %}">
+        <span class="nav-icon">⚙️</span> Settings
+      </a>
+      {% endif %}
+
+      <div class="nav-section-title">Store</div>
+      <a href="{% url 'menu:index' %}" class="sidebar-link" target="_blank">
+        <span class="nav-icon">🛒</span> Customer Menu
+      </a>
+      <a href="{% url 'orders:queue_board' %}" class="sidebar-link" target="_blank">
+        <span class="nav-icon">📺</span> Queue Board
+      </a>
+    </nav>
+
+    <div class="sidebar-user">
+      <div class="user-avatar">
+        {% if user.profile_image %}<img src="{{ user.profile_image.url }}" alt="">{% else %}{{ user.first_name|first|upper|default:user.username|first|upper }}{% endif %}
+      </div>
+      <div class="user-info">
+        <div class="user-name">{{ user.get_full_name|default:user.username }}</div>
+        <div class="user-role">{{ user.get_role_display }}</div>
+      </div>
+      <a href="{% url 'accounts:logout' %}" style="margin-left:auto;color:rgba(255,255,255,0.4);font-size:1.1rem;text-decoration:none" title="Logout">⏻</a>
+    </div>
+  </aside>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <!-- Topbar -->
+    <header class="topbar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button id="sidebar-toggle" aria-label="Toggle sidebar">☰</button>
+        <span class="topbar-title">{% block page_title %}Dashboard{% endblock %}</span>
+      </div>
+      <div class="topbar-actions">
+        <a href="{% url 'orders:order_list' %}" style="color:var(--brown-mid);font-size:1.2rem;text-decoration:none" title="Orders">📋</a>
+        <a href="{% url 'accounts:profile' %}" style="color:var(--brown-mid);font-size:1.2rem;text-decoration:none" title="Profile">👤</a>
+      </div>
+    </header>
+
+    <div class="page-content">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+</div>
+{% endblock %}

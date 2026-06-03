@@ -1,0 +1,82 @@
+{% extends "base_admin.html" %}
+{% block page_title %}Products{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div><h1 class="page-title">Products</h1><p class="page-subtitle">Manage your menu items</p></div>
+  <a href="{% url 'menu:product_create' %}" class="btn btn-primary">+ Add Product</a>
+</div>
+
+<div class="filter-bar">
+  <form method="get" style="display:flex;gap:10px;flex-wrap:wrap">
+    <input type="text" name="q" value="{{ search }}" placeholder="Search products..." class="form-control">
+    <select name="category" class="form-control form-select">
+      <option value="">All Categories</option>
+      {% for cat in categories %}
+      <option value="{{ cat.slug }}" {% if category_filter == cat.slug %}selected{% endif %}>{{ cat.name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-primary">Filter</button>
+    <a href="{% url 'menu:product_list' %}" class="btn btn-outline">Clear</a>
+  </form>
+</div>
+
+<div class="card">
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for product in products %}
+        <tr>
+          <td>
+            <div style="display:flex;align-items:center;gap:12px">
+              <div style="width:40px;height:40px;border-radius:8px;background:var(--cream);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.2rem">
+                {% if product.image %}<img src="{{ product.image.url }}" alt="" style="width:100%;height:100%;object-fit:cover">{% else %}{{ product.category.icon }}{% endif %}
+              </div>
+              <div>
+                <div style="font-weight:700">{{ product.name }}</div>
+                {% if product.description %}<div style="font-size:0.75rem;color:#aaa">{{ product.description|truncatechars:50 }}</div>{% endif %}
+              </div>
+            </div>
+          </td>
+          <td>{{ product.category.name }}</td>
+          <td style="font-weight:700;color:var(--caramel)">₱{{ product.price }}</td>
+          <td>
+            <span class="stock-indicator {% if product.stock_quantity <= 5 %}stock-critical{% elif product.stock_quantity <= 10 %}stock-low{% else %}stock-ok{% endif %}">
+              {{ product.stock_quantity }}
+            </span>
+          </td>
+          <td>
+            <span class="badge {% if product.is_available %}badge-ready{% else %}badge-cancelled{% endif %} toggle-product-btn"
+                  data-product-id="{{ product.pk }}" style="cursor:pointer" title="Click to toggle">
+              {% if product.is_available %}Available{% else %}Unavailable{% endif %}
+            </span>
+          </td>
+          <td>
+            <div style="display:flex;gap:6px">
+              <a href="{% url 'menu:product_edit' product.pk %}" class="btn btn-sm btn-outline">Edit</a>
+              <a href="{% url 'inventory:restock' product.pk %}" class="btn btn-sm btn-outline">Stock</a>
+              <button class="btn btn-sm btn-danger delete-btn" data-id="{{ product.pk }}" data-name="{{ product.name }}"
+                onclick="confirmDelete('{% url 'menu:product_delete' product.pk %}','{{ product.name }}')">Delete</button>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" style="text-align:center;color:#aaa;padding:40px">No products found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+async function confirmDelete(url, name) {
+  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  const r = await fetch(url, {method:'POST',headers:{'X-CSRFToken':'{{ csrf_token }}'}});
+  const d = await r.json();
+  if(d.success){showToast('Product deleted','success');setTimeout(()=>location.reload(),800);}
+}
+</script>
+{% endblock %}

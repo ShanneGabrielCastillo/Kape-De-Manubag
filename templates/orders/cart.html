@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Cart — Kape De Manubag{% endblock %}
+
+{% block body %}
+<nav style="background:var(--cream-white);padding:0 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid var(--cream);height:56px;position:sticky;top:0;z-index:50">
+  <a href="{% url 'menu:index' %}" style="font-family:'Playfair Display',serif;font-weight:700;color:var(--brown-dark)">☕ Kape De Manubag</a>
+  <a href="{% url 'menu:index' %}" class="btn btn-sm btn-outline">← Continue Shopping</a>
+</nav>
+
+<div class="cart-page">
+  <div class="cart-header">
+    <h1 style="font-size:1.8rem">🛒 Your Cart</h1>
+    <p class="text-muted">{{ items|length }} item{{ items|length|pluralize }}</p>
+  </div>
+
+  {% if items %}
+  <div class="card">
+    <div class="card-body" style="padding:0 24px">
+      {% for item in items %}
+      <div class="cart-item-row">
+        <div class="cart-item-img">
+          {% if item.product.image %}<img src="{{ item.product.image.url }}" alt="">{% else %}<span>{{ item.product.category.icon }}</span>{% endif %}
+        </div>
+        <div class="cart-item-info">
+          <div class="cart-item-name">{{ item.product.name }}</div>
+          {% if item.size != 'none' %}<div class="cart-item-size">{{ item.get_size_display }}</div>{% endif %}
+          <div style="font-size:0.8rem;color:#aaa">₱{{ item.unit_price }} each</div>
+        </div>
+        <div class="qty-control">
+          <button class="qty-btn" data-item-id="{{ item.pk }}" data-action="decrease">−</button>
+          <span class="qty-display">{{ item.quantity }}</span>
+          <button class="qty-btn" data-item-id="{{ item.pk }}" data-action="increase">+</button>
+        </div>
+        <div class="cart-item-price">₱{{ item.subtotal|floatformat:2 }}</div>
+        <span class="cart-remove" data-item-id="{{ item.pk }}" title="Remove">🗑️</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="cart-summary">
+    <div class="cart-total-row">
+      <span>Subtotal</span>
+      <span>₱{{ cart.total|floatformat:2 }}</span>
+    </div>
+    <div class="cart-total-row grand">
+      <span>Total</span>
+      <span class="cart-grand-total">₱{{ cart.total|floatformat:2 }}</span>
+    </div>
+    <a href="{% url 'orders:checkout' %}" class="btn btn-primary btn-block btn-lg" style="margin-top:16px">
+      Proceed to Checkout →
+    </a>
+  </div>
+
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">🛒</div>
+    <h3>Your cart is empty</h3>
+    <p>Browse our menu and add some items!</p>
+    <a href="{% url 'menu:index' %}" class="btn btn-primary" style="margin-top:16px">View Menu</a>
+  </div>
+  {% endif %}
+</div>
+
+{% if messages %}
+<div class="messages-container">
+  {% for message in messages %}
+  <div class="alert alert-{{ message.tags }}">{{ message }}<button class="alert-dismiss">×</button></div>
+  {% endfor %}
+</div>
+{% endif %}
+<script src="{% static 'js/main.js' %}"></script>
+{% endblock %}

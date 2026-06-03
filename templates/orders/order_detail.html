@@ -1,0 +1,135 @@
+{% extends "base_admin.html" %}
+{% block page_title %}Order {{ order.order_number }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Order #{{ order.order_number }}</h1>
+    <p class="page-subtitle">{{ order.created_at|date:"F j, Y g:i A" }}</p>
+  </div>
+  <div style="display:flex;gap:10px">
+    <a href="{% url 'orders:print_receipt' order.pk %}" class="btn btn-outline" target="_blank">🖨️ Print Receipt</a>
+    <a href="{% url 'orders:order_list' %}" class="btn btn-primary">← Orders</a>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 320px;gap:24px">
+  <div>
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header"><h3>Order Items</h3></div>
+      <div class="table-wrapper">
+        <table>
+          <thead><tr><th>Item</th><th>Size</th><th>Qty</th><th>Unit Price</th><th>Subtotal</th></tr></thead>
+          <tbody>
+            {% for item in items %}
+            <tr>
+              <td style="font-weight:600">{{ item.product_name }}</td>
+              <td>{{ item.get_size_display }}</td>
+              <td>{{ item.quantity }}</td>
+              <td>₱{{ item.unit_price|floatformat:2 }}</td>
+              <td style="font-weight:700;color:var(--caramel)">₱{{ item.subtotal|floatformat:2 }}</td>
+            </tr>
+            {% endfor %}
+            {% if order.packaging_fee and order.packaging_fee > 0 %}
+            <tr>
+              <td colspan="4" style="text-align:right;color:#888;font-size:0.85rem">📦 Packaging Fee</td>
+              <td style="color:var(--caramel);font-weight:600">₱{{ order.packaging_fee|floatformat:2 }}</td>
+            </tr>
+            {% endif %}
+            <tr style="background:var(--cream)">
+              <td colspan="4" style="text-align:right;font-weight:700">Total</td>
+              <td style="font-weight:700;font-size:1.1rem;color:var(--brown-dark)">₱{{ order.total|floatformat:2 }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header"><h3>Order Info</h3></div>
+      <div class="card-body">
+        <div style="display:flex;flex-direction:column;gap:12px">
+          {% include "partials/info_row.html" with label="Customer" value=order.customer_name %}
+          {% if order.customer_phone %}{% include "partials/info_row.html" with label="Phone" value=order.customer_phone %}{% endif %}
+          {% include "partials/info_row.html" with label="Type" value=order.get_order_type_display %}
+          {% if order.table_number %}{% include "partials/info_row.html" with label="Table" value=order.table_number %}{% endif %}
+          {% if order.notes %}{% include "partials/info_row.html" with label="Notes" value=order.notes %}{% endif %}
+          {% if order.cashier %}{% include "partials/info_row.html" with label="Cashier" value=order.cashier.get_full_name %}{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header"><h3>Update Status</h3></div>
+      <div class="card-body">
+        <form class="status-update-form" data-order-id="{{ order.pk }}">
+          {% csrf_token %}
+          <div class="form-group">
+            <select name="status" class="form-control form-select">
+              {% for v, l in order.STATUS_CHOICES %}
+              <option value="{{ v }}" {% if order.status == v %}selected{% endif %}>{{ l }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary btn-block">Update Status</button>
+        </form>
+      </div>
+    </div>
+
+    {% if not order.is_paid %}
+    <div class="card">
+      <div class="card-header"><h3>Payment</h3></div>
+      <div class="card-body">
+        <p style="color:#aaa;font-size:0.85rem;margin-bottom:12px">Total: <strong style="color:var(--caramel)">₱{{ order.total|floatformat:2 }}</strong></p>
+        <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }})" class="btn btn-caramel btn-block">💳 Process Payment</button>
+      </div>
+    </div>
+    {% else %}
+    <div class="card">
+      <div class="card-body">
+        <span class="badge badge-paid" style="font-size:0.9rem;padding:6px 14px">✓ Paid via {{ order.get_payment_method_display }}</span>
+        <p style="margin-top:8px;font-size:0.85rem;color:#aaa">Change given: ₱{{ order.change_amount|floatformat:2 }}</p>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Payment Modal -->
+<div id="payment-modal" class="modal-backdrop" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h4>💳 Process Payment</h4>
+      <button class="modal-close" onclick="document.getElementById('payment-modal').style.display='none'">×</button>
+    </div>
+    <div class="modal-body">
+      <form id="payment-form">{% csrf_token %}
+        <input type="hidden" id="payment-order-id" name="order_id">
+        <div class="form-group">
+          <label class="form-label">Order Total</label>
+          <div style="font-size:1.5rem;font-weight:700;color:var(--caramel)" id="payment-total">₱0.00</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Payment Method</label>
+          <select name="payment_method" class="form-control form-select">
+            <option value="cash">Cash</option><option value="gcash">GCash</option><option value="card">Card</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Amount Paid (₱)</label>
+          <input type="number" id="amount-paid" name="amount_paid" class="form-control" step="0.01" required>
+        </div>
+        <div style="background:var(--cream);border-radius:8px;padding:14px;text-align:center">
+          <div style="font-size:0.75rem;color:#aaa;font-weight:700;text-transform:uppercase">Change</div>
+          <div style="font-size:1.5rem;font-weight:700;color:var(--green-success)" id="change-display">₱0.00</div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button onclick="document.getElementById('payment-modal').style.display='none'" class="btn btn-outline">Cancel</button>
+      <button onclick="document.getElementById('payment-form').dispatchEvent(new Event('submit'))" class="btn btn-primary">Confirm Payment</button>
+    </div>
+  </div>
+</div>
+{% endblock %}

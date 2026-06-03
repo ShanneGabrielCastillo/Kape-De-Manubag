@@ -1,0 +1,259 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Track Order {{ order.order_number }} — Kape De Manubag</title>
+  <link rel="icon" type="image/svg+xml" href="{% static 'images/favicon.svg' %}">
+  <link rel="stylesheet" href="{% static 'css/main.css' %}">
+  <style>
+    body { background: var(--cream-light); }
+    .tracker-page { max-width: 480px; margin: 0 auto; padding: 20px 16px 60px; }
+
+    .tracker-hero {
+      border-radius: 20px;
+      padding: 32px 24px;
+      text-align: center;
+      border: 3px solid transparent;
+      transition: background 0.6s ease, border-color 0.6s ease;
+      margin-bottom: 16px;
+    }
+    .hero-pending   { background: #f8f9fa; border-color: var(--status-pending); }
+    .hero-preparing { background: #fff4e6; border-color: var(--status-preparing); }
+    .hero-ready     { background: #d4edda; border-color: var(--status-ready); }
+    .hero-completed { background: #e2e3e5; border-color: var(--status-completed); }
+    .hero-cancelled { background: #f8d7da; border-color: var(--status-cancelled); }
+
+    .hero-ready-flash { animation: readyFlash 0.5s ease 6; }
+    @keyframes readyFlash {
+      0%, 100% { box-shadow: none; }
+      50% { box-shadow: 0 0 30px rgba(25, 135, 84, 0.6); }
+    }
+
+    .tracker-queue-number {
+      font-size: 4rem;
+      font-family: 'Playfair Display', serif;
+      font-weight: 700;
+      color: var(--brown-dark);
+      line-height: 1;
+    }
+    .tracker-status-emoji { font-size: 2.5rem; margin: 8px 0; }
+    .tracker-status-label { font-size: 1.4rem; font-weight: 700; color: var(--brown-dark); }
+    .tracker-customer { font-size: 0.9rem; color: #888; margin-top: 6px; }
+
+    .tracker-card {
+      background: var(--cream-white);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 20px;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .tracker-card-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #aaa;
+      margin-bottom: 8px;
+    }
+    .tracker-position-number {
+      font-size: 3.5rem;
+      font-weight: 700;
+      color: var(--caramel);
+      font-family: 'Playfair Display', serif;
+      line-height: 1;
+    }
+    .tracker-position-sub { font-size: 0.85rem; color: #888; margin-top: 6px; }
+
+    .tracker-steps {
+      display: flex;
+      align-items: center;
+      background: var(--cream-white);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 20px 16px;
+      margin-bottom: 16px;
+    }
+    .tracker-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      opacity: 0.3;
+      transition: opacity 0.4s;
+      flex-shrink: 0;
+    }
+    .tracker-step.step-done   { opacity: 0.6; }
+    .tracker-step.step-active { opacity: 1; }
+    .step-dot {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--cream);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      transition: background 0.4s;
+    }
+    .tracker-step.step-active .step-dot {
+      background: var(--caramel);
+      animation: stepPulse 1.5s ease infinite;
+    }
+    @keyframes stepPulse {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(193,122,59,0.4); }
+      50% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(193,122,59,0); }
+    }
+    .step-label { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brown-mid); text-align: center; }
+    .tracker-step-line { flex: 1; height: 2px; background: var(--cream); margin: 0 4px; margin-bottom: 20px; }
+
+    .wait-display { font-size: 1.6rem; font-weight: 700; color: var(--brown-dark); font-family: 'Playfair Display', serif; }
+
+    .order-items-list { text-align: left; }
+    .order-item-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--cream); font-size: 0.88rem; }
+    .order-item-row:last-child { border-bottom: none; }
+    .order-total-row { display: flex; justify-content: space-between; padding-top: 10px; font-weight: 700; font-size: 1rem; }
+
+    .ready-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(25, 135, 84, 0.95);
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .ready-overlay-inner {
+      background: #fff;
+      border-radius: 20px;
+      padding: 40px 32px;
+      text-align: center;
+      max-width: 360px;
+      width: 100%;
+      animation: slideUp 0.4s ease;
+    }
+    .ready-overlay-emoji { font-size: 4rem; margin-bottom: 12px; }
+    .ready-overlay-title { font-size: 1.8rem; font-weight: 700; color: var(--status-ready); font-family: 'Playfair Display', serif; margin-bottom: 8px; }
+    .ready-order-number { font-size: 3rem; color: var(--status-ready); font-family: 'Playfair Display', serif; font-weight: 700; margin: 12px 0; }
+    .ready-overlay-sub { color: #666; font-size: 0.9rem; margin-bottom: 24px; }
+
+    .badge-queued { background: #cfe2ff; color: #084298; }
+  </style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav style="background:var(--brown-dark);padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:52px;position:sticky;top:0;z-index:50">
+  <span style="font-family:'Playfair Display',serif;font-weight:700;color:var(--gold);font-size:1rem">☕ Kape De Manubag</span>
+  <a href="{% url 'menu:index' %}" style="color:rgba(255,255,255,0.7);font-size:0.85rem;text-decoration:none">← Menu</a>
+</nav>
+
+<div class="tracker-page">
+
+  <!-- Hero -->
+  <div class="tracker-hero hero-{{ order.status }}" id="tracker-hero">
+    <div class="tracker-queue-number" id="tracker-queue-number">#{{ order.queue_number }}</div>
+    <div class="tracker-status-emoji" id="tracker-status-emoji">{{ order.status_emoji }}</div>
+    <div class="tracker-status-label" id="tracker-status-label">{{ order.get_status_display }}</div>
+    <div class="tracker-customer" id="tracker-customer-name">{{ order.customer_name }}</div>
+    <div class="tracker-customer" id="tracker-order-type">{{ order.get_order_type_display }}{% if order.table_number %} · Table {{ order.table_number }}{% endif %}</div>
+  </div>
+
+  <!-- Queue Position -->
+  <div class="tracker-card" id="queue-position-card">
+    <div class="tracker-card-label">Queue Position</div>
+    <div class="tracker-position-number" id="queue-position-display">{{ order.get_queue_position }}</div>
+    <div class="tracker-position-sub" id="queue-position-sub">
+      {% with pos=order.get_queue_position %}
+        {% if pos == 1 %}You're next!
+        {% elif pos == 0 %}—
+        {% else %}{{ pos|add:"-1" }} order{{ pos|add:"-1"|pluralize }} ahead of you{% endif %}
+      {% endwith %}
+    </div>
+  </div>
+
+  <!-- Progress Steps -->
+  <div class="tracker-steps">
+    {% with current=order.status %}
+    <div class="tracker-step {% if current in 'preparing,ready,completed' %}step-done{% endif %} {% if current == 'pending' %}step-active{% endif %}">
+      <div class="step-dot">🕐</div>
+      <div class="step-label">Received</div>
+    </div>
+    <div class="tracker-step-line"></div>
+    <div class="tracker-step {% if current in 'ready,completed' %}step-done{% endif %} {% if current == 'preparing' %}step-active{% endif %}">
+      <div class="step-dot">🍳</div>
+      <div class="step-label">Preparing</div>
+    </div>
+    <div class="tracker-step-line"></div>
+    <div class="tracker-step {% if current in 'ready,completed' %}step-done{% endif %} {% if current == 'ready' %}step-active{% endif %}">
+      <div class="step-dot">✅</div>
+      <div class="step-label">Ready!</div>
+    </div>
+    {% endwith %}
+  </div>
+
+  <!-- Wait Time -->
+  <div class="tracker-card" id="wait-card">
+    <div class="tracker-card-label">Estimated Wait</div>
+    <div class="wait-display" id="wait-display">Calculating...</div>
+  </div>
+
+  <!-- Order Items -->
+  <div class="tracker-card">
+    <div class="tracker-card-label" style="text-align:left;margin-bottom:12px">Your Order</div>
+    <div class="order-items-list">
+      {% for item in order.items.all %}
+      <div class="order-item-row">
+        <span>{{ item.quantity }}× {{ item.product_name }}{% if item.size != 'none' %} <span style="color:#aaa;font-size:0.8rem">({{ item.get_size_display }})</span>{% endif %}</span>
+        <span style="font-weight:600;color:var(--caramel)">₱{{ item.subtotal|floatformat:2 }}</span>
+      </div>
+      {% endfor %}
+      {% if order.packaging_fee and order.packaging_fee > 0 %}
+      <div class="order-item-row" style="color:#888;font-size:0.82rem">
+        <span>📦 Packaging Fee</span>
+        <span>₱{{ order.packaging_fee|floatformat:2 }}</span>
+      </div>
+      {% endif %}
+      <div class="order-total-row">
+        <span>Total</span>
+        <span style="color:var(--caramel)">₱{{ order.total|floatformat:2 }}</span>
+      </div>
+    </div>
+  </div>
+
+  <p style="text-align:center;font-size:0.75rem;color:#bbb;margin-top:8px">
+    🔄 Auto-refreshes every 5 seconds
+  </p>
+</div>
+
+<!-- Ready Overlay -->
+<div class="ready-overlay" id="ready-overlay">
+  <div class="ready-overlay-inner">
+    <div class="ready-overlay-emoji">✅</div>
+    <div class="ready-overlay-title">Your Order is Ready!</div>
+    <div class="ready-order-number">#{{ order.queue_number }}</div>
+    <div class="ready-overlay-sub">Please proceed to the counter to pick up your order.</div>
+    <button onclick="document.getElementById('ready-overlay').style.display='none'" class="btn btn-primary btn-block">Got it! 👍</button>
+  </div>
+</div>
+
+<!-- Audio -->
+<audio id="ready-sound" preload="auto">
+  <source src="{% static 'sounds/order_ready.mp3' %}" type="audio/mpeg">
+</audio>
+
+<script>
+window.TRACKER_CONFIG = {
+  orderNumber:   '{{ order.order_number }}',
+  queueNumber:   {{ order.queue_number }},
+  initialStatus: '{{ order.status }}',
+  apiUrl:        '{% url "orders:api_track_order" order.order_number %}',
+  pollInterval:  5000,
+};
+</script>
+<script src="{% static 'js/order_tracker.js' %}"></script>
+</body>
+</html>

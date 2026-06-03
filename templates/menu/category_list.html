@@ -1,0 +1,49 @@
+{% extends "base_admin.html" %}
+{% block page_title %}Categories{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div><h1 class="page-title">Categories</h1></div>
+  <a href="{% url 'menu:category_create' %}" class="btn btn-primary">+ Add Category</a>
+</div>
+<div class="card">
+  <div class="table-wrapper">
+    <table>
+      <thead><tr><th>Icon</th><th>Name</th><th>Products</th><th>Status</th><th>Packaging</th><th>Order</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for cat in categories %}
+        <tr>
+          <td style="font-size:1.5rem">{{ cat.icon }}</td>
+          <td style="font-weight:700">{{ cat.name }}</td>
+          <td>{{ cat.product_count }} items</td>
+          <td><span class="badge {% if cat.is_active %}badge-ready{% else %}badge-cancelled{% endif %}">{% if cat.is_active %}Active{% else %}Inactive{% endif %}</span></td>
+          <td>
+            {% if cat.is_packaging_required %}
+              <span class="badge badge-preparing">📦 Required</span>
+            {% else %}
+              <span class="badge" style="background:#e8ddd0;color:#888">🥤 None</span>
+            {% endif %}
+          </td>
+          <td>{{ cat.order }}</td>
+          <td>
+            <a href="{% url 'menu:category_edit' cat.pk %}" class="btn btn-sm btn-outline">Edit</a>
+            <button class="btn btn-sm btn-danger" onclick="confirmCatDelete('{% url 'menu:category_delete' cat.pk %}','{{ cat.name }}')">Delete</button>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" style="text-align:center;color:#aaa;padding:32px">No categories yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+async function confirmCatDelete(url, name){
+  if(!confirm(`Delete category "${name}"? Products may be affected.`))return;
+  const r=await fetch(url,{method:'POST',headers:{'X-CSRFToken':'{{ csrf_token }}'}});
+  const d=await r.json();
+  if(d.success){showToast('Category deleted','success');setTimeout(()=>location.reload(),800);}
+}
+</script>
+{% endblock %}

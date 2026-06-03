@@ -1,0 +1,122 @@
+{% extends "base_admin.html" %}
+{% block page_title %}Inventory{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Inventory</h1>
+    <p class="page-subtitle">Monitor and manage product stock levels</p>
+  </div>
+  <a href="{% url 'inventory:log' %}" class="btn btn-outline">View Log</a>
+</div>
+
+{% if low_stock_count %}
+<div class="alert alert-warning" style="margin-bottom:20px">
+  ⚠️ <strong>{{ low_stock_count }} product{{ low_stock_count|pluralize }}</strong> with low stock (≤10 units). Restock soon!
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr><th>Product</th><th>Category</th><th>Stock</th><th>Level</th><th>Status</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for product in products %}
+        {% with pct=product.stock_quantity|floatformat:0 %}
+        <tr>
+          <td style="font-weight:600">{{ product.name }}</td>
+          <td>{{ product.category.name }}</td>
+          <td style="font-weight:700;font-size:1rem">{{ product.stock_quantity }}</td>
+          <td>
+            <div class="stock-bar">
+              <div class="stock-bar-fill" style="width:{% if product.stock_quantity >= 100 %}100{% elif product.stock_quantity > 10 %}{{ product.stock_quantity }}{% else %}{{ product.stock_quantity|floatformat:0 }}{% endif %}%;
+                background:{% if product.stock_quantity <= 5 %}var(--red-accent){% elif product.stock_quantity <= 10 %}#e67e22{% else %}var(--green-success){% endif %}"></div>
+            </div>
+          </td>
+          <td>
+            {% if product.stock_quantity <= 5 %}
+              <span class="badge badge-cancelled">Critical</span>
+            {% elif product.stock_quantity <= 10 %}
+              <span class="badge badge-pending">Low</span>
+            {% else %}
+              <span class="badge badge-ready">OK</span>
+            {% endif %}
+          </td>
+          <td>
+            <button onclick="openRestockModal({{ product.pk }}, '{{ product.name|escapejs }}', {{ product.stock_quantity }})" class="btn btn-sm btn-primary">+ Restock</button>
+          </td>
+        </tr>
+        {% endwith %}
+        {% empty %}
+        <tr><td colspan="6" style="text-align:center;color:#aaa;padding:32px">No products found</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Restock Modal -->
+<div id="restock-modal" class="modal-backdrop" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h4>📦 Restock Product</h4>
+      <button class="modal-close" onclick="document.getElementById('restock-modal').style.display='none'">×</button>
+    </div>
+    <div class="modal-body">
+      <p id="restock-product-name" style="font-weight:700;font-size:1rem;margin-bottom:12px"></p>
+      <p style="color:#aaa;font-size:0.85rem;margin-bottom:16px">Current stock: <strong id="restock-current"></strong> units</p>
+      <form id="restock-form">
+        {% csrf_token %}
+        <div class="form-group">
+          <label class="form-label">Add Quantity</label>
+          <input type="number" name="quantity" id="restock-quantity" class="form-control" min="1" placeholder="Enter quantity to add" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Notes (optional)</label>
+          <input type="text" name="notes" class="form-control" placeholder="e.g. Restocked from supplier">
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button onclick="document.getElementById('restock-modal').style.display='none'" class="btn btn-outline">Cancel</button>
+      <button onclick="submitRestock()" class="btn btn-primary">Confirm Restock</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentRestockId = null;
+
+function openRestockModal(id, name, currentQty) {
+  currentRestockId = id;
+  document.getElementById('restock-product-name').textContent = name;
+  document.getElementById('restock-current').textContent = currentQty;
+  document.getElementById('restock-quantity').value = '';
+  document.getElementById('restock-modal').style.display = 'flex';
+}
+
+async function submitRestock() {
+  const qty = document.getElementById('restock-quantity').value;
+  const notes = document.querySelector('#restock-form [name=notes]').value;
+  if (!qty || parseInt(qty) <= 0) { showToast('Enter a valid quantity', 'error'); return; }
+
+  const formData = new FormData();
+  formData.append('quantity', qty);
+  formData.append('notes', notes);
+  formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+  const r = await fetch(`/inventory/${currentRestockId}/restock/`, { method: 'POST', body: formData });
+  const d = await r.json();
+  if (d.success) {
+    showToast(`Restocked! New qty: ${d.new_qty}`, 'success');
+    document.getElementById('restock-modal').style.display = 'none';
+    setTimeout(() => location.reload(), 1000);
+  } else {
+    showToast(d.error || 'Error', 'error');
+  }
+}
+</script>
+{% endblock %}

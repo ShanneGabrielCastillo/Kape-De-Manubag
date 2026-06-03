@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Receipt — {{ order.order_number }}</title>
+  {% load static %}
+  <link rel="icon" type="image/svg+xml" href="{% static 'images/favicon.svg' %}">
+  <style>
+    body { font-family: 'Courier New', monospace; background: #fff; margin: 0; padding: 20px; font-size: 13px; }
+    .receipt { max-width: 380px; margin: 0 auto; }
+    .center { text-align: center; }
+    .bold { font-weight: bold; }
+    hr { border: none; border-top: 1px dashed #ccc; margin: 10px 0; }
+    .row { display: flex; justify-content: space-between; padding: 3px 0; }
+    .total-row { font-size: 1.1em; font-weight: bold; border-top: 2px solid #000; padding-top: 8px; margin-top: 4px; }
+    .header h2 { margin: 0; font-size: 1.2em; }
+    .footer { text-align: center; color: #888; font-size: 0.85em; margin-top: 16px; }
+    @media print {
+      .no-print { display: none; }
+      body { padding: 0; }
+    }
+  </style>
+</head>
+<body>
+<div class="receipt">
+  <div class="header center">
+    <h2>☕ KAPE DE MANUBAG</h2>
+    <div>Food Ordering System</div>
+    <div style="font-size:0.85em;color:#666">--------------------------------</div>
+  </div>
+
+  <div style="margin:10px 0">
+    <div class="row"><span>Order #:</span><span class="bold">{{ order.order_number }}</span></div>
+    <div class="row"><span>Date:</span><span>{{ order.created_at|date:"M d, Y" }}</span></div>
+    <div class="row"><span>Time:</span><span>{{ order.created_at|date:"g:i A" }}</span></div>
+    <div class="row"><span>Customer:</span><span>{{ order.customer_name }}</span></div>
+    <div class="row"><span>Type:</span><span>{{ order.get_order_type_display }}</span></div>
+    {% if order.table_number %}<div class="row"><span>Table:</span><span>{{ order.table_number }}</span></div>{% endif %}
+    {% if order.cashier %}<div class="row"><span>Cashier:</span><span>{{ order.cashier.get_full_name|default:order.cashier.username }}</span></div>{% endif %}
+  </div>
+
+  <hr>
+  <div style="margin:8px 0">
+    {% for item in items %}
+    <div class="row">
+      <span>{{ item.product_name }}{% if item.size != 'none' %} ({{ item.get_size_display }}){% endif %}</span>
+    </div>
+    <div class="row" style="padding-left:10px;color:#555">
+      <span>{{ item.quantity }} × ₱{{ item.unit_price|floatformat:2 }}</span>
+      <span>₱{{ item.subtotal|floatformat:2 }}</span>
+    </div>
+    {% endfor %}
+  </div>
+
+  <hr>
+  <div class="row"><span>Subtotal:</span><span>₱{{ order.subtotal|floatformat:2 }}</span></div>
+  {% if order.packaging_fee and order.packaging_fee > 0 %}
+  <div class="row"><span>Packaging Fee:</span><span>₱{{ order.packaging_fee|floatformat:2 }}</span></div>
+  {% endif %}
+  {% if order.discount %}<div class="row"><span>Discount:</span><span>-₱{{ order.discount|floatformat:2 }}</span></div>{% endif %}
+  <div class="row total-row"><span>TOTAL:</span><span>₱{{ order.total|floatformat:2 }}</span></div>
+
+  {% if order.is_paid %}
+  <hr>
+  <div class="row"><span>Payment ({{ order.get_payment_method_display }}):</span><span>₱{{ order.amount_paid|floatformat:2 }}</span></div>
+  <div class="row bold"><span>Change:</span><span>₱{{ order.change_amount|floatformat:2 }}</span></div>
+  {% endif %}
+
+  <hr>
+  <div class="footer">
+    <div>Thank you for visiting!</div>
+    <div>Kape De Manubag</div>
+    <div style="font-size:0.8em;margin-top:4px">{{ order.created_at|date:"Y" }} — All rights reserved</div>
+  </div>
+</div>
+
+<div class="no-print" style="text-align:center;margin-top:24px">
+  <button onclick="window.print()" style="padding:10px 24px;background:#4A2C2A;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:0.9rem">🖨️ Print Receipt</button>
+  <button onclick="window.close()" style="padding:10px 24px;background:#888;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:0.9rem;margin-left:8px">Close</button>
+</div>
+<script>setTimeout(() => window.print(), 500);</script>
+</body>
+</html>

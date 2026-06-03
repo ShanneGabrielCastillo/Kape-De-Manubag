@@ -1,0 +1,164 @@
+{% extends "base_admin.html" %}
+{% block page_title %}Sales Reports{% endblock %}
+
+{% block extra_css %}
+<style>
+.chart-wrap { position:relative; height:280px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div><h1 class="page-title">Sales Reports</h1><p class="page-subtitle">Analyze your revenue and performance</p></div>
+  <div style="display:flex;gap:10px">
+    <a href="{% url 'reports:export_excel' %}?start={{ start_date }}&end={{ end_date }}" class="btn btn-success">📊 Export Excel</a>
+  </div>
+</div>
+
+<!-- Date Filter -->
+<div class="card" style="margin-bottom:24px">
+  <div class="card-body">
+    <form method="get" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+      <div class="form-group" style="margin:0">
+        <label class="form-label">From</label>
+        <input type="date" name="start" value="{{ start_date }}" class="form-control">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label class="form-label">To</label>
+        <input type="date" name="end" value="{{ end_date }}" class="form-control">
+      </div>
+      <button type="submit" class="btn btn-primary">Apply Filter</button>
+      <a href="{% url 'reports:index' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+<!-- Summary Stats -->
+<div class="stats-grid" style="margin-bottom:24px">
+  <div class="stat-card">
+    <div class="stat-label">Total Revenue</div>
+    <div class="stat-value">₱{{ total_revenue|floatformat:2 }}</div>
+    <div class="stat-sub">Selected period</div>
+    <div class="stat-icon">💰</div>
+  </div>
+  <div class="stat-card green">
+    <div class="stat-label">Total Orders</div>
+    <div class="stat-value">{{ total_orders }}</div>
+    <div class="stat-sub">Paid orders</div>
+    <div class="stat-icon">📋</div>
+  </div>
+  <div class="stat-card blue">
+    <div class="stat-label">Average Order</div>
+    <div class="stat-value">₱{{ avg_order|floatformat:2 }}</div>
+    <div class="stat-sub">Per transaction</div>
+    <div class="stat-icon">📊</div>
+  </div>
+</div>
+
+<!-- Charts + Tables -->
+<div style="display:grid;grid-template-columns:1fr 320px;gap:24px;margin-bottom:24px">
+  <!-- Daily Sales Chart -->
+  <div class="card">
+    <div class="card-header"><h3>Daily Sales</h3></div>
+    <div class="card-body">
+      <div class="chart-wrap">
+        <canvas id="daily-chart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Category Sales -->
+  <div class="card">
+    <div class="card-header"><h3>Sales by Category</h3></div>
+    <div class="card-body" style="padding:0">
+      {% for cat in category_sales %}
+      <div style="padding:12px 20px;border-bottom:1px solid var(--cream)">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span style="font-weight:600;font-size:0.88rem">{{ cat.name }}</span>
+          <span style="font-weight:700;color:var(--caramel)">₱{{ cat.total|floatformat:2 }}</span>
+        </div>
+        <div style="font-size:0.75rem;color:#aaa">{{ cat.qty }} items sold</div>
+      </div>
+      {% empty %}
+      <div class="empty-state" style="padding:32px"><p>No sales data</p></div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Top Products + Daily Table -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+  <div class="card">
+    <div class="card-header"><h3>🏆 Top Products</h3></div>
+    <div class="table-wrapper">
+      <table>
+        <thead><tr><th>Product</th><th>Qty Sold</th><th>Revenue</th></tr></thead>
+        <tbody>
+          {% for p in top_products %}
+          <tr>
+            <td style="font-weight:600">{{ p.product_name }}</td>
+            <td>{{ p.total_qty }}</td>
+            <td style="font-weight:700;color:var(--caramel)">₱{{ p.total_revenue|floatformat:2 }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="3" style="text-align:center;color:#aaa;padding:20px">No data</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3>📅 Daily Breakdown</h3></div>
+    <div class="table-wrapper" style="max-height:340px;overflow-y:auto">
+      <table>
+        <thead><tr><th>Date</th><th>Orders</th><th>Sales</th></tr></thead>
+        <tbody>
+          {% for day in daily_sales reversed %}
+          {% if day.count > 0 %}
+          <tr>
+            <td>{{ day.date }}</td>
+            <td>{{ day.count }}</td>
+            <td style="font-weight:700;color:var(--caramel)">₱{{ day.total|floatformat:2 }}</td>
+          </tr>
+          {% endif %}
+          {% empty %}
+          <tr><td colspan="3" style="text-align:center;color:#aaa;padding:20px">No data</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script>
+const dailyLabels = {{ daily_sales|safe }}.map(d => d.date);
+const dailyData = {{ daily_sales|safe }}.map(d => d.total);
+
+new Chart(document.getElementById('daily-chart'), {
+  type: 'bar',
+  data: {
+    labels: dailyLabels,
+    datasets: [{
+      label: 'Sales (₱)',
+      data: dailyData,
+      backgroundColor: 'rgba(193,122,59,0.7)',
+      borderColor: '#C17A3B',
+      borderWidth: 1,
+      borderRadius: 4,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `₱${ctx.raw.toFixed(2)}` } } },
+    scales: {
+      y: { beginAtZero: true, ticks: { callback: v => `₱${v}` }, grid: { color: 'rgba(0,0,0,.04)' } },
+      x: { grid: { display: false }, ticks: { maxRotation: 45, font: { size: 10 } } }
+    }
+  }
+});
+</script>
+{% endblock %}

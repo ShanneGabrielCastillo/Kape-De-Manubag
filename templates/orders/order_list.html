@@ -1,0 +1,153 @@
+{% extends "base_admin.html" %}
+{% block page_title %}Order Management{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Order Management</h1>
+    <p class="page-subtitle">Track and manage all orders</p>
+  </div>
+  <a href="{% url 'orders:pos' %}" class="btn btn-caramel">🖥️ Open POS</a>
+</div>
+
+<!-- Status tabs -->
+<div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
+  <a href="{% url 'orders:order_list' %}" class="btn btn-sm {% if not status_filter %}btn-primary{% else %}btn-outline{% endif %}">All Orders</a>
+  {% for value, label in status_choices %}
+  <a href="?status={{ value }}" class="btn btn-sm {% if status_filter == value %}btn-primary{% else %}btn-outline{% endif %}">{{ label }}</a>
+  {% endfor %}
+</div>
+
+<!-- Search -->
+<div class="filter-bar">
+  <form method="get" style="display:flex;gap:10px;flex-wrap:wrap;width:100%">
+    {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
+    <input type="text" name="q" value="{{ search }}" placeholder="Search order # or customer..." class="form-control">
+    <button type="submit" class="btn btn-primary">Search</button>
+    {% if search %}<a href="?{% if status_filter %}status={{ status_filter }}{% endif %}" class="btn btn-outline">Clear</a>{% endif %}
+  </form>
+</div>
+
+<div class="card">
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr><th>Order #</th><th>Customer</th><th>Type/Table</th><th>Items</th><th>Total</th><th>Status</th><th>Payment</th><th>Time</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for order in orders %}
+        <tr>
+          <td><a href="{% url 'orders:order_detail' order.pk %}" style="font-weight:700;color:var(--caramel)">{{ order.order_number }}</a></td>
+          <td>{{ order.customer_name }}</td>
+          <td>
+            <div>{{ order.get_order_type_display }}</div>
+            {% if order.table_number %}<div style="font-size:0.75rem;color:#aaa">Table {{ order.table_number }}</div>{% endif %}
+          </td>
+          <td>{{ order.items.count }} items</td>
+          <td style="font-weight:700">₱{{ order.total|floatformat:2 }}</td>
+          <td>
+            <form class="status-update-form" data-order-id="{{ order.pk }}" style="display:flex;gap:6px;align-items:center">
+              {% csrf_token %}
+              <select name="status" class="form-control form-select" style="font-size:0.8rem;padding:5px 8px">
+                {% for v, l in status_choices %}
+                <option value="{{ v }}" {% if order.status == v %}selected{% endif %}>{{ l }}</option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="btn btn-sm btn-primary">✓</button>
+            </form>
+          </td>
+          <td>
+            {% if order.is_paid %}
+              <span class="badge badge-paid">Paid</span>
+            {% else %}
+              <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }})" class="btn btn-sm btn-caramel">Pay</button>
+            {% endif %}
+          </td>
+          <td style="font-size:0.8rem;color:#aaa;white-space:nowrap">{{ order.created_at|date:"M d, g:i A" }}</td>
+          <td>
+            <div style="display:flex;gap:4px;flex-wrap:wrap">
+              <a href="{% url 'orders:order_detail' order.pk %}" class="btn btn-sm btn-outline">View</a>
+              <a href="{% url 'orders:print_receipt' order.pk %}" class="btn btn-sm btn-outline" target="_blank">🖨️</a>
+              {% if order.next_status %}
+              <button onclick="quickAdvance({{ order.pk }})" class="btn btn-sm btn-caramel" title="Advance to {{ order.next_status }}">▶ {{ order.next_status|title }}</button>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9" style="text-align:center;padding:40px;color:#aaa">No orders found</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Pagination -->
+{% if orders.has_other_pages %}
+<div class="pagination">
+  {% if orders.has_previous %}<a href="?page={{ orders.previous_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="page-link">‹ Prev</a>{% endif %}
+  {% for num in orders.paginator.page_range %}
+    {% if orders.number == num %}<span class="page-link active">{{ num }}</span>
+    {% elif num > orders.number|add:'-3' and num < orders.number|add:'3' %}<a href="?page={{ num }}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="page-link">{{ num }}</a>{% endif %}
+  {% endfor %}
+  {% if orders.has_next %}<a href="?page={{ orders.next_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="page-link">Next ›</a>{% endif %}
+</div>
+{% endif %}
+
+<!-- Payment Modal -->
+<div id="payment-modal" class="modal-backdrop" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h4>💳 Process Payment</h4>
+      <button class="modal-close" onclick="document.getElementById('payment-modal').style.display='none'">×</button>
+    </div>
+    <div class="modal-body">
+      <form id="payment-form">
+        {% csrf_token %}
+        <input type="hidden" id="payment-order-id" name="order_id">
+        <div class="form-group">
+          <label class="form-label">Order Total</label>
+          <div style="font-size:1.5rem;font-weight:700;color:var(--caramel)" id="payment-total">₱0.00</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Payment Method</label>
+          <select name="payment_method" class="form-control form-select">
+            <option value="cash">Cash</option>
+            <option value="gcash">GCash</option>
+            <option value="card">Card</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Amount Paid</label>
+          <input type="number" id="amount-paid" name="amount_paid" class="form-control" step="0.01" placeholder="0.00" required>
+        </div>
+        <div style="background:var(--cream);border-radius:8px;padding:14px;text-align:center">
+          <div style="font-size:0.75rem;color:#aaa;font-weight:700;text-transform:uppercase">Change</div>
+          <div style="font-size:1.5rem;font-weight:700;color:var(--green-success)" id="change-display">₱0.00</div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button onclick="document.getElementById('payment-modal').style.display='none'" class="btn btn-outline">Cancel</button>
+      <button onclick="document.getElementById('payment-form').dispatchEvent(new Event('submit'))" class="btn btn-primary">Confirm Payment</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function quickAdvance(orderId) {
+  const r = await fetch(`/orders/manage/${orderId}/advance/`, {
+    method: 'POST',
+    headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+  });
+  const d = await r.json();
+  if (d.success) {
+    showToast(`→ ${d.new_status_display}`, 'success');
+    setTimeout(() => location.reload(), 800);
+  } else {
+    showToast(d.error || 'Error', 'error');
+  }
+}
+</script>
+{% endblock %}

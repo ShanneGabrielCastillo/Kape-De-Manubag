@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Checkout — Kape De Manubag{% endblock %}
+
+{% block body %}
+<nav style="background:var(--cream-white);padding:0 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid var(--cream);height:56px;position:sticky;top:0;z-index:50">
+  <a href="{% url 'menu:index' %}" style="font-family:'Playfair Display',serif;font-weight:700;color:var(--brown-dark)">☕ Kape De Manubag</a>
+  <a href="{% url 'orders:cart' %}" class="btn btn-sm btn-outline">← Back to Cart</a>
+</nav>
+
+<div class="checkout-layout">
+  <!-- Order Form -->
+  <div>
+    <h1 style="font-size:1.8rem;margin-bottom:24px">Checkout</h1>
+    <div class="card">
+      <div class="card-header"><h3>Your Details</h3></div>
+      <div class="card-body">
+        <form method="post" id="checkout-form">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label">Your Name *</label>
+            {{ form.customer_name }}
+            {% if form.customer_name.errors %}<small style="color:var(--red-accent)">{{ form.customer_name.errors.0 }}</small>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label">Phone Number</label>
+            {{ form.customer_phone }}
+          </div>
+          <div class="form-group">
+            <label class="form-label">Order Type *</label>
+            <div style="display:flex;gap:20px;margin-top:8px">
+              {% for choice in form.order_type %}
+              <label class="form-check" style="cursor:pointer;font-weight:500">
+                {{ choice.tag }} {{ choice.choice_label }}
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="form-group" id="table-group">
+            <label class="form-label">Table Number</label>
+            {{ form.table_number }}
+          </div>
+          <div class="form-group">
+            <label class="form-label">Special Instructions</label>
+            {{ form.notes }}
+          </div>
+          <button type="submit" class="btn btn-primary btn-block btn-lg">Place Order →</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Order Summary -->
+  <div>
+    <h2 style="font-size:1.2rem;margin-bottom:16px">Order Summary</h2>
+    <div class="card">
+      <div class="card-body" style="padding:0">
+        {% for item in items %}
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-bottom:1px solid var(--cream)">
+          <div>
+            <div style="font-weight:600;font-size:0.9rem">{{ item.product.name }}</div>
+            {% if item.size != 'none' %}<div style="font-size:0.75rem;color:#aaa">{{ item.get_size_display }}</div>{% endif %}
+            <div style="font-size:0.8rem;color:#aaa">× {{ item.quantity }}</div>
+          </div>
+          <div style="font-weight:700;color:var(--caramel)">₱{{ item.subtotal|floatformat:2 }}</div>
+        </div>
+        {% endfor %}
+        <div style="padding:16px 20px">
+          <div class="cart-total-row" id="packaging-fee-row" style="display:none">
+            <span style="color:#888">📦 Packaging Fee
+              <span id="packaging-fee-note" style="font-size:0.75rem;color:#aaa;display:block"></span>
+            </span>
+            <span id="packaging-fee-display" style="color:var(--caramel)">₱0.00</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:1.1rem;font-weight:700;border-top:2px solid var(--cream);padding-top:12px">
+            <span>Total</span>
+            <span id="checkout-grand-total" style="color:var(--caramel)">₱{{ cart.total|floatformat:2 }}</span>
+          </div>
+          <p style="font-size:0.78rem;color:#aaa;margin-top:8px">💡 Payment is made at the counter after your order is ready.</p>
+        </div>
+        <script id="cart-data" type="application/json">
+        {"subtotal": {{ cart.total|floatformat:2 }}, "items": [{% for item in items %}{"product_id": {{ item.product.pk }}, "quantity": {{ item.quantity }}}{% if not forloop.last %},{% endif %}{% endfor %}]}
+        </script>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if messages %}
+<div class="messages-container">
+  {% for message in messages %}
+  <div class="alert alert-{{ message.tags }}">{{ message }}<button class="alert-dismiss">×</button></div>
+  {% endfor %}
+</div>
+{% endif %}
+<script src="{% static 'js/main.js' %}"></script>
+{% block extra_js %}
+<script>
+(function() {
+  const cartData = JSON.parse(document.getElementById('cart-data').textContent);
+  const feeRow     = document.getElementById('packaging-fee-row');
+  const feeDisplay = document.getElementById('packaging-fee-display');
+  const feeNote    = document.getElementById('packaging-fee-note');
+  const grandTotal = document.getElementById('checkout-grand-total');
+
+  async function updatePackagingFee(orderType) {
+    if (orderType !== 'takeout') {
+      feeRow.style.display = 'none';
+      grandTotal.textContent = '₱' + cartData.subtotal.toFixed(2);
+      return;
+    }
+    const params = new URLSearchParams({
+      order_type: orderType,
+      items: JSON.stringify(cartData.items)
+    });
+    try {
+      const r = await fetch('/orders/api/packaging-fee/?' + params.toString());
+      const data = await r.json();
+      if (data.packaging_fee > 0) {
+        feeRow.style.display = 'flex';
+        feeDisplay.textContent = data.packaging_fee_formatted;
+        feeNote.textContent = '₱' + data.fee_per_item.toFixed(2) + ' × ' +
+          data.eligible_item_count + ' meal item' +
+          (data.eligible_item_count !== 1 ? 's' : '');
+        grandTotal.textContent = '₱' + (cartData.subtotal + data.packaging_fee).toFixed(2);
+      } else {
+        feeRow.style.display = 'none';
+        grandTotal.textContent = '₱' + cartData.subtotal.toFixed(2);
+      }
+    } catch(e) {
+      console.error('Packaging fee error:', e);
+    }
+  }
+
+  document.querySelectorAll('[name="order_type"]').forEach(r =>
+    r.addEventListener('change', function() { updatePackagingFee(this.value); })
+  );
+  const sel = document.querySelector('[name="order_type"]:checked');
+  if (sel) updatePackagingFee(sel.value);
+})();
+</script>
+{% endblock %}
+{% endblock %}
