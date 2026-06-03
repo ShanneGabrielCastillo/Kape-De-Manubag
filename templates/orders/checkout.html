@@ -28,9 +28,9 @@
           </div>
           <div class="form-group">
             <label class="form-label">Order Type *</label>
-            <div style="display:flex;gap:20px;margin-top:8px">
+            <div class="order-type-selector">
               {% for choice in form.order_type %}
-              <label class="form-check" style="cursor:pointer;font-weight:500">
+              <label class="order-type-option">
                 {{ choice.tag }} {{ choice.choice_label }}
               </label>
               {% endfor %}
@@ -96,6 +96,20 @@
 <script src="{% static 'js/main.js' %}"></script>
 {% block extra_js %}
 <script>
+// ── Pill selector active state (JS fallback for :has() ──
+(function() {
+  function syncPillState() {
+    document.querySelectorAll('.order-type-option').forEach(label => {
+      const radio = label.querySelector('input[type="radio"]');
+      label.classList.toggle('active', radio && radio.checked);
+    });
+  }
+  document.querySelectorAll('.order-type-option input[type="radio"]').forEach(radio => {
+    radio.addEventListener('change', syncPillState);
+  });
+  syncPillState();
+})();
+
 (function() {
   const cartData = JSON.parse(document.getElementById('cart-data').textContent);
   const feeRow     = document.getElementById('packaging-fee-row');

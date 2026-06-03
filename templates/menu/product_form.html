@@ -9,7 +9,7 @@
   <div class="card-body">
     <form method="post" enctype="multipart/form-data">
       {% csrf_token %}
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="product-form-grid">
         {% for field in form %}
         <div class="form-group {% if field.name in 'description,image' %}full-col{% endif %}" style="{% if field.name in 'description,image,has_sizes,is_available,is_featured' %}grid-column:1/-1{% endif %}">
           <label class="form-label">{{ field.label }}</label>

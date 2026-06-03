@@ -12,12 +12,12 @@ class ProductForm(forms.ModelForm):
             'category': forms.Select(attrs={'class': 'form-control'}),
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Product name'}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'price': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
-            'price_medium': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
-            'price_large': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
-            'price_hot': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
-            'stock_quantity': forms.NumberInput(attrs={'class': 'form-control'}),
-            'low_stock_threshold': forms.NumberInput(attrs={'class': 'form-control'}),
+            'price': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'inputmode': 'decimal'}),
+            'price_medium': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'inputmode': 'decimal'}),
+            'price_large': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'inputmode': 'decimal'}),
+            'price_hot': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'inputmode': 'decimal'}),
+            'stock_quantity': forms.NumberInput(attrs={'class': 'form-control', 'inputmode': 'numeric'}),
+            'low_stock_threshold': forms.NumberInput(attrs={'class': 'form-control', 'inputmode': 'numeric'}),
         }
 
 

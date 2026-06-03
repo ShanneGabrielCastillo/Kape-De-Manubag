@@ -5,6 +5,12 @@
 <div class="app-layout">
   <!-- Sidebar -->
   <aside class="sidebar" id="sidebar">
+    <!-- Mobile close button (hidden on desktop via CSS) -->
+    <div class="sidebar-mobile-close">
+      <button onclick="document.querySelector('.sidebar').classList.remove('open');document.querySelector('.sidebar-overlay').classList.remove('open');document.body.style.overflow='';document.getElementById('sidebar-toggle').setAttribute('aria-expanded','false');"
+              aria-label="Close navigation">×</button>
+    </div>
+
     <div class="sidebar-brand">
       <span class="brand-name">☕ Kape De Manubag</span>
       <span class="brand-sub">Management System</span>
@@ -78,7 +84,10 @@
     <!-- Topbar -->
     <header class="topbar">
       <div style="display:flex;align-items:center;gap:12px">
-        <button id="sidebar-toggle" aria-label="Toggle sidebar">☰</button>
+        <button id="sidebar-toggle"
+                aria-label="Open navigation menu"
+                aria-expanded="false"
+                aria-controls="sidebar">☰</button>
         <span class="topbar-title">{% block page_title %}Dashboard{% endblock %}</span>
       </div>
       <div class="topbar-actions">

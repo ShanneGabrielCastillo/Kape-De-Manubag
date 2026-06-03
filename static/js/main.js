@@ -55,13 +55,48 @@ const sidebar = document.querySelector('.sidebar');
 const sidebarOverlay = document.querySelector('.sidebar-overlay');
 
 if (sidebarToggle && sidebar) {
+  // Open/close on hamburger click
   sidebarToggle.addEventListener('click', () => {
     sidebar.classList.toggle('open');
     sidebarOverlay && sidebarOverlay.classList.toggle('open');
+    // Prevent body scroll when sidebar open
+    const isOpen = sidebar.classList.contains('open');
+    document.body.style.overflow = isOpen ? 'hidden' : '';
+    // Update aria-expanded
+    sidebarToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
   });
-  sidebarOverlay && sidebarOverlay.addEventListener('click', () => {
-    sidebar.classList.remove('open');
-    sidebarOverlay.classList.remove('open');
+
+  // Close on overlay click
+  if (sidebarOverlay) {
+    sidebarOverlay.addEventListener('click', () => {
+      sidebar.classList.remove('open');
+      sidebarOverlay.classList.remove('open');
+      document.body.style.overflow = '';
+      sidebarToggle.setAttribute('aria-expanded', 'false');
+    });
+  }
+
+  // Close sidebar when any nav link is tapped on mobile
+  document.querySelectorAll('.sidebar-link').forEach(link => {
+    link.addEventListener('click', () => {
+      if (window.innerWidth < 768) {
+        sidebar.classList.remove('open');
+        sidebarOverlay && sidebarOverlay.classList.remove('open');
+        document.body.style.overflow = '';
+        sidebarToggle.setAttribute('aria-expanded', 'false');
+      }
+    });
+  });
+
+  // Close sidebar on Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && sidebar.classList.contains('open')) {
+      sidebar.classList.remove('open');
+      sidebarOverlay && sidebarOverlay.classList.remove('open');
+      document.body.style.overflow = '';
+      sidebarToggle.setAttribute('aria-expanded', 'false');
+      sidebarToggle.focus();
+    }
   });
 }
 

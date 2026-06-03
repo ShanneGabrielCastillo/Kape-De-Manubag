@@ -17,7 +17,7 @@
 
 <div class="card">
   <div class="table-wrapper">
-    <table>
+    <table class="table-inventory">
       <thead>
         <tr><th>Product</th><th>Category</th><th>Stock</th><th>Level</th><th>Status</th><th>Actions</th></tr>
       </thead>
@@ -70,7 +70,7 @@
         {% csrf_token %}
         <div class="form-group">
           <label class="form-label">Add Quantity</label>
-          <input type="number" name="quantity" id="restock-quantity" class="form-control" min="1" placeholder="Enter quantity to add" required>
+          <input type="number" name="quantity" id="restock-quantity" class="form-control" min="1" placeholder="Enter quantity to add" inputmode="numeric" required>
         </div>
         <div class="form-group">
           <label class="form-label">Notes (optional)</label>

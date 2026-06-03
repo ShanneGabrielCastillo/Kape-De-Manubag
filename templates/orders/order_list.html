@@ -29,7 +29,7 @@
 
 <div class="card">
   <div class="table-wrapper">
-    <table>
+    <table class="table-orders">
       <thead>
         <tr><th>Order #</th><th>Customer</th><th>Type/Table</th><th>Items</th><th>Total</th><th>Status</th><th>Payment</th><th>Time</th><th>Actions</th></tr>
       </thead>
@@ -118,7 +118,7 @@
         </div>
         <div class="form-group">
           <label class="form-label">Amount Paid</label>
-          <input type="number" id="amount-paid" name="amount_paid" class="form-control" step="0.01" placeholder="0.00" required>
+          <input type="number" id="amount-paid" name="amount_paid" class="form-control" step="0.01" placeholder="0.00" inputmode="decimal" required>
         </div>
         <div style="background:var(--cream);border-radius:8px;padding:14px;text-align:center">
           <div style="font-size:0.75rem;color:#aaa;font-weight:700;text-transform:uppercase">Change</div>

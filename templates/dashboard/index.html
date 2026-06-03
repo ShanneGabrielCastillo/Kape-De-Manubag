@@ -46,7 +46,7 @@
 </div>
 
 <!-- Quick Actions -->
-<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px">
+<div class="dashboard-quick-actions" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px">
   <a href="{% url 'orders:pos' %}" class="btn btn-caramel"><span>🖥️</span> Open POS</a>
   <a href="{% url 'orders:order_list' %}" class="btn btn-primary">
     📋 Orders
@@ -59,7 +59,7 @@
 </div>
 
 <!-- Charts + Recent Orders -->
-<div style="display:grid;grid-template-columns:1fr 360px;gap:24px;margin-bottom:24px">
+<div class="dashboard-grid-main">
   <!-- Sales Chart -->
   <div class="card">
     <div class="card-header">
@@ -96,7 +96,7 @@
 </div>
 
 <!-- Recent Orders + Low Stock -->
-<div style="display:grid;grid-template-columns:1fr 320px;gap:24px">
+<div class="dashboard-grid-secondary">
   <!-- Recent Orders -->
   <div class="card">
     <div class="card-header">

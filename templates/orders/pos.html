@@ -4,6 +4,7 @@
 
 {% block extra_css %}
 <style>
+/* ── POS Desktop layout ── */
 .pos-layout { display:grid; grid-template-columns:1fr 380px; height:calc(100vh - 65px); overflow:hidden; }
 .pos-left { overflow-y:auto; padding:16px; background:var(--cream-light); }
 .pos-right { background:var(--cream-white); border-left:2px solid var(--cream); display:flex; flex-direction:column; }
@@ -21,7 +22,76 @@
 .qty-ctrl { display:flex; align-items:center; gap:4px; }
 .qb { width:22px; height:22px; border:none; border-radius:4px; background:var(--cream); cursor:pointer; font-weight:700; font-size:0.9rem; color:var(--brown-mid); }
 .qb:hover { background:var(--caramel); color:#fff; }
-@media(max-width:768px){ .pos-layout{grid-template-columns:1fr;} .pos-right{height:280px;} }
+
+/* ── POS Mobile: bottom drawer layout ── */
+@media (max-width: 767.98px) {
+  .pos-layout {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: calc(100vh - 56px);
+    overflow: visible;
+  }
+  .pos-left {
+    overflow-y: visible;
+    padding: 12px;
+    padding-bottom: 160px; /* clearance for fixed drawer */
+  }
+  .pos-right {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 300;
+    border-left: none;
+    border-top: 2px solid var(--cream);
+    max-height: 60vh;
+    overflow-y: auto;
+    box-shadow: 0 -8px 32px rgba(44,24,16,0.18);
+    border-radius: 16px 16px 0 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .pos-header {
+    cursor: pointer;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-radius: 16px 16px 0 0;
+  }
+  .pos-body {
+    max-height: 35vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    display: none;
+  }
+  .pos-body.expanded { display: block; }
+  /* Category tabs scrollable row */
+  .cat-tabs-row {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap !important;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+  }
+  .cat-tabs-row::-webkit-scrollbar { display: none; }
+  .cat-tab {
+    min-height: 44px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  /* Product grid always 2 columns */
+  .pos-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px;
+  }
+  .pos-item { padding: 10px 8px; }
+  .pos-item .item-name { font-size: 0.75rem; }
+  /* Customer info inputs */
+  #pos-customer-name,
+  #pos-table { min-height: 44px; font-size: 0.9rem; }
+}
 </style>
 {% endblock %}
 
@@ -30,7 +100,7 @@
   <!-- Left: Products -->
   <div class="pos-left">
     <!-- Category Tabs -->
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+    <div class="cat-tabs-row" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
       {% for cat in categories %}
       <button class="cat-tab {% if forloop.first %}active{% endif %}" onclick="filterCat('{{ cat.slug }}',this)">{{ cat.icon }} {{ cat.name }}</button>
       {% endfor %}
@@ -73,10 +143,14 @@
 
   <!-- Right: Order Panel -->
   <div class="pos-right">
-    <div class="pos-header">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span>🧾 Current Order</span>
-        <button onclick="POS.items=[];POS.render()" style="background:rgba(255,255,255,.15);border:none;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:0.75rem">Clear</button>
+    <div class="pos-header" id="pos-drawer-header">
+      <div style="display:flex;justify-content:space-between;align-items:center;width:100%">
+        <span>🧾 Current Order<span id="pos-item-count-badge" style="font-size:0.75rem;opacity:0.7"></span></span>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span id="pos-total-preview" style="font-size:1rem;font-weight:700;color:var(--gold)">₱0.00</span>
+          <button onclick="POS.items=[];POS.render()" style="background:rgba(255,255,255,.15);border:none;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:0.75rem">Clear</button>
+          <span id="pos-drawer-toggle-icon" style="font-size:0.9rem">▲</span>
+        </div>
       </div>
     </div>
 
@@ -84,7 +158,7 @@
     <div style="padding:10px 12px;background:var(--cream);border-bottom:2px solid #e8ddd0">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
         <input type="text" id="pos-customer-name" placeholder="Customer name" class="form-control" style="font-size:0.82rem;padding:6px 10px">
-        <input type="text" id="pos-table" placeholder="Table #" class="form-control" style="font-size:0.82rem;padding:6px 10px">
+        <input type="text" id="pos-table" placeholder="Table #" class="form-control" inputmode="numeric" style="font-size:0.82rem;padding:6px 10px">
       </div>
       <div style="display:flex;gap:12px">
         <label style="display:flex;align-items:center;gap:5px;font-size:0.82rem;cursor:pointer;font-weight:600">
@@ -170,5 +244,55 @@ function handlePosAdd(id, name, price, hasSizes, el) {
 document.querySelectorAll('[name=pos-order-type]').forEach(r =>
   r.addEventListener('change', () => { POS.updatePackagingFee(); })
 );
+
+// ── POS Mobile Drawer Toggle ──
+(function() {
+  const header = document.getElementById('pos-drawer-header');
+  const body   = document.querySelector('.pos-body');
+  const icon   = document.getElementById('pos-drawer-toggle-icon');
+  if (!header || !body) return;
+
+  let isExpanded = false;
+
+  // Toggle on header tap (mobile only)
+  header.addEventListener('click', function(e) {
+    // Don't trigger if Clear button was clicked
+    if (e.target.tagName === 'BUTTON') return;
+    if (window.innerWidth > 767) return;
+    isExpanded = !isExpanded;
+    body.classList.toggle('expanded', isExpanded);
+    if (icon) icon.textContent = isExpanded ? '▼' : '▲';
+  });
+
+  // Wrap POS.render to update preview and auto-expand on first item
+  const originalRender = POS.render.bind(POS);
+  POS.render = function() {
+    originalRender();
+    // Update header preview total
+    const preview = document.getElementById('pos-total-preview');
+    const badge   = document.getElementById('pos-item-count-badge');
+    if (preview) {
+      preview.textContent = '₱' + POS.getTotal().toFixed(2);
+    }
+    if (badge) {
+      const count = POS.items.reduce((s, i) => s + i.qty, 0);
+      badge.textContent = count > 0
+        ? ` (${count} item${count !== 1 ? 's' : ''})`
+        : '';
+    }
+    // Auto-expand on first item add (mobile only)
+    if (POS.items.length > 0 && !isExpanded && window.innerWidth <= 767) {
+      isExpanded = true;
+      body.classList.add('expanded');
+      if (icon) icon.textContent = '▼';
+    }
+    // Collapse when cart is cleared
+    if (POS.items.length === 0 && isExpanded) {
+      isExpanded = false;
+      body.classList.remove('expanded');
+      if (icon) icon.textContent = '▲';
+    }
+  };
+})();
 </script>
 {% endblock %}
