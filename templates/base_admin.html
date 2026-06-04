@@ -16,6 +16,7 @@
       <span class="brand-sub">Management System</span>
     </div>
 
+    <div class="sidebar-nav-wrapper">
     <nav class="sidebar-nav">
       <div class="nav-section-title">Overview</div>
       <a href="{% url 'dashboard:index' %}" class="sidebar-link {% if request.resolver_match.app_name == 'dashboard' %}active{% endif %}">
@@ -65,6 +66,7 @@
         <span class="nav-icon">📺</span> Queue Board
       </a>
     </nav>
+    </div><!-- /.sidebar-nav-wrapper -->
 
     <div class="sidebar-user">
       <div class="user-avatar">
@@ -74,7 +76,10 @@
         <div class="user-name">{{ user.get_full_name|default:user.username }}</div>
         <div class="user-role">{{ user.get_role_display }}</div>
       </div>
-      <a href="{% url 'accounts:logout' %}" style="margin-left:auto;color:rgba(255,255,255,0.4);font-size:1.1rem;text-decoration:none" title="Logout">⏻</a>
+      <a href="{% url 'accounts:logout' %}" style="margin-left:auto;color:rgba(255,255,255,0.4);font-size:1.1rem;text-decoration:none" title="Logout" aria-label="Sign out">
+        <span class="logout-icon">⏻</span>
+        <span class="logout-text">Sign Out</span>
+      </a>
     </div>
   </aside>
   <div class="sidebar-overlay" id="sidebar-overlay"></div>

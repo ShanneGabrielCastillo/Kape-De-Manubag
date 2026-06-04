@@ -11,7 +11,7 @@
 <div class="page-header">
   <div><h1 class="page-title">Sales Reports</h1><p class="page-subtitle">Analyze your revenue and performance</p></div>
   <div style="display:flex;gap:10px">
-    <a href="{% url 'reports:export_excel' %}?start={{ start_date }}&end={{ end_date }}" class="btn btn-success">📊 Export Excel</a>
+    <a href="{% url 'reports:export_excel' %}?start={{ start_date }}&end={{ end_date }}" class="btn btn-success reports-export-btn">📊 Export Excel</a>
   </div>
 </div>
 
@@ -56,7 +56,7 @@
 </div>
 
 <!-- Charts + Tables -->
-<div style="display:grid;grid-template-columns:1fr 320px;gap:24px;margin-bottom:24px">
+<div class="reports-grid-top">
   <!-- Daily Sales Chart -->
   <div class="card">
     <div class="card-header"><h3>Daily Sales</h3></div>
@@ -87,10 +87,10 @@
 </div>
 
 <!-- Top Products + Daily Table -->
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+<div class="reports-grid-bottom">
   <div class="card">
     <div class="card-header"><h3>🏆 Top Products</h3></div>
-    <div class="table-wrapper">
+    <div class="table-wrapper reports-table-wrapper">
       <table>
         <thead><tr><th>Product</th><th>Qty Sold</th><th>Revenue</th></tr></thead>
         <tbody>
@@ -106,11 +106,24 @@
         </tbody>
       </table>
     </div>
+    <div class="reports-mobile-cards" id="top-products-cards">
+      {% for p in top_products %}
+      <div class="report-card-item">
+        <div class="report-card-item-main">
+          <div class="report-card-item-name">{{ p.product_name }}</div>
+          <div class="report-card-item-sub">{{ p.total_qty }} item{{ p.total_qty|pluralize }} sold</div>
+        </div>
+        <div class="report-card-item-value">₱{{ p.total_revenue|floatformat:2 }}</div>
+      </div>
+      {% empty %}
+      <div style="text-align:center;padding:24px;color:#aaa">No sales data for this period</div>
+      {% endfor %}
+    </div>
   </div>
 
   <div class="card">
     <div class="card-header"><h3>📅 Daily Breakdown</h3></div>
-    <div class="table-wrapper" style="max-height:340px;overflow-y:auto">
+    <div class="table-wrapper reports-table-wrapper" style="max-height:340px;overflow-y:auto">
       <table>
         <thead><tr><th>Date</th><th>Orders</th><th>Sales</th></tr></thead>
         <tbody>
@@ -127,6 +140,22 @@
           {% endfor %}
         </tbody>
       </table>
+    </div>
+    <div class="reports-mobile-cards" id="daily-breakdown-cards"
+         style="max-height:340px;overflow-y:auto;-webkit-overflow-scrolling:touch">
+      {% for day in daily_sales reversed %}
+      {% if day.count > 0 %}
+      <div class="report-card-item">
+        <div class="report-card-item-main">
+          <div class="report-card-item-name">{{ day.date }}</div>
+          <div class="report-card-item-sub">{{ day.count }} order{{ day.count|pluralize }}</div>
+        </div>
+        <div class="report-card-item-value">₱{{ day.total|floatformat:2 }}</div>
+      </div>
+      {% endif %}
+      {% empty %}
+      <div style="text-align:center;padding:24px;color:#aaa">No orders in this period</div>
+      {% endfor %}
     </div>
   </div>
 </div>
@@ -152,11 +181,22 @@ new Chart(document.getElementById('daily-chart'), {
     }]
   },
   options: {
-    responsive: true, maintainAspectRatio: false,
-    plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `₱${ctx.raw.toFixed(2)}` } } },
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: ctx => `₱${ctx.raw.toFixed(2)}` } }
+    },
     scales: {
-      y: { beginAtZero: true, ticks: { callback: v => `₱${v}` }, grid: { color: 'rgba(0,0,0,.04)' } },
-      x: { grid: { display: false }, ticks: { maxRotation: 45, font: { size: 10 } } }
+      y: {
+        beginAtZero: true,
+        ticks: { callback: v => `₱${v}`, font: { size: 11 }, maxTicksLimit: 6 },
+        grid: { color: 'rgba(0,0,0,.04)' }
+      },
+      x: {
+        grid: { display: false },
+        ticks: { maxRotation: 45, minRotation: 0, font: { size: 10 }, maxTicksLimit: 7 }
+      }
     }
   }
 });

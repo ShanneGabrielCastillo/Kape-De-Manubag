@@ -1,3 +1,4 @@
+
 /*
  * KAPE DE MANUBAG — Responsive Overrides
  * Mobile-first additions. Desktop styles in main.css are NEVER modified here.
@@ -135,6 +136,70 @@
   .reports-date-filter .btn {
     width: 100%;
     min-height: 46px;
+  }
+
+  /* ── Reports page mobile layout ── */
+  .reports-grid-top,
+  .reports-grid-bottom {
+    grid-template-columns: 1fr !important;
+    gap: 16px;
+  }
+  .reports-grid-top > *,
+  .reports-grid-bottom > * {
+    min-width: 0;
+  }
+  /* Chart height on mobile */
+  .chart-wrap {
+    height: 200px !important;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+  /* Hide desktop tables, show mobile cards */
+  .reports-table-wrapper { display: none !important; }
+  .reports-mobile-cards  { display: block !important; }
+
+  /* Mobile report card item */
+  .report-card-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--cream);
+    gap: 12px;
+    min-height: 56px;
+  }
+  .report-card-item:last-child { border-bottom: none; }
+  .report-card-item:active { background: rgba(193, 122, 59, 0.04); }
+  .report-card-item-main { flex: 1; min-width: 0; }
+  .report-card-item-name {
+    font-weight: 700;
+    font-size: 0.88rem;
+    color: var(--brown-dark);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+  }
+  .report-card-item-sub {
+    font-size: 0.75rem;
+    color: #aaa;
+    margin-top: 2px;
+  }
+  .report-card-item-value {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--caramel);
+    font-family: 'Playfair Display', serif;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Export button full-width on mobile */
+  .reports-export-btn {
+    width: 100%;
+    justify-content: center;
+    min-height: 48px;
   }
 
   /* ── Inventory stock bar compact ── */
@@ -396,6 +461,24 @@
     min-height: 46px;
   }
 
+  /* ── Reports tablet: single column, tables with scroll ── */
+  .reports-grid-top,
+  .reports-grid-bottom {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .reports-grid-top > *,
+  .reports-grid-bottom > * {
+    min-width: 0;
+  }
+  .reports-table-wrapper {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .reports-mobile-cards { display: none; }
+  .chart-wrap { height: 220px; }
+
 }
 
 /* ==========================================================================
@@ -505,6 +588,13 @@
     transform: translateX(-100%);
     transition: transform 0.3s ease;
     z-index: 200;
+
+    /* THREE-ZONE LAYOUT: sidebar does NOT scroll — only the nav zone does */
+    height: 100vh;
+    height: 100dvh;       /* dynamic viewport — handles mobile browser chrome */
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
   .sidebar.open {
     transform: translateX(0);
@@ -512,38 +602,14 @@
   .main-content {
     margin-left: 0 !important;
   }
-  #sidebar-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 44px;
-    height: 44px;
-    font-size: 1.4rem;
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--brown-dark);
-    flex-shrink: 0;
-  }
-  .sidebar-overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(44, 24, 16, 0.5);
-    z-index: 199;
-    cursor: pointer;
-  }
-  .sidebar-overlay.open {
-    display: block;
-    animation: fadeIn 0.2s ease;
-  }
 
-  /* ── Mobile sidebar close button ── */
+  /* Zone 1 — Mobile close button (flex-shrink: 0 = always visible) */
   .sidebar-mobile-close {
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    padding: 12px 16px 0;
+    padding: 8px 16px 0;
+    flex-shrink: 0;
   }
   .sidebar-mobile-close button {
     background: rgba(255,255,255,0.1);
@@ -562,6 +628,158 @@
   .sidebar-mobile-close button:hover {
     background: rgba(255,255,255,0.2);
     color: #fff;
+  }
+
+  /* Zone 1 — Brand (flex-shrink: 0 = always visible) */
+  .sidebar-brand {
+    flex-shrink: 0;
+    padding: 16px 20px;
+  }
+
+  /* Zone 2 — Nav wrapper (flex: 1 so it fills all remaining space) */
+  .sidebar-nav-wrapper {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Scroll gradient: visual cue that nav is scrollable */
+  .sidebar-nav-wrapper::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 24px;
+    background: linear-gradient(to bottom, transparent, rgba(44, 24, 16, 0.6));
+    pointer-events: none;
+  }
+
+  /* Zone 2 — Nav (scrolls independently inside the wrapper) */
+  .sidebar-nav {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    min-height: 0;        /* critical for Safari flex overflow */
+    padding-bottom: 8px;
+  }
+  .sidebar-nav::-webkit-scrollbar       { width: 3px; }
+  .sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+  .sidebar-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+
+  /* Zone 3 — Profile (flex-shrink: 0 = always visible at bottom) */
+  .sidebar-user {
+    flex-shrink: 0;
+    padding: 14px 16px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    background: var(--brown-dark);
+    box-shadow: 0 -4px 16px rgba(0,0,0,0.2);
+    min-height: 70px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  /* User info: truncate long names */
+  .user-info {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .user-name {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--cream);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .user-role {
+    font-size: 0.68rem;
+    color: rgba(255,255,255,0.4);
+    text-transform: capitalize;
+    white-space: nowrap;
+  }
+  .user-avatar {
+    width: 34px;
+    height: 34px;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+  }
+
+  /* Logout: show text + make it a proper tap target */
+  .logout-text {
+    display: inline;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: rgba(255,255,255,0.7);
+  }
+  .logout-icon { font-size: 1rem; }
+  .sidebar-user > a[href*="logout"] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-left: auto;
+    background: rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 8px 12px;
+    min-height: 44px;
+    min-width: 80px;
+    color: rgba(255,255,255,0.7) !important;
+    text-decoration: none;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .sidebar-user > a[href*="logout"]:hover,
+  .sidebar-user > a[href*="logout"]:active {
+    background: rgba(255,255,255,0.15);
+    color: #fff !important;
+  }
+
+  /* Nav links: proper 48px touch targets */
+  .sidebar-link {
+    padding: 13px 20px;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .nav-section-title {
+    padding: 10px 20px 4px;
+    font-size: 0.62rem;
+  }
+
+  /* Sidebar toggle button */
+  #sidebar-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    font-size: 1.4rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--brown-dark);
+    flex-shrink: 0;
+  }
+
+  /* Overlay */
+  .sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(44, 24, 16, 0.5);
+    z-index: 199;
+    cursor: pointer;
+  }
+  .sidebar-overlay.open {
+    display: block;
+    animation: fadeIn 0.2s ease;
   }
 
 }

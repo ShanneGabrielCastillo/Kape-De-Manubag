@@ -1210,3 +1210,23 @@ tbody tr:last-child { border-bottom: none; }
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
+
+/* ── Logout text hidden on desktop (shown on mobile via responsive.css) ── */
+.logout-text { display: none; }
+
+/* ── Reports page grid layouts ── */
+.reports-grid-top {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+.reports-grid-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+/* Mobile table/card toggle — desktop shows table, hides cards */
+.reports-table-wrapper { display: block; }
+.reports-mobile-cards  { display: none; }
