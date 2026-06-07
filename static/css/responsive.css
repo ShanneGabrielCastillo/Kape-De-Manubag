@@ -543,19 +543,6 @@
     width: 100%;
   }
 
-  /* ── Right-edge fade: visual scroll cue ── */
-  .table-wrapper::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 32px;
-    background: linear-gradient(to right, transparent, rgba(251, 247, 238, 0.9));
-    pointer-events: none;
-    border-radius: 0 var(--radius) var(--radius) 0;
-  }
-
   /* ── Reduce table density ── */
   .table-wrapper table {
     font-size: 0.78rem;
