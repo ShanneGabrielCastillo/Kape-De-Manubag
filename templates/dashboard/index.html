@@ -165,13 +165,29 @@
   initSalesChart(labels, data);
 
   async function loadChart(period, btn) {
+    // Update active button state
     document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    const r = await fetch(`/dashboard/chart-data/?period=${period}`);
-    const d = await r.json();
-    const canvas = document.getElementById('sales-chart');
-    if (canvas._chart) canvas._chart.destroy();
-    initSalesChart(d.labels, d.data);
+
+    // Show loading state
+    const originalText = btn.textContent;
+    btn.textContent = '...';
+    btn.disabled = true;
+
+    try {
+      const r = await fetch(`/dashboard/chart-data/?period=${period}`);
+      if (!r.ok) throw new Error(`Server error: ${r.status}`);
+      const d = await r.json();
+      if (!d.labels || !d.data) throw new Error('Invalid response format');
+      // initSalesChart now correctly destroys the old chart via Chart.getChart()
+      initSalesChart(d.labels, d.data);
+    } catch (err) {
+      console.error('Chart load error:', err);
+      btn.classList.remove('active');
+    } finally {
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }
   }
 </script>
 {% endblock %}

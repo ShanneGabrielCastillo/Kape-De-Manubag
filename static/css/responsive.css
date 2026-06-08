@@ -1,5 +1,5 @@
 
-/*
+  /*
  * KAPE DE MANUBAG — Responsive Overrides
  * Mobile-first additions. Desktop styles in main.css are NEVER modified here.
  * ============================================================================
@@ -479,6 +479,18 @@
   .reports-mobile-cards { display: none; }
   .chart-wrap { height: 220px; }
 
+  /* ── Order detail tablet: single column, show table ── */
+  .order-detail-grid {
+    grid-template-columns: 1fr !important;
+    gap: 20px;
+  }
+  .order-items-table {
+    display: block !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .order-items-mobile-cards { display: none !important; }
+
 }
 
 /* ==========================================================================
@@ -532,6 +544,118 @@
     grid-template-columns: 1fr;
     padding: 20px 16px;
     gap: 20px;
+  }
+
+  /* ── ORDER DETAIL PAGE MOBILE ── */
+  .order-detail-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px;
+  }
+  .order-detail-grid > * { min-width: 0; }
+
+  /* Hide desktop table, show mobile cards */
+  .order-items-table          { display: none !important; }
+  .order-items-mobile-cards   { display: block; }
+
+  /* Individual item card */
+  .order-item-card {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--cream);
+  }
+  .order-item-card:last-of-type { border-bottom: none; }
+  .order-item-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 4px;
+  }
+  .order-item-card-name {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--brown-dark);
+    flex: 1;
+    line-height: 1.3;
+  }
+  .order-item-card-size {
+    font-weight: 400;
+    font-size: 0.8rem;
+    color: #aaa;
+  }
+  .order-item-card-subtotal {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--caramel);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .order-item-card-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .order-item-card-qty  { font-size: 0.8rem; color: #888; }
+  .order-item-card-note { font-size: 0.75rem; color: var(--caramel); font-style: italic; }
+
+  /* Summary lines (packaging, discount, total) */
+  .order-summary-line {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    font-size: 0.85rem;
+    color: #888;
+    border-top: 1px solid var(--cream);
+    margin-top: 4px;
+  }
+  .order-summary-total {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 0 4px;
+    font-weight: 700;
+    font-size: 1.05rem;
+    border-top: 2px solid var(--cream);
+    color: var(--brown-dark);
+    margin-top: 4px;
+  }
+
+  /* Status form full-width on order detail */
+  .order-detail-grid .status-update-form {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .order-detail-grid .status-update-form select,
+  .order-detail-grid .status-update-form .form-select {
+    width: 100%;
+    min-height: 48px;
+    font-size: 1rem;
+  }
+  .order-detail-grid .status-update-form button[type="submit"] {
+    width: 100%;
+    min-height: 48px;
+    font-size: 1rem;
+    justify-content: center;
+  }
+
+  /* Process payment button full-width */
+  .order-detail-grid .card-body > button[onclick*="openPaymentModal"],
+  .order-detail-grid .card-body > .btn-caramel {
+    width: 100%;
+    min-height: 52px;
+    font-size: 1rem;
+    justify-content: center;
+  }
+
+  /* Page header button row wraps on mobile */
+  .page-header > div[style*="display:flex"] {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .page-header > div[style*="display:flex"] .btn {
+    flex: 1;
+    min-width: 140px;
+    justify-content: center;
+    min-height: 44px;
   }
 
   /* ── Table wrapper scrolls independently ── */

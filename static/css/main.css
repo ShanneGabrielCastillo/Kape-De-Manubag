@@ -1230,3 +1230,37 @@ tbody tr:last-child { border-bottom: none; }
 /* Mobile table/card toggle — desktop shows table, hides cards */
 .reports-table-wrapper { display: block; }
 .reports-mobile-cards  { display: none; }
+
+/* ── Order Detail page grid ── */
+.order-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 24px;
+}
+
+/* Order detail item display toggle: desktop shows table, hides cards */
+.order-items-mobile-cards { display: none; }
+.order-items-table        { display: block; }
+
+/* Special instructions highlight — desktop + mobile */
+.order-notes-highlight {
+  background: rgba(193, 122, 59, 0.08);
+  border: 1px solid rgba(193, 122, 59, 0.25);
+  border-left: 3px solid var(--caramel);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-top: 8px;
+}
+.order-notes-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--caramel);
+  margin-bottom: 4px;
+}
+.order-notes-text {
+  font-size: 0.88rem;
+  color: var(--brown-dark);
+  line-height: 1.5;
+}

@@ -12,11 +12,11 @@
   </div>
 </div>
 
-<div style="display:grid;grid-template-columns:1fr 320px;gap:24px">
+<div class="order-detail-grid">
   <div>
     <div class="card" style="margin-bottom:20px">
       <div class="card-header"><h3>Order Items</h3></div>
-      <div class="table-wrapper">
+      <div class="table-wrapper order-items-table">
         <table>
           <thead><tr><th>Item</th><th>Size</th><th>Qty</th><th>Unit Price</th><th>Subtotal</th></tr></thead>
           <tbody>
@@ -42,6 +42,41 @@
           </tbody>
         </table>
       </div>
+
+      <!-- Mobile item cards (hidden on desktop) -->
+      <div class="order-items-mobile-cards">
+        {% for item in items %}
+        <div class="order-item-card">
+          <div class="order-item-card-top">
+            <div class="order-item-card-name">
+              {{ item.product_name }}
+              {% if item.size != 'none' %}<span class="order-item-card-size">({{ item.get_size_display }})</span>{% endif %}
+            </div>
+            <div class="order-item-card-subtotal">₱{{ item.subtotal|floatformat:2 }}</div>
+          </div>
+          <div class="order-item-card-bottom">
+            <span class="order-item-card-qty">{{ item.quantity }} × ₱{{ item.unit_price|floatformat:2 }}</span>
+            {% if item.notes %}<span class="order-item-card-note">📝 {{ item.notes }}</span>{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+        {% if order.packaging_fee and order.packaging_fee > 0 %}
+        <div class="order-summary-line">
+          <span>📦 Packaging Fee</span>
+          <span>₱{{ order.packaging_fee|floatformat:2 }}</span>
+        </div>
+        {% endif %}
+        {% if order.discount and order.discount > 0 %}
+        <div class="order-summary-line">
+          <span>Discount</span>
+          <span style="color:var(--green-success)">-₱{{ order.discount|floatformat:2 }}</span>
+        </div>
+        {% endif %}
+        <div class="order-summary-total">
+          <span>Total</span>
+          <span>₱{{ order.total|floatformat:2 }}</span>
+        </div>
+      </div><!-- End mobile item cards -->
     </div>
   </div>
 
@@ -54,7 +89,12 @@
           {% if order.customer_phone %}{% include "partials/info_row.html" with label="Phone" value=order.customer_phone %}{% endif %}
           {% include "partials/info_row.html" with label="Type" value=order.get_order_type_display %}
           {% if order.table_number %}{% include "partials/info_row.html" with label="Table" value=order.table_number %}{% endif %}
-          {% if order.notes %}{% include "partials/info_row.html" with label="Notes" value=order.notes %}{% endif %}
+          {% if order.notes %}
+          <div class="order-notes-highlight">
+            <div class="order-notes-label">📝 Special Instructions</div>
+            <div class="order-notes-text">{{ order.notes }}</div>
+          </div>
+          {% endif %}
           {% if order.cashier %}{% include "partials/info_row.html" with label="Cashier" value=order.cashier.get_full_name %}{% endif %}
         </div>
       </div>

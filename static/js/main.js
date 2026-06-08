@@ -375,6 +375,12 @@ window.initSalesChart = function(labels, data) {
   const canvas = document.getElementById('sales-chart');
   if (!canvas || typeof Chart === 'undefined') return;
 
+  // Chart.js v4 correct API — canvas._chart does not exist
+  const existingChart = Chart.getChart(canvas);
+  if (existingChart) {
+    existingChart.destroy();
+  }
+
   new Chart(canvas, {
     type: 'line',
     data: {
@@ -406,9 +412,21 @@ window.initSalesChart = function(labels, data) {
         y: {
           beginAtZero: true,
           grid: { color: 'rgba(0,0,0,0.05)' },
-          ticks: { callback: v => `₱${v}` },
+          ticks: {
+            callback: v => `₱${v}`,
+            font: { size: 11 },
+            maxTicksLimit: 6,
+          },
         },
-        x: { grid: { display: false } },
+        x: {
+          grid: { display: false },
+          ticks: {
+            maxRotation: 45,
+            minRotation: 0,
+            font: { size: 10 },
+            maxTicksLimit: 7,
+          },
+        },
       },
     },
   });
