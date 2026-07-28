@@ -35,7 +35,7 @@
       </thead>
       <tbody>
         {% for order in orders %}
-        <tr>
+        <tr data-order-id="{{ order.pk }}">
           <td><a href="{% url 'orders:order_detail' order.pk %}" style="font-weight:700;color:var(--caramel)">{{ order.order_number }}</a></td>
           <td>{{ order.customer_name }}</td>
           <td>
@@ -149,5 +149,38 @@ async function quickAdvance(orderId) {
     showToast(d.error || 'Error', 'error');
   }
 }
+
+// ── Real-time: new order ──────────────────────────────────────────────────
+RealtimeConnection.on('new_order', function(order) {
+  if (typeof showToast === 'function') {
+    showToast(`🔔 New order received: #${order.queue_number}`, 'success');
+  }
+  // Only auto-reload when no filter is active (so we don't disrupt searches)
+  const hasFilter = new URLSearchParams(window.location.search).toString();
+  if (!hasFilter) {
+    setTimeout(() => location.reload(), 2000);
+  }
+});
+
+// ── Real-time: status changed — update badge in-place ─────────────────────
+RealtimeConnection.on('status_changed', function(data) {
+  const row = document.querySelector(`tr[data-order-id="${data.order_id}"]`);
+  if (row) {
+    const badge = row.querySelector('.badge[class*="badge-"]');
+    if (badge) {
+      badge.className = `badge badge-${data.new_status}`;
+      // Preserve the status dot if present
+      const dot = badge.querySelector('.order-status-dot');
+      if (dot) {
+        dot.className = `order-status-dot dot-${data.new_status}`;
+        badge.textContent = '';
+        badge.appendChild(dot);
+        badge.appendChild(document.createTextNode(data.new_status_display));
+      } else {
+        badge.textContent = data.new_status_display;
+      }
+    }
+  }
+});
 </script>
 {% endblock %}

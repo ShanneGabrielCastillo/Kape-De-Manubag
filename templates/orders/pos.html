@@ -294,5 +294,12 @@ document.querySelectorAll('[name=pos-order-type]').forEach(r =>
     }
   };
 })();
+
+// ── Real-time: notify cashier of new orders (lightweight — no reload) ──────
+RealtimeConnection.on('new_order', function(order) {
+  if (typeof showToast === 'function') {
+    showToast(`🔔 New order: #${order.queue_number}`, 'info');
+  }
+});
 </script>
 {% endblock %}

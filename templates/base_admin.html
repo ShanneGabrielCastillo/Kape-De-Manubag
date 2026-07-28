@@ -106,4 +106,14 @@
     </div>
   </main>
 </div>
+
+{# Audio + realtime.js loads after main.js (which is in base.html's body close) #}
+{# Use a dedicated block so child extra_js blocks don't clobber this #}
+{% block realtime_js %}
+<audio id="new-order-sound" preload="auto">
+  <source src="{% static 'sounds/new_order.mp3' %}" type="audio/mpeg">
+</audio>
+<script src="{% static 'js/realtime.js' %}"></script>
+{% endblock realtime_js %}
+
 {% endblock %}

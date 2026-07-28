@@ -50,7 +50,7 @@
   <a href="{% url 'orders:pos' %}" class="btn btn-caramel"><span>🖥️</span> Open POS</a>
   <a href="{% url 'orders:order_list' %}" class="btn btn-primary">
     📋 Orders
-    {% if pending_count %}<span class="badge badge-pending" style="margin-left:4px">{{ pending_count }} pending</span>{% endif %}
+    {% if pending_count %}<span class="badge badge-pending" id="pending-count-value" style="margin-left:4px">{{ pending_count }} pending</span>{% endif %}
   </a>
   {% if user.is_admin_user %}
   <a href="{% url 'menu:product_create' %}" class="btn btn-outline">+ Add Product</a>
@@ -108,7 +108,7 @@
         <thead>
           <tr><th>Order #</th><th>Customer</th><th>Type</th><th>Total</th><th>Status</th><th>Time</th></tr>
         </thead>
-        <tbody>
+        <tbody id="recent-orders-body">
           {% for order in recent_orders %}
           <tr>
             <td><a href="{% url 'orders:order_detail' order.pk %}" style="font-weight:700;color:var(--caramel)">{{ order.order_number }}</a></td>
@@ -189,5 +189,49 @@
       btn.disabled = false;
     }
   }
+
+  // ── Real-time: new order received ─────────────────────────────────────────
+  RealtimeConnection.on('new_order', function(order) {
+    // Increment pending count badge
+    const pendingBadge = document.getElementById('pending-count-value');
+    if (pendingBadge) {
+      const current = parseInt(pendingBadge.textContent) || 0;
+      pendingBadge.textContent = (current + 1) + ' pending';
+    }
+
+    // Prepend new row to Recent Orders table
+    const recentTable = document.getElementById('recent-orders-body');
+    if (recentTable) {
+      const row = document.createElement('tr');
+      row.className = 'new-order-highlight';
+      row.innerHTML = `
+        <td><a href="/orders/manage/${order.order_id}/"
+               style="font-weight:700;color:var(--caramel)">${order.order_number}</a></td>
+        <td>${order.customer_name}</td>
+        <td><span class="badge badge-preparing">${order.order_type}</span></td>
+        <td style="font-weight:700">₱${order.total.toFixed(2)}</td>
+        <td><span class="badge badge-pending">
+          <span class="order-status-dot dot-pending"></span>Pending
+        </span></td>
+        <td style="color:#aaa;font-size:0.8rem">Just now</td>
+      `;
+      recentTable.prepend(row);
+      setTimeout(() => row.classList.remove('new-order-highlight'), 3000);
+      // Keep table at max 10 rows
+      const rows = recentTable.querySelectorAll('tr');
+      if (rows.length > 10) rows[rows.length - 1].remove();
+    }
+  });
+
+  // ── Real-time: low stock alert ────────────────────────────────────────────
+  RealtimeConnection.on('inventory_low', function(product) {
+    if (typeof showToast === 'function') {
+      showToast(
+        `⚠️ Low stock: ${product.product_name} (${product.stock_quantity} left)`,
+        'warning',
+        5000
+      );
+    }
+  });
 </script>
 {% endblock %}

@@ -1264,3 +1264,21 @@ tbody tr:last-child { border-bottom: none; }
   color: var(--brown-dark);
   line-height: 1.5;
 }
+
+/* ── Real-time new order row highlight ── */
+.new-order-highlight {
+  animation: newOrderFlash 1.5s ease 0s 2 alternate;
+}
+@keyframes newOrderFlash {
+  from { background: transparent; }
+  to   { background: rgba(193, 122, 59, 0.12); }
+}
+
+/* ── Pending badge pulse on new order ── */
+.badge-pulse {
+  animation: badgePulse 0.5s ease 0s 2 alternate;
+}
+@keyframes badgePulse {
+  from { transform: scale(1); }
+  to   { transform: scale(1.3); }
+}
