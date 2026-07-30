@@ -29,7 +29,7 @@
     <div class="card-body" style="padding:0">
 
       {% for setting in settings_list %}
-      <div style="padding:20px 24px;border-bottom:1px solid var(--cream);display:grid;grid-template-columns:1fr 180px;gap:20px;align-items:start">
+      <div class="settings-row">
         <div>
           <div style="font-weight:700;font-size:0.95rem;color:var(--brown-dark);margin-bottom:4px">
             {% if setting.key == 'PACKAGING_FEE_PER_ITEM' %}
@@ -71,7 +71,7 @@
 
     </div>
     {% if settings_list %}
-    <div style="padding:16px 24px;border-top:2px solid var(--cream);display:flex;justify-content:flex-end;gap:12px">
+    <div class="settings-footer">
       <a href="{% url 'dashboard:index' %}" class="btn btn-outline">Cancel</a>
       <button type="submit" class="btn btn-primary">💾 Save Changes</button>
     </div>

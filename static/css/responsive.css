@@ -1092,3 +1092,63 @@
   }
 
 }
+
+/* ==========================================================================
+   SYSTEM SETTINGS PAGE — mobile
+   ========================================================================== */
+@media (max-width: 575.98px) {
+
+  /* Each setting row stacks vertically */
+  .settings-row {
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  /* Value input full-width */
+  .settings-row input[type="text"],
+  .settings-row input[type="number"] {
+    width: 100% !important;
+    min-height: 48px !important;
+    font-size: 1rem !important;
+  }
+
+  /* Timestamp readable below input */
+  .settings-row div[style*="0.72rem"] {
+    font-size: 0.72rem;
+    color: #bbb;
+    margin-top: 4px;
+  }
+
+  /* Footer buttons stack / wrap */
+  .settings-footer {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 14px 16px;
+  }
+  .settings-footer .btn {
+    flex: 1;
+    min-width: 120px;
+    min-height: 48px;
+    justify-content: center;
+  }
+
+  /* How Settings Work info card */
+  .card .card-body ul {
+    padding-left: 16px;
+  }
+
+}
+
+@media (min-width: 576px) and (max-width: 767.98px) {
+
+  /* Tablet: allow grid but make value column wider */
+  .settings-row {
+    grid-template-columns: 1fr 200px;
+    gap: 16px;
+  }
+  .settings-footer .btn {
+    min-height: 44px;
+  }
+
+}
