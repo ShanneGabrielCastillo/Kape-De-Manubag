@@ -227,6 +227,13 @@ def process_payment(request, pk):
         amount_paid = float(request.POST.get('amount_paid', 0))
         payment_method = request.POST.get('payment_method', 'cash')
 
+        VALID_PAYMENT_METHODS = ['cash', 'gcash']
+        if payment_method not in VALID_PAYMENT_METHODS:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid payment method. Only Cash and GCash are accepted.',
+            })
+
         if amount_paid >= float(order.total):
             order.is_paid = True
             order.payment_method = payment_method

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Finance Report — {{ record.date }}</title>
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 13px; background: #fff; margin: 0; padding: 0; }
+    .print-container { max-width: 680px; margin: 0 auto; padding: 32px; }
+    h1 { font-size: 1.3rem; margin: 0 0 4px; }
+    .brand { text-align: center; margin-bottom: 24px; border-bottom: 2px solid #333; padding-bottom: 16px; }
+    .brand h2 { margin: 0 0 4px; font-size: 1.2rem; }
+    .brand p  { margin: 0; color: #555; font-size: 0.85rem; }
+    .meta-table { width: 100%; margin-bottom: 24px; font-size: 0.9rem; }
+    .meta-table td { padding: 3px 0; }
+    .meta-table td:first-child { color: #666; width: 140px; }
+    table.report { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+    table.report th, table.report td { padding: 8px 12px; border: 1px solid #ddd; }
+    table.report th { background: #f5f5f5; text-align: left; font-size: 0.85rem; }
+    table.report td.amount { text-align: right; font-family: monospace; font-size: 0.95rem; }
+    .row-separator td { background: #f9f9f9; font-weight: bold; }
+    .row-ending td { background: #2c1810; color: #fff; font-weight: bold; font-size: 1rem; }
+    .row-ending td.amount { font-size: 1.1rem; }
+    .notes-row td { font-style: italic; color: #666; font-size: 0.82rem; padding: 4px 12px 8px; border-top: none; }
+    .footer { text-align: center; color: #888; font-size: 0.78rem; margin-top: 32px; border-top: 1px solid #ddd; padding-top: 12px; }
+    .no-print { text-align: center; margin: 20px 0; }
+    .no-print button { padding: 8px 20px; margin: 0 4px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+    .btn-print { background: #4A2C2A; color: #fff; }
+    .btn-close { background: #888; color: #fff; }
+    @media print {
+      .no-print { display: none; }
+      body { padding: 0; }
+    }
+  </style>
+</head>
+<body>
+<div class="print-container">
+
+  <div class="brand">
+    <h2>☕ KAPE DE MANUBAG</h2>
+    <p>Daily Cash Reconciliation Report</p>
+  </div>
+
+  <table class="meta-table">
+    <tr>
+      <td>Date:</td>
+      <td><strong>{{ record.date }}</strong></td>
+    </tr>
+    <tr>
+      <td>Prepared By:</td>
+      <td>{{ record.prepared_by.get_full_name|default:record.prepared_by.username|default:"—" }}</td>
+    </tr>
+    <tr>
+      <td>Cash Orders:</td>
+      <td>{{ order_count }} completed cash order{{ order_count|pluralize }}</td>
+    </tr>
+    <tr>
+      <td>Printed:</td>
+      <td>{{ printed_at|date:"F j, Y g:i A" }}</td>
+    </tr>
+  </table>
+
+  <table class="report">
+    <thead>
+      <tr>
+        <th>Item</th>
+        <th style="text-align:right">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Previous Cash on Hand</td>
+        <td class="amount">₱{{ record.previous_coh|floatformat:2 }}</td>
+      </tr>
+      <tr>
+        <td>+ Cash Sales</td>
+        <td class="amount">₱{{ cash_sales|floatformat:2 }}</td>
+      </tr>
+      <tr class="row-separator">
+        <td>= Running Total</td>
+        <td class="amount">₱{{ running_total|floatformat:2 }}</td>
+      </tr>
+      <tr>
+        <td>− Expenses</td>
+        <td class="amount">₱{{ record.expenses|floatformat:2 }}</td>
+      </tr>
+      {% if record.expenses_notes %}
+      <tr class="notes-row">
+        <td colspan="2">{{ record.expenses_notes }}</td>
+      </tr>
+      {% endif %}
+      <tr>
+        <td>− GCash Payments</td>
+        <td class="amount">₱{{ record.gcash_payments|floatformat:2 }}</td>
+      </tr>
+      <tr>
+        <td>− Coins</td>
+        <td class="amount">₱{{ record.coins|floatformat:2 }}</td>
+      </tr>
+      <tr>
+        <td>− Cash Advance</td>
+        <td class="amount">₱{{ record.cash_advance|floatformat:2 }}</td>
+      </tr>
+      <tr>
+        <td>− Floating Cash</td>
+        <td class="amount">₱{{ record.floating_cash|floatformat:2 }}</td>
+      </tr>
+      <tr class="row-ending">
+        <td>ENDING CASH ON HAND</td>
+        <td class="amount">₱{{ ending_coh|floatformat:2 }}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <p>This is a system-generated report.</p>
+    <p>Kape De Manubag Finance System</p>
+  </div>
+
+</div>
+
+<div class="no-print">
+  <button class="btn-print" onclick="window.print()">🖨️ Print</button>
+  <button class="btn-close" onclick="window.close()">Close</button>
+</div>
+
+<script>setTimeout(() => window.print(), 500);</script>
+</body>
+</html>

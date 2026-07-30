@@ -25,7 +25,6 @@ class Order(models.Model):
     PAYMENT_METHOD_CHOICES = [
         ('cash', 'Cash'),
         ('gcash', 'GCash'),
-        ('card', 'Card'),
     ]
 
     order_number = models.CharField(max_length=20, unique=True, blank=True)

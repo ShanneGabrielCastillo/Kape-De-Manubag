@@ -1,0 +1,419 @@
+{% extends "base_admin.html" %}
+{% load static %}
+{% block page_title %}Finance{% endblock %}
+
+{% block content %}
+
+{# ── SECTION 1: Page Header ── #}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Finance</h1>
+    <p class="page-subtitle">Daily Cash Reconciliation</p>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    {# Date selector #}
+    <form method="get" style="display:flex;gap:8px;align-items:center">
+      <input type="date" name="date" value="{{ selected_date|date:'Y-m-d' }}"
+             class="form-control" style="width:160px">
+      <button type="submit" class="btn btn-primary btn-sm">Go</button>
+    </form>
+    <a href="{% url 'finance:history' %}" class="btn btn-outline btn-sm">📋 Full History</a>
+  </div>
+</div>
+
+{# Messages #}
+{% if messages %}
+<div style="margin-bottom:16px">
+  {% for message in messages %}
+  <div class="alert alert-{{ message.tags }}">{{ message }}<button class="alert-dismiss">×</button></div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ── SECTION 2: Finance Entry ── #}
+<form method="post" id="finance-form"
+      data-previous-coh="{{ prev_coh_display }}"
+      data-cash-sales="{{ cash_sales }}">
+  {% csrf_token %}
+  {# Hidden date field always submitted #}
+  <input type="hidden" name="date" value="{{ selected_date|date:'Y-m-d' }}">
+
+  <div class="finance-form-grid">
+
+    {# ── LEFT: Entry Form ── #}
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <h3>Cash Reconciliation — {{ selected_date|date:"F j, Y" }}</h3>
+          {% if existing_record %}
+          <span class="finance-saved-badge">✓ Saved</span>
+          {% endif %}
+        </div>
+        <div class="card-body">
+
+          {# Field 1: Previous COH #}
+          <div class="form-group">
+            <label class="form-label">Previous Cash on Hand</label>
+            {% if previous_coh_is_auto %}
+              {# Read-only display — auto from yesterday #}
+              <div class="finance-coh-display">₱{{ prev_coh_display|floatformat:2 }}</div>
+              <div class="finance-source-label">✓ {{ previous_coh_source }}</div>
+              <input type="hidden" name="previous_coh" value="{{ prev_coh_display }}">
+            {% else %}
+              {# Editable input — no auto record found #}
+              {{ form.previous_coh }}
+              <div class="finance-warning-label">⚠️ {{ previous_coh_source }}</div>
+            {% endif %}
+          </div>
+
+          {# Field 2: Cash Sales (read-only) #}
+          <div class="form-group">
+            <label class="form-label">Sales Overview (Today)</label>
+            <div class="finance-coh-display">₱{{ cash_sales|floatformat:2 }}
+              <span style="font-size:0.75rem;font-weight:400;color:#888;margin-left:6px">({{ order_count }} order{{ order_count|pluralize }})</span>
+            </div>
+            <div style="font-size:0.75rem;color:var(--green-success);margin-top:4px;font-weight:600">
+              Cash Sales &nbsp;—&nbsp; included in Running Total
+            </div>
+            {% if gcash_order_count %}
+            <div class="finance-coh-display" style="margin-top:8px;background:rgba(13,110,253,0.05);border-color:rgba(13,110,253,0.2)">
+              ₱{{ gcash_sales|floatformat:2 }}
+              <span style="font-size:0.75rem;font-weight:400;color:#888;margin-left:6px">({{ gcash_order_count }} order{{ gcash_order_count|pluralize }})</span>
+            </div>
+            <div style="font-size:0.75rem;color:#0d6efd;margin-top:4px;font-weight:600">
+              📱 GCash Sales &nbsp;—&nbsp; enter below as deduction
+            </div>
+            {% endif %}
+            <div style="font-size:0.72rem;color:#aaa;margin-top:6px">
+              <a href="?date={{ selected_date|date:'Y-m-d' }}" style="color:var(--caramel)">↺ Refresh</a>
+            </div>
+          </div>
+
+          {# Running Total display #}
+          <div class="form-group">
+            <label class="form-label">Running Total</label>
+            <div class="finance-coh-display" id="running-total-display"
+                 style="font-size:1.2rem;color:var(--caramel);font-family:'Playfair Display',serif">
+              ₱<span id="rt-value">{{ running_total|floatformat:2 }}</span>
+            </div>
+            <div style="font-size:0.72rem;color:#aaa;margin-top:4px">Previous COH + Cash Sales</div>
+          </div>
+
+          <hr style="border:none;border-top:2px dashed var(--cream);margin:20px 0 16px">
+          <div style="font-size:0.75rem;font-weight:700;color:var(--red-accent);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:16px">Less Deductions</div>
+
+          {# Field 3: Expenses #}
+          <div class="form-group">
+            <label class="form-label">Expenses</label>
+            {{ form.expenses }}
+            {% if form.expenses.errors %}<small style="color:var(--red-accent)">{{ form.expenses.errors.0 }}</small>{% endif %}
+            <div style="margin-top:8px">{{ form.expenses_notes }}</div>
+            {% if form.expenses_notes.errors %}<small style="color:var(--red-accent)">{{ form.expenses_notes.errors.0 }}</small>{% endif %}
+          </div>
+
+          {# Field 4: GCash #}
+          <div class="form-group">
+            <label class="form-label">GCash Payments</label>
+            {{ form.gcash_payments }}
+            {% if form.gcash_payments.errors %}<small style="color:var(--red-accent)">{{ form.gcash_payments.errors.0 }}</small>{% endif %}
+            <small class="finance-gcash-suggestion" id="gcash-suggestion"
+                   style="display:none;color:var(--caramel);font-size:0.78rem;margin-top:4px;cursor:pointer">
+              📱 System total: <strong id="gcash-suggestion-value">₱0.00</strong>
+              — <span style="text-decoration:underline">Use this amount</span>
+            </small>
+          </div>
+
+          {# Field 5: Coins #}
+          <div class="form-group">
+            <label class="form-label">Coins</label>
+            {{ form.coins }}
+            {% if form.coins.errors %}<small style="color:var(--red-accent)">{{ form.coins.errors.0 }}</small>{% endif %}
+          </div>
+
+          {# Field 6: Cash Advance #}
+          <div class="form-group">
+            <label class="form-label">Cash Advance</label>
+            {{ form.cash_advance }}
+            {% if form.cash_advance.errors %}<small style="color:var(--red-accent)">{{ form.cash_advance.errors.0 }}</small>{% endif %}
+          </div>
+
+          {# Field 7: Floating Cash #}
+          <div class="form-group">
+            <label class="form-label">Floating Cash</label>
+            {{ form.floating_cash }}
+            {% if form.floating_cash.errors %}<small style="color:var(--red-accent)">{{ form.floating_cash.errors.0 }}</small>{% endif %}
+          </div>
+
+          <button type="submit" class="btn btn-caramel btn-block btn-lg" style="margin-top:8px">
+            💾 Save Finance Record
+          </button>
+
+        </div>
+      </div>
+    </div>
+
+    {# ── RIGHT: Live Summary ── #}
+    <div>
+      <div class="card" style="position:sticky;top:80px">
+        <div class="card-header">
+          <h3>Summary</h3>
+          {% if existing_record %}
+          <span style="font-size:0.75rem;color:#aaa">
+            Updated {{ existing_record.updated_at|date:"g:i A" }}
+          </span>
+          {% endif %}
+        </div>
+        <div class="card-body" style="padding:0">
+          <div class="finance-summary-box">
+
+            <div class="finance-summary-row">
+              <span>Previous COH</span>
+              <span>₱<span id="sum-prev-coh">{{ prev_coh_display|floatformat:2 }}</span></span>
+            </div>
+            <div class="finance-summary-row">
+              <span style="color:var(--green-success)">+ Cash Sales</span>
+              <span style="color:var(--green-success)">₱{{ cash_sales|floatformat:2 }}</span>
+            </div>
+            <div class="finance-summary-row total-row">
+              <span>Running Total</span>
+              <span>₱<span id="sum-running">{{ running_total|floatformat:2 }}</span></span>
+            </div>
+
+            <div style="margin:8px 0 4px;font-size:0.72rem;font-weight:700;color:var(--red-accent);text-transform:uppercase;letter-spacing:0.08em">Deductions</div>
+
+            <div class="finance-summary-row">
+              <span>− Expenses</span>
+              <span>₱<span id="sum-expenses">{{ existing_record.expenses|default:"0.00"|floatformat:2 }}</span></span>
+            </div>
+            <div class="finance-summary-row">
+              <span>− GCash</span>
+              <span>₱<span id="sum-gcash">{{ existing_record.gcash_payments|default:"0.00"|floatformat:2 }}</span></span>
+            </div>
+            <div class="finance-summary-row">
+              <span>− Coins</span>
+              <span>₱<span id="sum-coins">{{ existing_record.coins|default:"0.00"|floatformat:2 }}</span></span>
+            </div>
+            <div class="finance-summary-row">
+              <span>− Cash Advance</span>
+              <span>₱<span id="sum-ca">{{ existing_record.cash_advance|default:"0.00"|floatformat:2 }}</span></span>
+            </div>
+            <div class="finance-summary-row">
+              <span>− Floating</span>
+              <span>₱<span id="sum-floating">{{ existing_record.floating_cash|default:"0.00"|floatformat:2 }}</span></span>
+            </div>
+
+            <div class="finance-summary-row ending-row" id="ending-row">
+              <span style="font-size:0.85rem">ENDING COH</span>
+              <span class="finance-ending-value" id="sum-ending">
+                ₱<span id="sum-ending-value">0.00</span>
+              </span>
+            </div>
+
+            <div id="negative-warning" style="display:none;color:var(--red-accent);font-size:0.8rem;margin-top:8px;text-align:center">
+              ⚠️ Ending COH is negative. Please review.
+            </div>
+
+          </div>
+
+          {% if existing_record %}
+          <div style="padding:16px;border-top:1px solid var(--cream)">
+            <a href="{% url 'finance:print' existing_record.pk %}" target="_blank"
+               class="btn btn-outline btn-block btn-sm">🖨️ Print Report</a>
+          </div>
+          {% endif %}
+
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /.finance-form-grid -->
+</form>
+
+{# ── SECTION 3: Finance History ── #}
+<div class="card" style="margin-top:28px">
+  <div class="card-header">
+    <h3>Finance History</h3>
+    <a href="{% url 'finance:history' %}" class="btn btn-sm btn-outline">View All</a>
+  </div>
+
+  {# Desktop table #}
+  <div class="table-wrapper finance-history-table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Prev COH</th>
+          <th>Cash Sales</th>
+          <th>Expenses</th>
+          <th>GCash</th>
+          <th>Coins</th>
+          <th>Cash Adv</th>
+          <th>Floating</th>
+          <th>Ending COH</th>
+          <th>By</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for rec in finance_history %}
+        <tr>
+          <td style="font-weight:600;white-space:nowrap">{{ rec.date }}</td>
+          <td>₱{{ rec.previous_coh|floatformat:2 }}</td>
+          <td style="color:var(--green-success)">₱{{ rec.annotated_cash_sales|default:"0.00"|floatformat:2 }}</td>
+          <td>₱{{ rec.expenses|floatformat:2 }}</td>
+          <td>₱{{ rec.gcash_payments|floatformat:2 }}</td>
+          <td>₱{{ rec.coins|floatformat:2 }}</td>
+          <td>₱{{ rec.cash_advance|floatformat:2 }}</td>
+          <td>₱{{ rec.floating_cash|floatformat:2 }}</td>
+          <td style="font-weight:700;color:var(--caramel)">
+            {% with ec=rec.ending_coh %}
+            <span {% if ec < 0 %}style="color:var(--red-accent)"{% endif %}>
+              ₱{{ ec|floatformat:2 }}
+            </span>
+            {% endwith %}
+          </td>
+          <td style="font-size:0.8rem;color:#aaa">{{ rec.prepared_by.username|default:"—" }}</td>
+          <td>
+            <a href="{% url 'finance:print' rec.pk %}" target="_blank" class="btn btn-sm btn-outline">🖨️</a>
+            <a href="?date={{ rec.date|date:'Y-m-d' }}" class="btn btn-sm btn-outline">Edit</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="11" style="text-align:center;padding:32px;color:#aaa">No finance records yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# Mobile cards #}
+  <div class="finance-history-card">
+    {% for rec in finance_history %}
+    <div style="padding:14px 16px;border-bottom:1px solid var(--cream)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+        <div>
+          <div style="font-weight:700;font-size:0.95rem">{{ rec.date }}</div>
+          <div style="font-size:0.75rem;color:#aaa;margin-top:2px">
+            Cash Sales ₱{{ rec.annotated_cash_sales|default:"0.00"|floatformat:2 }}
+            &nbsp;·&nbsp;
+            Expenses ₱{{ rec.expenses|floatformat:2 }}
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:1.1rem;
+            {% if rec.ending_coh < 0 %}color:var(--red-accent){% else %}color:var(--caramel){% endif %}">
+            ₱{{ rec.ending_coh|floatformat:2 }}
+          </div>
+          <div style="font-size:0.7rem;color:#aaa">Ending COH</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <a href="?date={{ rec.date|date:'Y-m-d' }}" class="btn btn-sm btn-outline" style="flex:1;justify-content:center">Edit</a>
+        <a href="{% url 'finance:print' rec.pk %}" target="_blank" class="btn btn-sm btn-outline">🖨️</a>
+      </div>
+    </div>
+    {% empty %}
+    <div class="empty-state" style="padding:40px"><div class="empty-icon">💰</div><p>No finance records yet.</p></div>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  const form      = document.getElementById('finance-form');
+  if (!form) return;
+
+  const prevCoh   = parseFloat(form.dataset.previousCoh) || 0;
+  const cashSales = parseFloat(form.dataset.cashSales)   || 0;
+
+  // Summary span refs
+  const sumPrevCoh  = document.getElementById('sum-prev-coh');
+  const sumRunning  = document.getElementById('sum-running');
+  const rtDisplay   = document.getElementById('rt-value');
+  const sumExpenses = document.getElementById('sum-expenses');
+  const sumGcash    = document.getElementById('sum-gcash');
+  const sumCoins    = document.getElementById('sum-coins');
+  const sumCa       = document.getElementById('sum-ca');
+  const sumFloating = document.getElementById('sum-floating');
+  const sumEndingVal= document.getElementById('sum-ending-value');
+  const endingRow   = document.getElementById('ending-row');
+  const endingSpan  = document.getElementById('sum-ending');
+  const negWarn     = document.getElementById('negative-warning');
+
+  function fmt(n) { return n.toFixed(2); }
+
+  function recompute() {
+    const expenses  = parseFloat(document.querySelector('[name=expenses]')?.value)       || 0;
+    const gcash     = parseFloat(document.querySelector('[name=gcash_payments]')?.value) || 0;
+    const coins     = parseFloat(document.querySelector('[name=coins]')?.value)           || 0;
+    const ca        = parseFloat(document.querySelector('[name=cash_advance]')?.value)    || 0;
+    const floating  = parseFloat(document.querySelector('[name=floating_cash]')?.value)   || 0;
+    const pcohInput = document.querySelector('[name=previous_coh]');
+    const pcoh      = pcohInput ? (parseFloat(pcohInput.value) || 0) : prevCoh;
+
+    const rt        = pcoh + cashSales;
+    const deductions= expenses + gcash + coins + ca + floating;
+    const ending    = rt - deductions;
+
+    if (sumPrevCoh)   sumPrevCoh.textContent   = fmt(pcoh);
+    if (sumRunning)   sumRunning.textContent    = fmt(rt);
+    if (rtDisplay)    rtDisplay.textContent     = fmt(rt);
+    if (sumExpenses)  sumExpenses.textContent   = fmt(expenses);
+    if (sumGcash)     sumGcash.textContent      = fmt(gcash);
+    if (sumCoins)     sumCoins.textContent      = fmt(coins);
+    if (sumCa)        sumCa.textContent         = fmt(ca);
+    if (sumFloating)  sumFloating.textContent   = fmt(floating);
+    if (sumEndingVal) sumEndingVal.textContent  = fmt(ending);
+
+    if (ending < 0) {
+      endingRow  && endingRow.classList.add('negative');
+      endingSpan && endingSpan.classList.add('negative');
+      negWarn    && (negWarn.style.display = 'block');
+    } else {
+      endingRow  && endingRow.classList.remove('negative');
+      endingSpan && endingSpan.classList.remove('negative');
+      negWarn    && (negWarn.style.display = 'none');
+    }
+  }
+
+  // Listen on all deduction + prev_coh inputs
+  ['[name=expenses]','[name=gcash_payments]','[name=coins]',
+   '[name=cash_advance]','[name=floating_cash]','[name=previous_coh]',
+  ].forEach(sel => {
+    const el = document.querySelector(sel);
+    if (el) el.addEventListener('input', recompute);
+  });
+
+  recompute();
+
+  // ── GCash suggestion via API ──────────────────────────────────────────────
+  const selectedDate = '{{ selected_date|date:"Y-m-d" }}';
+  const gcashSuggestionEl    = document.getElementById('gcash-suggestion');
+  const gcashSuggestionValue = document.getElementById('gcash-suggestion-value');
+  const gcashInput           = document.querySelector('[name=gcash_payments]');
+
+  if (gcashSuggestionEl && gcashSuggestionValue && gcashInput) {
+    // Fetch sales data including GCash
+    fetch(`/finance/api/cash-sales/?date=${selectedDate}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.gcash_sales && data.gcash_order_count > 0) {
+          gcashSuggestionValue.textContent = `₱${parseFloat(data.gcash_sales).toFixed(2)}`;
+          gcashSuggestionEl.style.display  = 'block';
+
+          // Click to fill in the suggested value
+          gcashSuggestionEl.addEventListener('click', function() {
+            gcashInput.value = parseFloat(data.gcash_sales).toFixed(2);
+            recompute();
+            gcashInput.focus();
+          });
+        }
+      })
+      .catch(() => {/* silently ignore — suggestion is optional */});
+  }
+
+})();
+</script>
+{% endblock %}

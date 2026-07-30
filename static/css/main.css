@@ -1282,3 +1282,82 @@ tbody tr:last-child { border-bottom: none; }
   from { transform: scale(1); }
   to   { transform: scale(1.3); }
 }
+
+/* ── FINANCE PAGE STYLES ── */
+.finance-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 24px;
+  align-items: start;
+}
+.finance-summary-box {
+  background: var(--cream);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+.finance-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 0.9rem;
+  border-bottom: 1px dashed #e8ddd0;
+}
+.finance-summary-row:last-child { border-bottom: none; }
+.finance-summary-row.total-row {
+  border-top: 2px solid var(--brown-mid);
+  border-bottom: 2px solid var(--brown-mid);
+  padding: 10px 0;
+  margin: 6px 0;
+  font-weight: 700;
+  font-size: 1rem;
+}
+.finance-summary-row.ending-row {
+  border: 2px solid var(--caramel);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-top: 8px;
+  background: var(--cream-white);
+  font-weight: 700;
+  font-size: 1.2rem;
+}
+.finance-summary-row.ending-row.negative {
+  border-color: var(--red-accent);
+  background: #fff5f5;
+  color: var(--red-accent);
+}
+.finance-ending-value {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--caramel);
+}
+.finance-ending-value.negative { color: var(--red-accent); }
+.finance-coh-display {
+  background: var(--cream);
+  border: 2px solid var(--cream);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--brown-dark);
+}
+.finance-source-label  { font-size: 0.75rem; color: var(--caramel); margin-top: 4px; font-weight: 600; }
+.finance-warning-label { font-size: 0.75rem; color: #e67e22;         margin-top: 4px; font-weight: 600; }
+.finance-saved-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(39, 174, 96, 0.12);
+  color: var(--green-success);
+  border: 1px solid rgba(39, 174, 96, 0.3);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.finance-deduction-label { font-size: 0.75rem; color: var(--red-accent); font-weight: 600; }
+
+/* Finance history display toggle */
+.finance-history-card          { display: none; }
+.finance-history-table-wrapper { display: block; }

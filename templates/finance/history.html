@@ -1,0 +1,116 @@
+{% extends "base_admin.html" %}
+{% block page_title %}Finance History{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Finance History</h1>
+    <p class="page-subtitle">All daily cash reconciliation records</p>
+  </div>
+  <a href="{% url 'finance:index' %}" class="btn btn-primary">← Back to Finance</a>
+</div>
+
+{# Filter bar #}
+<div class="filter-bar" style="margin-bottom:20px">
+  <form method="get" style="display:flex;gap:10px;flex-wrap:wrap;width:100%">
+    <input type="text" name="q" value="{{ search }}" placeholder="Search by date (YYYY-MM-DD)…" class="form-control">
+    <input type="month" name="month" value="{{ month_filter }}" class="form-control" style="max-width:180px">
+    <button type="submit" class="btn btn-primary">Filter</button>
+    <a href="{% url 'finance:history' %}" class="btn btn-outline">Clear</a>
+  </form>
+</div>
+
+<div class="card">
+  <div class="table-wrapper finance-history-table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Prev COH</th>
+          <th>Cash Sales</th>
+          <th>Expenses</th>
+          <th>GCash</th>
+          <th>Coins</th>
+          <th>Cash Adv</th>
+          <th>Floating</th>
+          <th>Ending COH</th>
+          <th>By</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for rec in records %}
+        <tr>
+          <td style="font-weight:600;white-space:nowrap">{{ rec.date }}</td>
+          <td>₱{{ rec.previous_coh|floatformat:2 }}</td>
+          <td style="color:var(--green-success)">₱{{ rec.annotated_cash_sales|default:"0.00"|floatformat:2 }}</td>
+          <td>₱{{ rec.expenses|floatformat:2 }}</td>
+          <td>₱{{ rec.gcash_payments|floatformat:2 }}</td>
+          <td>₱{{ rec.coins|floatformat:2 }}</td>
+          <td>₱{{ rec.cash_advance|floatformat:2 }}</td>
+          <td>₱{{ rec.floating_cash|floatformat:2 }}</td>
+          <td style="font-weight:700">
+            {% with ec=rec.ending_coh %}
+            <span {% if ec < 0 %}style="color:var(--red-accent)"{% else %}style="color:var(--caramel)"{% endif %}>
+              ₱{{ ec|floatformat:2 }}
+            </span>
+            {% endwith %}
+          </td>
+          <td style="font-size:0.8rem;color:#aaa">{{ rec.prepared_by.username|default:"—" }}</td>
+          <td>
+            <a href="{% url 'finance:print' rec.pk %}" target="_blank" class="btn btn-sm btn-outline">🖨️</a>
+            <a href="{% url 'finance:index' %}?date={{ rec.date|date:'Y-m-d' }}" class="btn btn-sm btn-outline">Edit</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="11" style="text-align:center;padding:32px;color:#aaa">No finance records found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# Mobile cards #}
+  <div class="finance-history-card">
+    {% for rec in records %}
+    <div style="padding:14px 16px;border-bottom:1px solid var(--cream)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div>
+          <div style="font-weight:700;font-size:0.95rem">{{ rec.date }}</div>
+          <div style="font-size:0.75rem;color:#aaa;margin-top:2px">
+            Cash Sales ₱{{ rec.annotated_cash_sales|default:"0.00"|floatformat:2 }}
+            &nbsp;·&nbsp;
+            Expenses ₱{{ rec.expenses|floatformat:2 }}
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:1.1rem;
+            {% if rec.ending_coh < 0 %}color:var(--red-accent){% else %}color:var(--caramel){% endif %}">
+            ₱{{ rec.ending_coh|floatformat:2 }}
+          </div>
+          <div style="font-size:0.7rem;color:#aaa">Ending COH</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <a href="{% url 'finance:index' %}?date={{ rec.date|date:'Y-m-d' }}" class="btn btn-sm btn-outline" style="flex:1;justify-content:center">Edit</a>
+        <a href="{% url 'finance:print' rec.pk %}" target="_blank" class="btn btn-sm btn-outline">🖨️</a>
+      </div>
+    </div>
+    {% empty %}
+    <div class="empty-state" style="padding:40px"><div class="empty-icon">💰</div><p>No records found.</p></div>
+    {% endfor %}
+  </div>
+</div>
+
+{% if records.has_other_pages %}
+<div class="pagination">
+  {% if records.has_previous %}<a href="?page={{ records.previous_page_number }}{% if month_filter %}&month={{ month_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}" class="page-link">‹ Prev</a>{% endif %}
+  {% for num in records.paginator.page_range %}
+    {% if records.number == num %}<span class="page-link active">{{ num }}</span>
+    {% elif num > records.number|add:'-3' and num < records.number|add:'3' %}
+    <a href="?page={{ num }}{% if month_filter %}&month={{ month_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}" class="page-link">{{ num }}</a>{% endif %}
+  {% endfor %}
+  {% if records.has_next %}<a href="?page={{ records.next_page_number }}{% if month_filter %}&month={{ month_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}" class="page-link">Next ›</a>{% endif %}
+</div>
+{% endif %}
+
+{% endblock %}

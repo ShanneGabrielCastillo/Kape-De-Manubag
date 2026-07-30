@@ -58,6 +58,11 @@
       </a>
       {% endif %}
 
+      <div class="nav-section-title">Finance</div>
+      <a href="{% url 'finance:index' %}" class="sidebar-link {% if request.resolver_match.app_name == 'finance' %}active{% endif %}">
+        <span class="nav-icon">💰</span> Finance
+      </a>
+
       <div class="nav-section-title">Store</div>
       <a href="{% url 'menu:index' %}" class="sidebar-link" target="_blank">
         <span class="nav-icon">🛒</span> Customer Menu

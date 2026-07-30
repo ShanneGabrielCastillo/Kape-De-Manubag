@@ -1064,3 +1064,31 @@
   .cart-total-row.grand { font-size: 1rem; }
 
 }
+
+/* ==========================================================================
+   FINANCE PAGE — mobile
+   ========================================================================== */
+@media (max-width: 575.98px) {
+
+  .finance-form-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px;
+  }
+  .finance-summary-box {
+    padding: 14px;
+  }
+  .finance-ending-value {
+    font-size: 1.2rem;
+  }
+  /* Hide desktop table, show cards */
+  .finance-history-table-wrapper { display: none !important; }
+  .finance-history-card          { display: block !important; }
+  /* Submit button full-width */
+  #finance-form .btn[type="submit"] {
+    width: 100%;
+    min-height: 52px;
+    font-size: 1rem;
+    justify-content: center;
+  }
+
+}
