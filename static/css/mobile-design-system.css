@@ -1,0 +1,601 @@
+/**
+ * =============================================
+ * KAPE DE MANUBAG — Mobile Design System
+ * Global mobile standards for all pages.
+ * Desktop styles: UNCHANGED (see main.css)
+ * Load order: main.css → THIS FILE → responsive.css
+ * =============================================
+ */
+
+/**
+ * ── SECTION 1: CSS VARIABLES (Mobile Only) ──
+ * These variables are scoped inside mobile
+ * media queries so they do NOT affect desktop.
+ */
+@media (max-width: 991.98px) {
+  :root {
+    /* Spacing scale */
+    --mobile-space-xxs: 4px;
+    --mobile-space-xs:  8px;
+    --mobile-space-sm:  12px;
+    --mobile-space-md:  16px;
+    --mobile-space-lg:  20px;
+    --mobile-space-xl:  24px;
+    --mobile-space-2xl: 32px;
+
+    /* Component standards */
+    --mobile-padding:       16px;
+    --mobile-radius:        12px;
+    --mobile-radius-sm:     8px;
+    --touch-target:         44px;
+    --touch-target-lg:      48px;
+    --mobile-font-h1:       20px;
+    --mobile-font-h2:       18px;
+    --mobile-font-h3:       16px;
+    --mobile-font-body:     14px;
+    --mobile-font-small:    12px;
+    --mobile-line-height:   1.5;
+    --mobile-btn-height:    44px;
+    --mobile-input-height:  46px;
+  }
+}
+
+/**
+ * ── SECTION 2: GLOBAL LAYOUT ──
+ */
+@media (max-width: 575.98px) {
+  /* Prevent any horizontal overflow at body level */
+  html, body {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
+  /* Page content padding */
+  .page-content {
+    padding: var(--mobile-padding);
+    overflow-x: hidden;
+    max-width: 100%;
+  }
+
+  /* Main content area */
+  .main-content {
+    overflow-x: hidden;
+    max-width: 100%;
+  }
+}
+
+/**
+ * ── SECTION 3: CARDS ──
+ */
+@media (max-width: 575.98px) {
+  .card {
+    overflow: hidden;
+    max-width: 100%;
+    border-radius: var(--mobile-radius);
+    margin-bottom: var(--mobile-space-md);
+  }
+  .card-body {
+    padding: var(--mobile-padding);
+  }
+  .card-header {
+    padding: 14px var(--mobile-padding);
+  }
+  .card-header h3,
+  .card-header h4,
+  .card-header h5 {
+    font-size: var(--mobile-font-h3);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 700;
+  }
+}
+
+/**
+ * ── SECTION 4: TYPOGRAPHY ──
+ */
+@media (max-width: 575.98px) {
+  .page-title {
+    font-size: var(--mobile-font-h1) !important;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+  .page-subtitle {
+    font-size: var(--mobile-font-small);
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+  h1 { font-size: var(--mobile-font-h1); }
+  h2 { font-size: var(--mobile-font-h2); }
+  h3 { font-size: var(--mobile-font-h3); }
+
+  body, p, td, th, label,
+  .form-control, .btn {
+    font-size: var(--mobile-font-body);
+    line-height: var(--mobile-line-height);
+  }
+
+  .text-muted, small, .small,
+  .stat-label, .stat-sub,
+  .nav-section-title {
+    font-size: var(--mobile-font-small);
+  }
+
+  /* Prevent any text from causing overflow */
+  p, span, div, td, th,
+  h1, h2, h3, h4, h5, h6, label {
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+  }
+}
+
+/**
+ * ── SECTION 5: BUTTONS ──
+ */
+@media (max-width: 575.98px) {
+  /* Global button touch target */
+  .btn {
+    min-height: var(--mobile-btn-height);
+    border-radius: 10px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    touch-action: manipulation;
+  }
+
+  /* Full-width buttons inside page headers */
+  .page-header .btn,
+  .page-header a.btn {
+    width: 100%;
+    min-height: var(--touch-target-lg);
+    justify-content: center;
+  }
+
+  /* Full-width buttons inside forms */
+  form .btn[type="submit"],
+  form .btn-primary,
+  form .btn-caramel {
+    width: 100%;
+    min-height: var(--touch-target-lg);
+    justify-content: center;
+  }
+
+  /* Button groups: wrap on mobile */
+  .btn-group-mobile,
+  .page-header > div,
+  .modal-footer {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* Small buttons: increase tap area via padding */
+  .btn-sm {
+    min-height: 36px;
+    padding: 6px 12px;
+  }
+}
+
+/**
+ * ── SECTION 6: FORM INPUTS ──
+ */
+@media (max-width: 575.98px) {
+  .form-control,
+  .form-select,
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  input[type="password"],
+  input[type="date"],
+  input[type="tel"],
+  textarea,
+  select {
+    width: 100%;
+    min-height: var(--mobile-input-height);
+    font-size: 1rem;
+    padding: 12px 14px;
+    border-radius: var(--mobile-radius-sm);
+    box-sizing: border-box;
+  }
+
+  textarea.form-control {
+    min-height: auto;
+  }
+
+  .form-group {
+    margin-bottom: var(--mobile-space-md);
+  }
+
+  .form-label {
+    font-size: 0.88rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  /* Filter bars: stack vertically */
+  .filter-bar,
+  .filter-bar form {
+    flex-direction: column;
+    gap: var(--mobile-space-sm);
+    width: 100%;
+  }
+
+  .filter-bar .form-control,
+  .filter-bar .form-select,
+  .filter-bar .btn {
+    width: 100%;
+    max-width: 100%;
+    min-height: var(--mobile-btn-height);
+  }
+}
+
+/**
+ * ── SECTION 7: PAGE HEADERS ──
+ */
+@media (max-width: 575.98px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--mobile-space-sm);
+    margin-bottom: var(--mobile-space-md);
+  }
+
+  .page-header > .btn,
+  .page-header > a.btn {
+    width: 100%;
+    justify-content: center;
+    min-height: var(--touch-target-lg);
+  }
+}
+
+/**
+ * ── SECTION 8: TABLES ──
+ */
+@media (max-width: 575.98px) {
+  /* Tables scroll within their wrapper ONLY */
+  .table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  /* Table density reduction */
+  .table-wrapper table {
+    font-size: 0.78rem;
+    min-width: 480px;
+  }
+
+  .table-wrapper thead th {
+    padding: 10px;
+    font-size: 0.7rem;
+    white-space: nowrap;
+  }
+
+  .table-wrapper tbody td {
+    padding: 10px;
+    vertical-align: middle;
+  }
+}
+
+/**
+ * ── SECTION 9: STATS GRID ──
+ */
+@media (max-width: 575.98px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--mobile-space-sm);
+  }
+
+  .stat-card {
+    padding: var(--mobile-space-md) 14px;
+  }
+
+  .stat-value {
+    font-size: clamp(1.1rem, 5vw, 1.6rem);
+  }
+
+  .stat-label {
+    font-size: 0.68rem;
+  }
+
+  .stat-sub {
+    font-size: 0.68rem;
+  }
+}
+
+/**
+ * ── SECTION 10: BADGES ──
+ */
+@media (max-width: 575.98px) {
+  .badge {
+    font-size: 0.68rem;
+    padding: 4px 8px;
+    white-space: normal;
+    word-break: break-word;
+    max-width: 100%;
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+/**
+ * ── SECTION 11: MODALS ──
+ */
+@media (max-width: 575.98px) {
+  .modal-backdrop {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal {
+    width: 100%;
+    max-width: 100%;
+    max-height: 85vh;
+    border-radius: 20px 20px 0 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .modal-body {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    flex: 1;
+    padding: 20px var(--mobile-padding);
+  }
+
+  .modal-footer {
+    flex-direction: column-reverse;
+    padding: 14px var(--mobile-padding);
+    gap: 8px;
+    border-top: 1px solid var(--cream);
+  }
+
+  .modal-footer .btn {
+    width: 100%;
+    min-height: 50px;
+  }
+
+  .modal .form-control,
+  .modal .form-select {
+    min-height: var(--touch-target-lg);
+  }
+}
+
+/**
+ * ── SECTION 12: SIDEBAR ──
+ */
+@media (max-width: 767.98px) {
+  /* Sidebar: off-canvas drawer with 3-zone layout */
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    z-index: 200;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  /* Zone 1: Brand (fixed top) */
+  .sidebar-brand {
+    flex-shrink: 0;
+    padding: 16px 20px;
+  }
+
+  /* Zone 2: Navigation (scrollable) */
+  .sidebar-nav {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    min-height: 0;
+  }
+
+  /* Zone 3: User profile (fixed bottom) */
+  .sidebar-user {
+    flex-shrink: 0;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    padding: 14px 16px;
+    background: var(--brown-dark);
+  }
+
+  /* Main content: full width when sidebar hidden */
+  .main-content {
+    margin-left: 0 !important;
+  }
+
+  /* Sidebar overlay */
+  .sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(44, 24, 16, 0.5);
+    z-index: 199;
+  }
+
+  .sidebar-overlay.open {
+    display: block;
+  }
+
+  /* Toggle button visible on mobile */
+  #sidebar-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+  }
+
+  /* Nav link touch targets */
+  .sidebar-link {
+    min-height: 48px;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+  }
+}
+
+/**
+ * ── SECTION 13: TOPBAR ──
+ */
+@media (max-width: 575.98px) {
+  .topbar {
+    padding: 0 var(--mobile-space-sm);
+    height: 56px;
+  }
+
+  .topbar-title {
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 160px;
+  }
+
+  .topbar-actions {
+    gap: var(--mobile-space-xs);
+    flex-shrink: 0;
+  }
+}
+
+/**
+ * ── SECTION 14: UTILITY CLASSES ──
+ * Mobile-only utility classes for use in templates.
+ * Only effective on mobile — ignored on desktop.
+ */
+@media (max-width: 575.98px) {
+  /* Stack any flex row vertically */
+  .mobile-stack {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+
+  /* Force full width */
+  .mobile-full {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Hide on mobile */
+  .mobile-hide {
+    display: none !important;
+  }
+
+  /* Show only on mobile */
+  .mobile-show {
+    display: block !important;
+  }
+
+  /* Touch-friendly padding for clickable elements */
+  .mobile-touch {
+    min-height: var(--touch-target) !important;
+    min-width: var(--touch-target) !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  /* Full-width button */
+  .mobile-btn-full {
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: var(--touch-target-lg) !important;
+  }
+
+  /* Stacked button group */
+  .mobile-btn-group {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  /* Side-by-side equal button group */
+  .mobile-btn-row {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .mobile-btn-row .btn {
+    flex: 1 !important;
+    justify-content: center !important;
+  }
+
+  /* Inline card item for mobile data rows */
+  .mobile-card-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--cream);
+    gap: var(--mobile-space-sm);
+    min-height: 48px;
+  }
+
+  .mobile-card-item:last-child {
+    border-bottom: none;
+  }
+
+  .mobile-card-item-label {
+    font-size: 0.78rem;
+    color: #aaa;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+    min-width: 80px;
+  }
+
+  .mobile-card-item-value {
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-align: right;
+    flex: 1;
+    overflow-wrap: break-word;
+  }
+}
+
+/**
+ * ── SECTION 15: TABLET STANDARDS (sm/md) ──
+ */
+@media (min-width: 576px) and (max-width: 767.98px) {
+  .page-content  { padding: 20px; }
+  .card-body     { padding: 20px; }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .filter-bar {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .filter-bar .form-control,
+  .filter-bar .form-select {
+    min-width: 160px;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 991.98px) {
+  .page-content { padding: 24px; }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
