@@ -252,32 +252,194 @@
 /**
  * ── SECTION 8: TABLES ──
  */
+/* Mobile XS and SM: Hide table, show cards */
 @media (max-width: 575.98px) {
-  /* Tables scroll within their wrapper ONLY */
+  /* Hide the traditional table on mobile */
+  .table-wrapper {
+    overflow: visible !important;
+  }
+  .table-wrapper table[data-mobile-cards="true"] {
+    display: none !important;
+  }
+
+  /* Show mobile cards container */
+  .table-mobile-cards {
+    display: block;
+  }
+
+  /* Mobile card base */
+  .table-card {
+    background: var(--cream-white);
+    border-radius: var(--mobile-radius);
+    box-shadow: var(--shadow);
+    margin-bottom: 12px;
+    overflow: hidden;
+    border-left: 3px solid var(--caramel);
+    transition: box-shadow 0.2s;
+  }
+  .table-card:active { box-shadow: var(--shadow-hover); }
+  .table-card:last-child { margin-bottom: 0; }
+
+  .table-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 12px 14px 8px;
+    gap: 10px;
+    border-bottom: 1px solid var(--cream);
+    flex-wrap: wrap;
+  }
+  .table-card-title {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--brown-dark);
+    flex: 1;
+    min-width: 0;
+  }
+  .table-card-title a {
+    color: var(--caramel);
+    font-weight: 700;
+    text-decoration: none;
+  }
+  .table-card-status { flex-shrink: 0; }
+  .table-card-amount {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--caramel);
+    font-family: 'Playfair Display', serif;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .table-card-body { padding: 8px 14px; }
+  .table-card-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    gap: 10px;
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+    min-height: 32px;
+  }
+  .table-card-row:last-child { border-bottom: none; }
+  .table-card-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #aaa;
+    flex-shrink: 0;
+    min-width: 70px;
+  }
+  .table-card-value {
+    font-size: 0.85rem;
+    color: var(--brown-dark);
+    text-align: right;
+    flex: 1;
+    overflow-wrap: break-word;
+  }
+  .table-card-date {
+    font-size: 0.75rem;
+    color: #aaa;
+    padding: 4px 14px 8px;
+  }
+  .table-card-footer {
+    padding: 10px 14px;
+    background: var(--cream);
+    border-top: 1px solid #e8ddd0;
+  }
+  .table-card-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .table-card-actions .btn,
+  .table-card-actions a.btn,
+  .table-card-actions button {
+    flex: 1;
+    min-width: 60px;
+    min-height: 36px;
+    font-size: 0.78rem;
+    padding: 6px 8px;
+    justify-content: center;
+  }
+  .table-card .badge {
+    white-space: nowrap !important;
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+/* Tablet SM: Also show cards */
+@media (min-width: 576px) and (max-width: 767.98px) {
+  .table-wrapper table[data-mobile-cards="true"] {
+    display: none !important;
+  }
+  .table-mobile-cards { display: block; }
+  .table-card {
+    background: var(--cream-white);
+    border-radius: var(--mobile-radius);
+    box-shadow: var(--shadow);
+    margin-bottom: 12px;
+    overflow: hidden;
+    border-left: 3px solid var(--caramel);
+  }
+  .table-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px 8px;
+    gap: 12px;
+    border-bottom: 1px solid var(--cream);
+    flex-wrap: wrap;
+  }
+  .table-card-title { font-weight: 700; font-size: 0.95rem; flex: 1; }
+  .table-card-title a { color: var(--caramel); }
+  .table-card-body { padding: 8px 16px; }
+  .table-card-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    gap: 12px;
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+  }
+  .table-card-row:last-child { border-bottom: none; }
+  .table-card-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    min-width: 80px;
+  }
+  .table-card-value { font-size: 0.88rem; text-align: right; flex: 1; }
+  .table-card-footer { padding: 10px 16px; background: var(--cream); border-top: 1px solid #e8ddd0; }
+  .table-card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .table-card-actions .btn { min-height: 38px; font-size: 0.82rem; }
+}
+
+/* Tablet MD and up: Show traditional table, hide cards */
+@media (min-width: 768px) {
+  .table-mobile-cards { display: none; }
   .table-wrapper {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     max-width: 100%;
-    width: 100%;
   }
-
-  /* Table density reduction */
-  .table-wrapper table {
-    font-size: 0.78rem;
-    min-width: 480px;
-  }
-
-  .table-wrapper thead th {
-    padding: 10px;
-    font-size: 0.7rem;
-    white-space: nowrap;
-  }
-
-  .table-wrapper tbody td {
-    padding: 10px;
-    vertical-align: middle;
-  }
+  .table-wrapper table { display: table !important; }
+  .badge { white-space: nowrap; }
+  .card { overflow: hidden; }
 }
+
+/* Desktop: Completely unchanged */
+@media (min-width: 992px) {
+  .table-mobile-cards { display: none; }
+  .table-wrapper table { display: table !important; }
+}
+
+/* Global: cards hidden by default (desktop-first) */
+.table-mobile-cards { display: none; }
 
 /**
  * ── SECTION 9: STATS GRID ──

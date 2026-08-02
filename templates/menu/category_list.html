@@ -7,8 +7,8 @@
 </div>
 <div class="card">
   <div class="table-wrapper">
-    <table>
-      <thead><tr><th>Icon</th><th>Name</th><th>Products</th><th>Status</th><th>Packaging</th><th>Order</th><th>Actions</th></tr></thead>
+    <table data-mobile-cards="true">
+      <thead><tr><th data-role="hide">Icon</th><th data-role="primary">Name</th><th data-role="secondary">Products</th><th data-role="status">Status</th><th data-role="secondary">Packaging</th><th data-role="secondary">Order</th><th data-role="actions">Actions</th></tr></thead>
       <tbody>
         {% for cat in categories %}
         <tr>

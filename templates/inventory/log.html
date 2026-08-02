@@ -7,8 +7,8 @@
 </div>
 <div class="card">
   <div class="table-wrapper">
-    <table class="table-inv-log">
-      <thead><tr><th>Product</th><th>Action</th><th>Change</th><th>Before</th><th>After</th><th>Notes</th><th>By</th><th>Date</th></tr></thead>
+    <table class="table-inv-log" data-mobile-cards="true">
+      <thead><tr><th data-role="primary">Product</th><th data-role="status">Action</th><th data-role="amount">Change</th><th data-role="secondary">Before</th><th data-role="secondary">After</th><th data-role="secondary">Notes</th><th data-role="secondary">By</th><th data-role="date">Date</th></tr></thead>
       <tbody>
         {% for log in logs %}
         <tr>

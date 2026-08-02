@@ -1152,3 +1152,35 @@
   }
 
 }
+
+/* ==========================================================================
+   RESPONSIVE TABLE CARDS — status form overrides
+   ========================================================================== */
+@media (max-width: 767.98px) {
+
+  /* Status update form inside mobile order card */
+  .table-card-actions .status-update-form {
+    width: 100%;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .table-card-actions .status-update-form select {
+    width: 100%;
+    min-height: 40px;
+    font-size: 0.82rem;
+  }
+  .table-card-actions .status-update-form button {
+    width: 100%;
+    min-height: 40px;
+  }
+
+  /* Quick-advance and other small action buttons */
+  .table-card-actions .btn-sm {
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+    font-size: 0.75rem;
+    padding: 6px 4px;
+  }
+
+}

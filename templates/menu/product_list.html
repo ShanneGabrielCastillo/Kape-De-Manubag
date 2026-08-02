@@ -22,9 +22,9 @@
 
 <div class="card">
   <div class="table-wrapper">
-    <table class="table-products">
+    <table class="table-products" data-mobile-cards="true">
       <thead>
-        <tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr>
+        <tr><th data-role="primary">Product</th><th data-role="secondary">Category</th><th data-role="amount">Price</th><th data-role="secondary">Stock</th><th data-role="status">Status</th><th data-role="actions">Actions</th></tr>
       </thead>
       <tbody>
         {% for product in products %}

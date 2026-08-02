@@ -104,9 +104,9 @@
       <a href="{% url 'orders:order_list' %}" class="btn btn-sm btn-outline">View All</a>
     </div>
     <div class="table-wrapper">
-      <table>
+      <table data-mobile-cards="true">
         <thead>
-          <tr><th>Order #</th><th>Customer</th><th>Type</th><th>Total</th><th>Status</th><th>Time</th></tr>
+          <tr><th data-role="primary">Order #</th><th data-role="secondary">Customer</th><th data-role="secondary">Type</th><th data-role="amount">Total</th><th data-role="status">Status</th><th data-role="date">Time</th></tr>
         </thead>
         <tbody id="recent-orders-body">
           {% for order in recent_orders %}
@@ -220,6 +220,10 @@
       // Keep table at max 10 rows
       const rows = recentTable.querySelectorAll('tr');
       if (rows.length > 10) rows[rows.length - 1].remove();
+      // Regenerate mobile cards after table update
+      if (typeof window.initResponsiveTables === 'function') {
+        window.initResponsiveTables();
+      }
     }
   });
 

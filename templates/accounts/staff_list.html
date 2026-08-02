@@ -7,8 +7,8 @@
 </div>
 <div class="card">
   <div class="table-wrapper">
-    <table class="table-staff">
-      <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Email</th><th>Status</th><th>Actions</th></tr></thead>
+    <table class="table-staff" data-mobile-cards="true">
+      <thead><tr><th data-role="primary">Name</th><th data-role="secondary">Username</th><th data-role="status">Role</th><th data-role="secondary">Email</th><th data-role="hide">Status</th><th data-role="actions">Actions</th></tr></thead>
       <tbody>
         {% for member in staff %}
         <tr>

@@ -269,6 +269,7 @@ tbody tr:last-child { border-bottom: none; }
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  white-space: nowrap;
 }
 .badge-pending { background: #fff3cd; color: #856404; }
 .badge-preparing { background: #cfe2ff; color: #084298; }

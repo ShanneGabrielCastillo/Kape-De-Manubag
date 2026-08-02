@@ -29,9 +29,9 @@
 
 <div class="card">
   <div class="table-wrapper">
-    <table class="table-orders">
+    <table class="table-orders" data-mobile-cards="true">
       <thead>
-        <tr><th>Order #</th><th>Customer</th><th>Type/Table</th><th>Items</th><th>Total</th><th>Status</th><th>Payment</th><th>Time</th><th>Actions</th></tr>
+        <tr><th data-role="primary">Order #</th><th data-role="secondary">Customer</th><th data-role="secondary">Type/Table</th><th data-role="secondary">Items</th><th data-role="amount">Total</th><th data-role="status">Status</th><th data-role="secondary">Payment</th><th data-role="date">Time</th><th data-role="actions">Actions</th></tr>
       </thead>
       <tbody>
         {% for order in orders %}
