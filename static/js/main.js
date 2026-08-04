@@ -61,6 +61,7 @@ if (sidebarToggle && sidebar) {
     sidebarOverlay && sidebarOverlay.classList.toggle('open');
     // Prevent body scroll when sidebar open
     const isOpen = sidebar.classList.contains('open');
+    document.body.classList.toggle('sidebar-open', isOpen);
     document.body.style.overflow = isOpen ? 'hidden' : '';
     // Update aria-expanded
     sidebarToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
@@ -71,6 +72,7 @@ if (sidebarToggle && sidebar) {
     sidebarOverlay.addEventListener('click', () => {
       sidebar.classList.remove('open');
       sidebarOverlay.classList.remove('open');
+      document.body.classList.remove('sidebar-open');
       document.body.style.overflow = '';
       sidebarToggle.setAttribute('aria-expanded', 'false');
     });
@@ -82,6 +84,7 @@ if (sidebarToggle && sidebar) {
       if (window.innerWidth < 768) {
         sidebar.classList.remove('open');
         sidebarOverlay && sidebarOverlay.classList.remove('open');
+        document.body.classList.remove('sidebar-open');
         document.body.style.overflow = '';
         sidebarToggle.setAttribute('aria-expanded', 'false');
       }
@@ -93,6 +96,7 @@ if (sidebarToggle && sidebar) {
     if (e.key === 'Escape' && sidebar.classList.contains('open')) {
       sidebar.classList.remove('open');
       sidebarOverlay && sidebarOverlay.classList.remove('open');
+      document.body.classList.remove('sidebar-open');
       document.body.style.overflow = '';
       sidebarToggle.setAttribute('aria-expanded', 'false');
       sidebarToggle.focus();

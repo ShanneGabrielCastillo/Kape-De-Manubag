@@ -1184,3 +1184,33 @@
   }
 
 }
+
+/* ==========================================================================
+   POS TERMINAL — Sidebar Drawer Fix
+   Ensures the partial-width sidebar drawer works correctly on the POS page.
+   ========================================================================== */
+@media (max-width: 767.98px) {
+
+  /* POS layout must not create a new stacking context that traps the sidebar */
+  .pos-layout {
+    position: relative;
+    overflow: visible;
+  }
+
+  /* POS product panel stays below the sidebar */
+  .pos-left {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* POS order drawer always floats above the sidebar backdrop */
+  .pos-right {
+    z-index: 300 !important;
+  }
+
+  /* When sidebar is open, POS drawer still visible above backdrop */
+  body.sidebar-open .pos-right {
+    z-index: 300;
+  }
+
+}
