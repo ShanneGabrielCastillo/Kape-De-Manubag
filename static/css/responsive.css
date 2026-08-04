@@ -519,9 +519,9 @@
    ========================================================================== */
 @media (max-width: 767.98px) {
 
-  /* ── Contain card overflow ── */
+  /* ── Card overflow: visible so JS-generated .table-mobile-cards render outside ── */
   .card {
-    overflow: hidden;
+    overflow: visible;
     max-width: 100%;
   }
 
@@ -1211,6 +1211,98 @@
   /* When sidebar is open, POS drawer still visible above backdrop */
   body.sidebar-open .pos-right {
     z-index: 300;
+  }
+
+}
+
+/* ==========================================================================
+   ORDER MANAGEMENT — Mobile Status Tab Strip
+   ========================================================================== */
+@media (max-width: 767.98px) {
+
+  /* Override desktop flex-wrap with horizontal scrolling strip */
+  .status-filter-bar {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 8px;
+    padding: 4px 2px 8px;
+    margin-bottom: 16px;
+    max-width: 100%;
+    width: 100%;
+    /* Hide scrollbar while keeping swipe */
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .status-filter-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Individual tab buttons — never shrink, always pill-shaped */
+  .status-filter-bar .btn,
+  .status-filter-bar a.btn {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+    min-height: 44px;
+    height: 44px;
+    padding: 10px 16px;
+    border-radius: 22px !important;
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
+    transition: all 0.15s ease;
+  }
+
+  /* ACTIVE TAB — brown filled */
+  .status-filter-bar .btn-primary,
+  .status-filter-bar a.btn-primary {
+    background: var(--brown-mid) !important;
+    color: var(--cream) !important;
+    border-color: var(--brown-mid) !important;
+    box-shadow: 0 2px 8px rgba(74, 44, 42, 0.25);
+  }
+
+  /* INACTIVE TABS — white with brown border */
+  .status-filter-bar .btn-outline,
+  .status-filter-bar a.btn-outline {
+    background: var(--cream-white) !important;
+    color: var(--brown-mid) !important;
+    border: 2px solid var(--brown-mid) !important;
+  }
+
+  /* Tap feedback */
+  .status-filter-bar .btn:active {
+    transform: scale(0.96);
+    opacity: 0.85;
+  }
+
+}
+
+/* ==========================================================================
+   ORDER MANAGEMENT — Pagination mobile
+   ========================================================================== */
+@media (max-width: 575.98px) {
+
+  .pagination {
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 20px;
+  }
+
+  .page-link {
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.88rem;
   }
 
 }

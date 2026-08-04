@@ -1379,3 +1379,11 @@ tbody tr:last-child { border-bottom: none; }
   justify-content: flex-end;
   gap: 12px;
 }
+
+/* Status filter bar — desktop layout (preserved) */
+.status-filter-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}

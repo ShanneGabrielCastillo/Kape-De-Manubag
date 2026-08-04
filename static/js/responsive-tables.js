@@ -110,8 +110,10 @@
     const wrapper = table.closest('.table-wrapper') || table.parentElement;
 
     // Remove any previously generated cards (idempotency)
-    const existing = wrapper.parentElement
-      ? wrapper.parentElement.querySelector(':scope > .table-mobile-cards')
+    // Cards are inserted AFTER the nearest .card ancestor, so look there too
+    const cardAncestor = wrapper.closest('.card') || wrapper.parentElement;
+    const existing = cardAncestor.parentElement
+      ? cardAncestor.parentElement.querySelector(':scope > .table-mobile-cards')
       : null;
     if (existing) existing.remove();
 
@@ -147,8 +149,9 @@
       container.appendChild(emptyEl);
     }
 
-    // Insert cards container after the table wrapper
-    wrapper.insertAdjacentElement('afterend', container);
+    // Insert AFTER the .card ancestor (outside overflow:hidden) so cards are visible
+    const insertTarget = wrapper.closest('.card') || wrapper;
+    insertTarget.insertAdjacentElement('afterend', container);
   }
 
   /**

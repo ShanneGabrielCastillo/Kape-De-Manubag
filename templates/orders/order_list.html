@@ -10,7 +10,7 @@
 </div>
 
 <!-- Status tabs -->
-<div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
+<div class="status-filter-bar">
   <a href="{% url 'orders:order_list' %}" class="btn btn-sm {% if not status_filter %}btn-primary{% else %}btn-outline{% endif %}">All Orders</a>
   {% for value, label in status_choices %}
   <a href="?status={{ value }}" class="btn btn-sm {% if status_filter == value %}btn-primary{% else %}btn-outline{% endif %}">{{ label }}</a>

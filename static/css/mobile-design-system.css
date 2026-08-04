@@ -69,7 +69,7 @@
  */
 @media (max-width: 575.98px) {
   .card {
-    overflow: hidden;
+    overflow: visible;
     max-width: 100%;
     border-radius: var(--mobile-radius);
     margin-bottom: var(--mobile-space-md);
@@ -254,9 +254,15 @@
  */
 /* Mobile XS and SM: Hide table, show cards */
 @media (max-width: 575.98px) {
-  /* Hide the traditional table on mobile */
-  .table-wrapper {
+  /* Only make wrappers containing mobile-card tables overflow visible
+     — plain tables without data-mobile-cards keep normal scroll */
+  .table-wrapper:has(table[data-mobile-cards="true"]) {
     overflow: visible !important;
+  }
+  /* Fallback for browsers without :has() — scoped by card context */
+  .table-mobile-cards ~ .table-wrapper,
+  .table-wrapper table[data-mobile-cards="true"] {
+    /* table itself hidden; wrapper overflow handled per-case */
   }
   .table-wrapper table[data-mobile-cards="true"] {
     display: none !important;
