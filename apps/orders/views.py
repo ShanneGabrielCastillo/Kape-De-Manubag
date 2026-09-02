@@ -543,7 +543,11 @@ def order_detail(request, pk):
     # (order.cashier.get_full_name) -- one query instead of a lazy fetch.
     order = get_object_or_404(Order.objects.select_related('cashier'), pk=pk)
     items = order.items.select_related('product').all()
-    return render(request, 'orders/order_detail.html', {'order': order, 'items': items})
+    return render(request, 'orders/order_detail.html', {
+        'order': order,
+        'items': items,
+        'status_choices': Order.STATUS_CHOICES,
+    })
 
 
 @login_required

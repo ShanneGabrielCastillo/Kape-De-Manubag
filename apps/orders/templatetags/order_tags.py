@@ -54,40 +54,29 @@ class _StatusSelectNode(template.Node):
 
 
 def do_status_select(parser, token):
-    """
-    Parse {% status_select order %} or
-          {% status_select order select_style="..." form_classes="..." %}
-
-    Uses token.contents (the raw text after the tag name) instead of
-    split_contents() because Django 5.2 changed how split_contents()
-    tokenizes tags with keyword arguments containing spaces inside quotes.
-    """
-    import shlex
-
-    # token.contents is everything after {% and before %}, e.g.:
-    # "status_select order select_style=\"font-size:0.8rem\""
+    import shlex, sys
     contents = token.contents.strip()
+    print(f"DEBUG status_select token.contents={contents!r}", file=sys.stderr)
 
-    # Use shlex to split respecting quoted strings
     try:
         parts = shlex.split(contents)
     except ValueError:
         parts = contents.split()
 
-    # parts[0] is the tag name, parts[1] is the order var, parts[2+] are kwargs
+    print(f"DEBUG status_select parts={parts!r}", file=sys.stderr)
+
     if len(parts) < 2:
         raise template.TemplateSyntaxError(
-            f"'{parts[0]}' requires at least one argument: the order variable."
+            f"'{parts[0] if parts else 'status_select'}' requires at least one argument. "
+            f"contents={contents!r}"
         )
 
     order_var = parser.compile_filter(parts[1])
-
     kwargs = {}
     for part in parts[2:]:
         if '=' in part:
             key, _, val = part.partition('=')
             kwargs[key.strip()] = val.strip().strip('"\'')
-
     return _StatusSelectNode(order_var, kwargs)
 
 

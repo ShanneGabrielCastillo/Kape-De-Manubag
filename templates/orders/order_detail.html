@@ -1,6 +1,5 @@
 {% extends "base_admin.html" %}
 {% load product_images %}
-{% load order_tags %}
 {% block page_title %}Order {{ order.order_number }}{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -116,7 +115,14 @@
         <form class="status-update-form" data-order-id="{{ order.pk }}">
           {% csrf_token %}
           <div class="form-group">
-            {% status_select order %}
+            {% if order.status == 'completed' or order.status == 'cancelled' %}
+            <span class="badge {% if order.status == 'completed' %}badge-ready{% else %}badge-cancelled{% endif %}">{{ order.get_status_display }}</span>
+            {% else %}
+            <select name="status" class="form-control form-select">
+              <option value="{{ order.status }}" selected>{{ order.get_status_display }}</option>
+              {% for value, label in status_choices %}{% if value != order.status %}<option value="{{ value }}">{{ label }}</option>{% endif %}{% endfor %}
+            </select>
+            {% endif %}
           </div>
           {% if order.next_status %}<button type="submit" class="btn btn-primary btn-block">Update Status</button>{% endif %}
         </form>
