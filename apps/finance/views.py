@@ -46,27 +46,58 @@ def _cash_sales_subquery():
     )
 
 
+def _gcash_sales_subquery():
+    """
+    Returns a Subquery that aggregates completed GCash-order totals for the
+    date that matches the outer DailyFinance row.  Mirrors _cash_sales_subquery
+    but filters for payment_method='gcash'.  Used in _annotate_history_qs so
+    the running total includes both cash and GCash revenue in SQL.
+    """
+    return Subquery(
+        Order.objects.filter(
+            created_at__date=OuterRef('date'),
+            is_paid=True,
+            payment_method='gcash',
+            status='completed',
+        )
+        .values('created_at__date')
+        .annotate(total=Sum('total'))
+        .values('total')[:1],
+        output_field=DecimalField(max_digits=12, decimal_places=2),
+    )
+
+
 def _annotate_history_qs(qs):
     """
-    Attach two annotations to a DailyFinance queryset:
+    Attach annotations to a DailyFinance queryset:
 
-    • annotated_cash_sales  — cash sales total from Order table (one subquery)
-    • annotated_ending_coh  — ending COH computed entirely in SQL
-                              (previous_coh + cash_sales - all deductions)
+    • annotated_cash_sales  — cash sales total from Order table
+    • annotated_gcash_sales — GCash sales total from Order table
+    • annotated_ending_coh  — ending COH computed entirely in SQL:
+                              previous_coh + cash_sales + gcash_sales
+                              - all deductions
 
     Using these annotations in templates avoids the N+1 pattern caused by
     calling the `ending_coh` Python property, which fires a DB query per row.
     """
     cash_sales_sq = _cash_sales_subquery()
-    # COALESCE so dates with zero cash orders contribute 0, not NULL
+    gcash_sales_sq = _gcash_sales_subquery()
+
+    # COALESCE so dates with zero orders contribute 0, not NULL
     cash_sales_expr = Coalesce(
         cash_sales_sq,
+        Value(Decimal('0.00')),
+        output_field=DecimalField(max_digits=12, decimal_places=2),
+    )
+    gcash_sales_expr = Coalesce(
+        gcash_sales_sq,
         Value(Decimal('0.00')),
         output_field=DecimalField(max_digits=12, decimal_places=2),
     )
     ending_coh_expr = ExpressionWrapper(
         F('previous_coh')
         + cash_sales_expr
+        + gcash_sales_expr
         - F('expenses')
         - F('gcash_payments')
         - F('coins')
@@ -76,6 +107,7 @@ def _annotate_history_qs(qs):
     )
     return qs.annotate(
         annotated_cash_sales=cash_sales_expr,
+        annotated_gcash_sales=gcash_sales_expr,
         annotated_ending_coh=ending_coh_expr,
     )
 
@@ -279,7 +311,7 @@ def finance_index(request):
         existing_record.previous_coh
         if existing_record else previous_coh_suggested
     )
-    running_total = prev_coh_display + cash_sales
+    running_total = prev_coh_display + cash_sales + gcash_sales
 
     context = {
         'form': form,
@@ -348,18 +380,21 @@ def finance_print(request, pk):
     # three times.  We compute the formula here using the model's field
     # values; the arithmetic is identical to the model properties.
     cash_sales, order_count = _get_cash_sales_for_date(record.date)
-    running_total    = record.previous_coh + cash_sales
+    gcash_sales, gcash_order_count = _get_gcash_sales_for_date(record.date)
+    running_total    = record.previous_coh + cash_sales + gcash_sales
     total_deductions = record.total_deductions  # pure Python, no DB query
     ending_coh       = running_total - total_deductions
 
     context = {
         'record': record,
-        'cash_sales':       cash_sales,
-        'order_count':      order_count,
-        'running_total':    running_total,
-        'total_deductions': total_deductions,
-        'ending_coh':       ending_coh,
-        'printed_at':       timezone.now(),
+        'cash_sales':         cash_sales,
+        'order_count':        order_count,
+        'gcash_sales':        gcash_sales,
+        'gcash_order_count':  gcash_order_count,
+        'running_total':      running_total,
+        'total_deductions':   total_deductions,
+        'ending_coh':         ending_coh,
+        'printed_at':         timezone.now(),
     }
     return render(request, 'finance/print.html', context)
 

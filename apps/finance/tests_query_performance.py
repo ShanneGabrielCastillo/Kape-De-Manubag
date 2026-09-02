@@ -376,12 +376,12 @@ class FinancialCorrectnessNormalDayTest(TestCase):
         self.assertEqual(count, 2)
 
     def test_finance_model_properties(self):
-        # running_total = 2000 + 600 = 2600
+        # running_total = 2000 + 600 cash + 300 gcash = 2900
         # deductions    = 100 + 300 + 50 + 200 + 150 = 800
-        # ending_coh    = 2600 - 800 = 1800
-        self.assertEqual(self.rec.running_total,    Decimal('2600.00'))
+        # ending_coh    = 2900 - 800 = 2100
+        self.assertEqual(self.rec.running_total,    Decimal('2900.00'))
         self.assertEqual(self.rec.total_deductions, Decimal('800.00'))
-        self.assertEqual(self.rec.ending_coh,       Decimal('1800.00'))
+        self.assertEqual(self.rec.ending_coh,       Decimal('2100.00'))
 
     def test_print_view_values(self):
         url = reverse('finance:print', kwargs={'pk': self.rec.pk})
@@ -389,9 +389,9 @@ class FinancialCorrectnessNormalDayTest(TestCase):
         ctx = resp.context
         self.assertEqual(ctx['cash_sales'],       Decimal('600.00'))
         self.assertEqual(ctx['order_count'],      3)
-        self.assertEqual(ctx['running_total'],    Decimal('2600.00'))
+        self.assertEqual(ctx['running_total'],    Decimal('2900.00'))
         self.assertEqual(ctx['total_deductions'], Decimal('800.00'))
-        self.assertEqual(ctx['ending_coh'],       Decimal('1800.00'))
+        self.assertEqual(ctx['ending_coh'],       Decimal('2100.00'))
 
     def test_index_view_context(self):
         url = reverse('finance:index') + f'?date={TODAY}'
@@ -400,7 +400,8 @@ class FinancialCorrectnessNormalDayTest(TestCase):
         self.assertEqual(resp.context['order_count'],  3)
         self.assertEqual(resp.context['gcash_sales'],  Decimal('300.00'))
         self.assertEqual(resp.context['gcash_order_count'], 2)
-        self.assertEqual(resp.context['running_total'], Decimal('2600.00'))
+        # running_total = 2000 + 600 cash + 300 gcash = 2900
+        self.assertEqual(resp.context['running_total'], Decimal('2900.00'))
 
 
 # ── Financial correctness — no-sales day ─────────────────────────────────────
@@ -459,8 +460,8 @@ class FinancialCorrectnessManyOrdersTest(TestCase):
         self.assertEqual(count, 50)
 
     def test_running_total_exact(self):
-        # 1000 + 9990 = 10990
-        self.assertEqual(self.rec.running_total, Decimal('10990.00'))
+        # 1000 + 9990 cash + 2505 gcash = 13495
+        self.assertEqual(self.rec.running_total, Decimal('13495.00'))
 
     def test_print_view_many_orders(self):
         user = _user('cashier_many')
@@ -470,8 +471,9 @@ class FinancialCorrectnessManyOrdersTest(TestCase):
         ctx = resp.context
         self.assertEqual(ctx['cash_sales'],    Decimal('9990.00'))
         self.assertEqual(ctx['order_count'],   100)
-        self.assertEqual(ctx['running_total'], Decimal('10990.00'))
-        self.assertEqual(ctx['ending_coh'],    Decimal('10990.00'))
+        # running_total = 1000 + 9990 + 2505 = 13495; no deductions
+        self.assertEqual(ctx['running_total'], Decimal('13495.00'))
+        self.assertEqual(ctx['ending_coh'],    Decimal('13495.00'))
 
 
 # ── Financial correctness — historical dates (COH carry-forward) ──────────────

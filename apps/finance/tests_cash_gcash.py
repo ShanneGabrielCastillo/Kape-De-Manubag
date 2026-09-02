@@ -16,11 +16,11 @@ Cross-module consistency:
   7.  Dashboard total = cash + gcash combined
   8.  Reports total = cash + gcash combined
   9.  Finance COH calculation with GCash as deduction
-  10. GCash never inflates physical cash on hand
+  10. GCash never inflates physical cash on hand (ending_coh correct)
   11. Unsupported payment method rejected server-side (process_payment)
   12. Finance API returns both cash and gcash totals correctly
   13. Finance gcash_payments deduction reduces ending COH
-  14. Finance running_total is previous_coh + cash only (not gcash)
+  14. Finance running_total includes both cash and gcash
   15. Payment method choices restricted to cash/gcash at model level
 
 Manual verification:
@@ -113,7 +113,7 @@ class CashOnlyDayTest(TestCase):
 
     def test_finance_running_total(self):
         rec = _finance(TODAY, previous_coh=Decimal('1000.00'))
-        # running_total = 1000 + 350 = 1350
+        # running_total = 1000 + 350 cash + 0 gcash = 1350
         self.assertEqual(rec.running_total, Decimal('1350.00'))
 
     def test_finance_ending_coh_no_deductions(self):
@@ -156,7 +156,7 @@ class CashOnlyDayTest(TestCase):
 
 class GCashOnlyDayTest(TestCase):
     """All orders paid with GCash. Cash sales must be zero.
-    GCash must NOT appear in Finance cash_sales or running_total."""
+    GCash IS included in running_total but then deducted via gcash_payments."""
 
     def setUp(self):
         _order(TODAY, payment_method='gcash', total=Decimal('300.00'))
@@ -173,23 +173,24 @@ class GCashOnlyDayTest(TestCase):
         rec = _finance(TODAY, previous_coh=Decimal('500.00'))
         self.assertEqual(rec.cash_sales, Decimal('0.00'))
 
-    def test_gcash_does_not_inflate_running_total(self):
-        """running_total = previous_coh + cash_sales only (GCash excluded)."""
+    def test_gcash_included_in_running_total(self):
+        """running_total = previous_coh + cash_sales + gcash_sales."""
         rec = _finance(TODAY, previous_coh=Decimal('500.00'))
-        self.assertEqual(rec.running_total, Decimal('500.00'))
+        # running_total = 500 + 0 cash + 550 gcash = 1050
+        self.assertEqual(rec.running_total, Decimal('1050.00'))
 
     def test_ending_coh_with_gcash_deduction(self):
-        """When cashier enters GCash amount as deduction, ending COH decreases."""
+        """GCash added to running_total and deducted via gcash_payments → net effect on ending_coh."""
         rec = _finance(
             TODAY,
             previous_coh=Decimal('500.00'),
             gcash_payments=Decimal('550.00'),
         )
-        # running_total = 500 + 0 cash = 500
-        # deductions = 550 gcash
-        # ending_coh = 500 - 550 = -50 (valid — alerts cashier to review)
-        self.assertEqual(rec.running_total, Decimal('500.00'))
-        self.assertEqual(rec.ending_coh, Decimal('-50.00'))
+        # running_total = 500 + 0 cash + 550 gcash = 1050
+        # deductions = 550 gcash_payments
+        # ending_coh = 1050 - 550 = 500
+        self.assertEqual(rec.running_total, Decimal('1050.00'))
+        self.assertEqual(rec.ending_coh, Decimal('500.00'))
 
     def test_api_gcash_only(self):
         user = _user('cashier_gcash_only')
@@ -267,27 +268,28 @@ class MixedDayTest(TestCase):
         )
         self.assertEqual(cash_total + gcash_total, Decimal('900.00'))
 
-    def test_finance_running_total_excludes_gcash(self):
-        """running_total uses previous_coh + cash (500) only, not gcash (400)."""
+    def test_finance_running_total_includes_gcash(self):
+        """running_total uses previous_coh + cash (500) + gcash (400)."""
         rec = _finance(TODAY, previous_coh=Decimal('1000.00'))
         self.assertEqual(rec.cash_sales,    Decimal('500.00'))
-        self.assertEqual(rec.running_total, Decimal('1500.00'))  # 1000+500
+        # running_total = 1000 + 500 + 400 = 1900
+        self.assertEqual(rec.running_total, Decimal('1900.00'))
 
     def test_finance_full_reconciliation(self):
         """
         Full reconciliation for a mixed day.
-        previous_coh=1000, cash_sales=500, gcash_deduction=400
-        running_total = 1000 + 500 = 1500
-        ending_coh    = 1500 - 400 = 1100
+        previous_coh=1000, cash_sales=500, gcash_sales=400, gcash_deduction=400
+        running_total = 1000 + 500 + 400 = 1900
+        ending_coh    = 1900 - 400 = 1500
         """
         rec = _finance(
             TODAY,
             previous_coh=Decimal('1000.00'),
             gcash_payments=Decimal('400.00'),
         )
-        self.assertEqual(rec.running_total,    Decimal('1500.00'))
+        self.assertEqual(rec.running_total,    Decimal('1900.00'))
         self.assertEqual(rec.total_deductions, Decimal('400.00'))
-        self.assertEqual(rec.ending_coh,       Decimal('1100.00'))
+        self.assertEqual(rec.ending_coh,       Decimal('1500.00'))
 
     def test_api_mixed_day(self):
         user = _user('cashier_mixed')
@@ -333,6 +335,7 @@ class NoSalesTest(TestCase):
     def test_finance_model_zero_sales(self):
         rec = _finance(TODAY, previous_coh=Decimal('500.00'))
         self.assertEqual(rec.cash_sales,    Decimal('0.00'))
+        # running_total = 500 + 0 cash + 0 gcash = 500
         self.assertEqual(rec.running_total, Decimal('500.00'))
         self.assertEqual(rec.ending_coh,    Decimal('500.00'))
 
@@ -409,12 +412,12 @@ class MultipleTransactionsTest(TestCase):
         )
         self.assertEqual(gcash, self.expected_gcash)
 
-    def test_finance_cash_only_in_running_total(self):
+    def test_finance_cash_and_gcash_in_running_total(self):
         rec = _finance(TODAY, previous_coh=Decimal('1000.00'))
         self.assertEqual(rec.cash_sales, self.expected_cash)
         self.assertEqual(
             rec.running_total,
-            Decimal('1000.00') + self.expected_cash,
+            Decimal('1000.00') + self.expected_cash + self.expected_gcash,
         )
 
     def test_dashboard_total_includes_all(self):
@@ -548,22 +551,23 @@ class FinanceCOHTest(TestCase):
 
     def test_gcash_only_does_not_change_running_total(self):
         """
-        GCash order exists but must NOT change running_total.
-        previous_coh=2000, cash_sales=0 (gcash only), no deductions
-        running_total = 2000+0 = 2000
-        ending_coh    = 2000
+        GCash order exists — running_total now INCLUDES gcash.
+        previous_coh=2000, cash_sales=0 (gcash only=500), no deductions
+        running_total = 2000+0+500 = 2500
+        ending_coh    = 2500
         """
         _order(TODAY, payment_method='gcash', total=Decimal('500.00'))
         rec = _finance(TODAY, previous_coh=Decimal('2000.00'))
         self.assertEqual(rec.cash_sales,    Decimal('0.00'))
-        self.assertEqual(rec.running_total, Decimal('2000.00'))
-        self.assertEqual(rec.ending_coh,    Decimal('2000.00'))
+        # running_total includes gcash
+        self.assertEqual(rec.running_total, Decimal('2500.00'))
+        self.assertEqual(rec.ending_coh,    Decimal('2500.00'))
 
     def test_gcash_deduction_reduces_ending_coh(self):
         """
-        previous_coh=2000, cash_sales=0, gcash_deduction=500
-        running_total = 2000
-        ending_coh    = 2000-500 = 1500
+        previous_coh=2000, gcash_sales=500, gcash_deduction=500
+        running_total = 2000 + 500 = 2500
+        ending_coh    = 2500-500 = 2000
         """
         _order(TODAY, payment_method='gcash', total=Decimal('500.00'))
         rec = _finance(
@@ -571,20 +575,20 @@ class FinanceCOHTest(TestCase):
             previous_coh=Decimal('2000.00'),
             gcash_payments=Decimal('500.00'),
         )
-        self.assertEqual(rec.running_total, Decimal('2000.00'))
-        self.assertEqual(rec.ending_coh,    Decimal('1500.00'))
+        self.assertEqual(rec.running_total, Decimal('2500.00'))
+        self.assertEqual(rec.ending_coh,    Decimal('2000.00'))
 
     def test_mixed_full_reconciliation(self):
         """
         previous_coh=1500
         cash_sales=600 (3 orders × 200)
-        gcash_orders=400 (2 orders × 200) — shown as suggestion, not in running_total
+        gcash_sales=400 (2 orders × 200) — included in running_total
         gcash_deduction entered by cashier=400
         expenses=100, coins=50, ca=0, floating=100
 
-        running_total = 1500+600 = 2100
+        running_total = 1500+600+400 = 2500
         total_deductions = 400+100+50+0+100 = 650
-        ending_coh = 2100-650 = 1450
+        ending_coh = 2500-650 = 1850
         """
         for _ in range(3):
             _order(TODAY, payment_method='cash',  total=Decimal('200.00'))
@@ -601,14 +605,18 @@ class FinanceCOHTest(TestCase):
             floating_cash=Decimal('100.00'),
         )
         self.assertEqual(rec.cash_sales,       Decimal('600.00'))
-        self.assertEqual(rec.running_total,    Decimal('2100.00'))
+        self.assertEqual(rec.running_total,    Decimal('2500.00'))
         self.assertEqual(rec.total_deductions, Decimal('650.00'))
-        self.assertEqual(rec.ending_coh,       Decimal('1450.00'))
+        self.assertEqual(rec.ending_coh,       Decimal('1850.00'))
 
     def test_coh_next_day_carry_forward(self):
         """
-        Yesterday ending_coh = 1450, today's previous_coh should be 1450.
-        Verify _get_previous_coh_info returns yesterday's ending_coh.
+        Yesterday ending_coh with new formula.
+        previous_coh=1500, cash_sales=600, gcash_sales=400,
+        gcash_deduction=400, expenses=100, coins=50, floating=100
+        running_total = 1500+600+400 = 2500
+        total_deductions = 400+100+50+100 = 650
+        ending_coh = 2500-650 = 1850
         """
         from apps.finance.views import _get_previous_coh_info
         _order(YESTERDAY, payment_method='cash', total=Decimal('600.00'))
@@ -621,6 +629,9 @@ class FinanceCOHTest(TestCase):
             floating_cash=Decimal('100.00'),
         )
         # yesterday ending_coh = (1500+600) - (400+100+50+100) = 2100-650 = 1450
+        # Wait: no gcash orders on YESTERDAY, so gcash_sales = 0
+        # running_total = 1500 + 600 + 0 = 2100
+        # ending_coh = 2100 - 650 = 1450
         self.assertEqual(yest.ending_coh, Decimal('1450.00'))
 
         suggested, source, is_auto = _get_previous_coh_info(TODAY)
@@ -630,6 +641,7 @@ class FinanceCOHTest(TestCase):
     def test_gcash_never_appears_in_annotated_cash_sales(self):
         """
         annotated_cash_sales from the SQL annotation must exclude GCash.
+        annotated_ending_coh now includes gcash_sales in running total.
         """
         from apps.finance.views import _annotate_history_qs
         _order(TODAY, payment_method='cash',  total=Decimal('300.00'))
@@ -642,5 +654,5 @@ class FinanceCOHTest(TestCase):
 
         # annotated_cash_sales must be 300 only, not 1000
         self.assertEqual(annotated.annotated_cash_sales, Decimal('300.00'))
-        # annotated_ending_coh = 0 + 300 = 300
-        self.assertEqual(annotated.annotated_ending_coh, Decimal('300.00'))
+        # annotated_ending_coh = 0 + 300 cash + 700 gcash - 0 deductions = 1000
+        self.assertEqual(annotated.annotated_ending_coh, Decimal('1000.00'))

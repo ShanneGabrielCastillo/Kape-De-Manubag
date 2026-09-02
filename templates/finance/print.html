@@ -75,8 +75,12 @@
         <td>+ Cash Sales</td>
         <td class="amount">₱{{ cash_sales|floatformat:2 }}</td>
       </tr>
+      <tr>
+        <td>+ GCash Sales</td>
+        <td class="amount">₱{{ gcash_sales|floatformat:2 }}</td>
+      </tr>
       <tr class="row-separator">
-        <td>= Running Total</td>
+        <td>= Running Total (Prev COH + Total Sales)</td>
         <td class="amount">₱{{ running_total|floatformat:2 }}</td>
       </tr>
       <tr>

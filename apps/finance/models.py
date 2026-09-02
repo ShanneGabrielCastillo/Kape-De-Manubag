@@ -112,9 +112,34 @@ class DailyFinance(models.Model):
     def cash_sales(self):
         return self.get_cash_sales()
 
+    def get_gcash_sales(self):
+        """
+        Sum of all completed, GCash-paid orders for this date.
+
+        Queries the Order table on every call — never stored.
+        GCash sales are included in the running total (alongside cash sales)
+        and then deducted again via gcash_payments so that Ending COH
+        reflects only physical cash remaining in the drawer.
+        """
+        from apps.orders.models import Order
+        result = Order.objects.filter(
+            created_at__date=self.date,
+            is_paid=True,
+            payment_method='gcash',
+            status='completed',
+        ).aggregate(total=Sum('total'))
+        return result['total'] or Decimal('0.00')
+
     @property
     def running_total(self):
-        return self.previous_coh + self.cash_sales
+        """Previous COH + Cash Sales + GCash Sales.
+
+        GCash is included because it represents real revenue for the day.
+        It is then deducted in total_deductions (via gcash_payments) because
+        those amounts were received digitally, not placed in the cash drawer.
+        Ending COH therefore reflects only physical cash on hand.
+        """
+        return self.previous_coh + self.cash_sales + self.get_gcash_sales()
 
     @property
     def total_deductions(self):

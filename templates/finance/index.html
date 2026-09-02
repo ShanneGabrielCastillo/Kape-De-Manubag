@@ -33,7 +33,8 @@
 {# ── SECTION 2: Finance Entry ── #}
 <form method="post" id="finance-form"
       data-previous-coh="{{ prev_coh_display }}"
-      data-cash-sales="{{ cash_sales }}">
+      data-cash-sales="{{ cash_sales }}"
+      data-gcash-sales="{{ gcash_sales }}">
   {% csrf_token %}
   {# Hidden date field always submitted #}
   <input type="hidden" name="date" value="{{ selected_date|date:'Y-m-d' }}">
@@ -81,7 +82,7 @@
               <span style="font-size:0.75rem;font-weight:400;color:#888;margin-left:6px">({{ gcash_order_count }} order{{ gcash_order_count|pluralize }})</span>
             </div>
             <div style="font-size:0.75rem;color:#0d6efd;margin-top:4px;font-weight:600">
-              📱 GCash Sales &nbsp;—&nbsp; enter below as deduction
+              📱 GCash Sales &nbsp;—&nbsp; included in Running Total, enter below as deduction
             </div>
             {% endif %}
             <div style="font-size:0.72rem;color:#aaa;margin-top:6px">
@@ -96,7 +97,7 @@
                  style="font-size:1.2rem;color:var(--caramel);font-family:'Playfair Display',serif">
               ₱<span id="rt-value">{{ running_total|floatformat:2 }}</span>
             </div>
-            <div style="font-size:0.72rem;color:#aaa;margin-top:4px">Previous COH + Cash Sales</div>
+            <div style="font-size:0.72rem;color:#aaa;margin-top:4px">Previous COH + Total Sales (Cash + GCash)</div>
           </div>
 
           <hr style="border:none;border-top:2px dashed var(--cream);margin:20px 0 16px">
@@ -173,6 +174,10 @@
             <div class="finance-summary-row">
               <span style="color:var(--green-success)">+ Cash Sales</span>
               <span style="color:var(--green-success)">₱{{ cash_sales|floatformat:2 }}</span>
+            </div>
+            <div class="finance-summary-row">
+              <span style="color:#0d6efd">+ GCash Sales</span>
+              <span style="color:#0d6efd">₱<span id="sum-gcash-sales">{{ gcash_sales|floatformat:2 }}</span></span>
             </div>
             <div class="finance-summary-row total-row">
               <span>Running Total</span>
@@ -327,11 +332,13 @@
 
   const prevCoh   = parseFloat(form.dataset.previousCoh) || 0;
   const cashSales = parseFloat(form.dataset.cashSales)   || 0;
+  const gcashSalesData = parseFloat(form.dataset.gcashSales) || 0;
 
   // Summary span refs
-  const sumPrevCoh  = document.getElementById('sum-prev-coh');
-  const sumRunning  = document.getElementById('sum-running');
-  const rtDisplay   = document.getElementById('rt-value');
+  const sumPrevCoh    = document.getElementById('sum-prev-coh');
+  const sumRunning    = document.getElementById('sum-running');
+  const sumGcashSales = document.getElementById('sum-gcash-sales');
+  const rtDisplay     = document.getElementById('rt-value');
   const sumExpenses = document.getElementById('sum-expenses');
   const sumGcash    = document.getElementById('sum-gcash');
   const sumCoins    = document.getElementById('sum-coins');
@@ -353,13 +360,14 @@
     const pcohInput = document.querySelector('[name=previous_coh]');
     const pcoh      = pcohInput ? (parseFloat(pcohInput.value) || 0) : prevCoh;
 
-    const rt        = pcoh + cashSales;
+    const rt        = pcoh + cashSales + gcashSalesData;
     const deductions= expenses + gcash + coins + ca + floating;
     const ending    = rt - deductions;
 
-    if (sumPrevCoh)   sumPrevCoh.textContent   = fmt(pcoh);
-    if (sumRunning)   sumRunning.textContent    = fmt(rt);
-    if (rtDisplay)    rtDisplay.textContent     = fmt(rt);
+    if (sumPrevCoh)    sumPrevCoh.textContent    = fmt(pcoh);
+    if (sumGcashSales) sumGcashSales.textContent = fmt(gcashSalesData);
+    if (sumRunning)    sumRunning.textContent     = fmt(rt);
+    if (rtDisplay)     rtDisplay.textContent      = fmt(rt);
     if (sumExpenses)  sumExpenses.textContent   = fmt(expenses);
     if (sumGcash)     sumGcash.textContent      = fmt(gcash);
     if (sumCoins)     sumCoins.textContent      = fmt(coins);

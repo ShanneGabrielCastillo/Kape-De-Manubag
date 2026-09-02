@@ -125,25 +125,27 @@ class DailyFinanceModelTest(TestCase):
         self.assertEqual(rec.cash_sales, Decimal('250.00'))
 
     # ── Scenario 4: GCash-only sales ─────────────────────────────────────────
-    def test_gcash_sales_not_in_running_total(self):
-        """GCash orders do NOT contribute to cash_sales or running_total."""
+    def test_gcash_included_in_running_total(self):
+        """GCash orders contribute to running_total but NOT to cash_sales."""
         make_order(TODAY, payment_method='gcash', total=Decimal('300.00'))
         rec = make_finance(TODAY, previous_coh=Decimal('500.00'))
         self.assertEqual(rec.cash_sales, Decimal('0.00'))
-        self.assertEqual(rec.running_total, Decimal('500.00'))
+        # running_total = 500 + 0 cash + 300 gcash = 800
+        self.assertEqual(rec.running_total, Decimal('800.00'))
 
     def test_gcash_as_deduction(self):
-        """GCash amount entered as gcash_payments deduction reduces ending_coh."""
+        """GCash included in running_total AND deducted via gcash_payments → ending_coh unchanged vs cash-only."""
         make_order(TODAY, payment_method='gcash', total=Decimal('300.00'))
         rec = make_finance(
             TODAY,
             previous_coh=Decimal('1000.00'),
             gcash_payments=Decimal('300.00'),
         )
-        # running_total = 1000 + 0 cash = 1000
-        # ending_coh = 1000 - 300 = 700
-        self.assertEqual(rec.running_total, Decimal('1000.00'))
-        self.assertEqual(rec.ending_coh, Decimal('700.00'))
+        # running_total = 1000 + 0 cash + 300 gcash = 1300
+        # deductions    = 300 gcash_payments
+        # ending_coh    = 1300 - 300 = 1000
+        self.assertEqual(rec.running_total, Decimal('1300.00'))
+        self.assertEqual(rec.ending_coh, Decimal('1000.00'))
 
     # ── Scenario 5: Expenses deduction ───────────────────────────────────────
     def test_expenses_deduction(self):
@@ -346,12 +348,14 @@ class AnnotatedEndingCohTest(TestCase):
         self._assert_annotation_matches_property(rec)
 
     def test_annotation_gcash_not_in_cash_sales(self):
-        """GCash order for same date must not inflate annotated_cash_sales."""
+        """GCash order for same date must not inflate annotated_cash_sales,
+        but IS included in annotated_ending_coh via annotated_gcash_sales."""
         make_order(TODAY, payment_method='gcash', total=Decimal('999.00'))
         rec = make_finance(TODAY, previous_coh=Decimal('500.00'), gcash_payments=Decimal('999.00'))
         qs = _annotate_history_qs(DailyFinance.objects.filter(pk=rec.pk))
         annotated = qs.get()
         self.assertEqual(annotated.annotated_cash_sales, Decimal('0.00'))
+        # annotated_ending_coh = 500 + 0 cash + 999 gcash_sales - 999 gcash_payments = 500
         self._assert_annotation_matches_property(rec)
 
     def test_annotation_multiple_records(self):
@@ -402,20 +406,23 @@ class FinanceViewTest(TestCase):
         response = self.client.get(self._index_url(str(TODAY)))
         self.assertEqual(response.context['cash_sales'], Decimal('350.00'))
 
-    def test_index_gcash_not_in_running_total(self):
+    def test_index_gcash_in_running_total(self):
+        """GCash sales appear in running_total; cash_sales remains 0."""
         make_order(TODAY, payment_method='gcash', total=Decimal('500.00'))
         response = self.client.get(self._index_url(str(TODAY)))
         self.assertEqual(response.context['cash_sales'], Decimal('0.00'))
-        # gcash_sales shown separately
+        # gcash_sales shown separately in context
         self.assertEqual(response.context['gcash_sales'], Decimal('500.00'))
+        # running_total = 0 (prev_coh, no prev record) + 0 cash + 500 gcash = 500
+        self.assertEqual(response.context['running_total'], Decimal('500.00'))
 
-    def test_index_running_total_is_prev_coh_plus_cash(self):
+    def test_index_running_total_is_prev_coh_plus_cash_and_gcash(self):
         make_order(TODAY, payment_method='cash', total=Decimal('300.00'))
         # Create yesterday's record so prev_coh is auto-suggested as 400
         make_finance(YESTERDAY, previous_coh=Decimal('600.00'), expenses=Decimal('200.00'))
         response = self.client.get(self._index_url(str(TODAY)))
         # yesterday ending_coh = 600 - 200 = 400
-        # running_total = 400 + 300 = 700
+        # running_total = 400 + 300 cash + 0 gcash = 700
         self.assertEqual(response.context['running_total'], Decimal('700.00'))
 
     # ── Index POST: save a new record ─────────────────────────────────────────
@@ -540,7 +547,7 @@ class FinancePrintViewTest(TestCase):
             expenses=Decimal('300.00'),
             gcash_payments=Decimal('200.00'),
         )
-        # rt = 2000 + 500 = 2500; deductions = 300 + 200 = 500; ending = 2000
+        # rt = 2000 + 500 cash + 0 gcash = 2500; deductions = 300 + 200 = 500; ending = 2000
         url = reverse('finance:print', kwargs={'pk': rec.pk})
         response = self.client.get(url)
         self.assertEqual(response.context['ending_coh'], Decimal('2000.00'))
