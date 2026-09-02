@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name='product',
             constraint=models.CheckConstraint(
-                check=models.Q(('stock_quantity__gte', 0)),
+                condition=models.Q(('stock_quantity__gte', 0)),
                 name='product_stock_non_negative',
             ),
         ),
