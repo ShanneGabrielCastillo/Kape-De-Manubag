@@ -47,7 +47,7 @@
     </tr>
     <tr>
       <td>Prepared By:</td>
-      <td>{{ record.prepared_by.get_full_name|default:record.prepared_by.username|default:"—" }}</td>
+      <td>{% if record.prepared_by %}{{ record.prepared_by.get_full_name|default:record.prepared_by.username|default:"—" }}{% else %}—{% endif %}</td>
     </tr>
     <tr>
       <td>Cash Orders:</td>

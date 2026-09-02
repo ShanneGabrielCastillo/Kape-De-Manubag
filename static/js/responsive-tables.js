@@ -37,6 +37,25 @@
       card.dataset.orderId = row.dataset.orderId;
     }
 
+    // Empty-state rows are a single <td colspan="N"> (e.g. "No categories
+    // yet."). Without this guard the colspan cell is matched against the
+    // first column's role -- often a hidden icon/status column -- and the
+    // card comes out blank on mobile.
+    if (cells.length === 1 && cells[0].colSpan > 1) {
+      const firstChild = cells[0].firstElementChild;
+      if (firstChild && firstChild.classList.contains('empty-state')) {
+        // Rich empty-state block (e.g. dashboard widget placeholders): keep
+        // its markup, cloned so the hidden table row stays intact.
+        card.appendChild(firstChild.cloneNode(true));
+      } else {
+        const note = document.createElement('div');
+        note.className = 'table-card-empty';
+        note.textContent = cells[0].textContent.trim() || 'No records found';
+        card.appendChild(note);
+      }
+      return card;
+    }
+
     cells.forEach(function (td, i) {
       const header  = headers[i] || { text: '', role: 'secondary' };
       const role    = header.role;

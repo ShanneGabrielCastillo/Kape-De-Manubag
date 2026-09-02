@@ -1,0 +1,16 @@
+== product images check start ==
+[08:45:33] logged in: true
+[08:45:58] desktop customer menu: {"total":42,"broken":[],"placeholder":41,"media":["/media/products/test_img.png"],"withImageLoaded":false,"productImgs":42,"posThumbs":0,"orderThumbs":0,"overflow":false,"width":1440}
+[08:46:05] desktop product list: {"total":106,"broken":[],"placeholder":104,"media":["/media/products/test_img.png","/media/products/test_img.png"],"withImageLoaded":true,"productImgs":106,"posThumbs":0,"orderThumbs":0,"overflow":false,"width":1440}
+[08:46:12] desktop POS: {"total":42,"broken":[],"placeholder":41,"media":["/media/products/test_img.png"],"withImageLoaded":true,"productImgs":42,"posThumbs":42,"orderThumbs":0,"overflow":false,"width":1440}
+[08:46:19] order detail url: /orders/manage/32/
+[08:46:25] desktop order detail: {"total":4,"broken":[],"placeholder":4,"media":[],"withImageLoaded":false,"productImgs":4,"posThumbs":0,"orderThumbs":4,"overflow":false,"width":1440}
+[08:46:25] order detail thumbs: 4
+[08:46:32] mobile customer menu: {"total":42,"broken":[],"placeholder":41,"media":["/media/products/test_img.png"],"withImageLoaded":true,"productImgs":42,"posThumbs":0,"orderThumbs":0,"overflow":false,"width":375}
+[08:46:38] mobile POS: {"total":42,"broken":[],"placeholder":41,"media":["/media/products/test_img.png"],"withImageLoaded":true,"productImgs":42,"posThumbs":42,"orderThumbs":0,"overflow":false,"width":375}
+[08:46:44] mobile product list: {"total":106,"broken":[],"placeholder":104,"media":["/media/products/test_img.png","/media/products/test_img.png"],"withImageLoaded":true,"productImgs":106,"posThumbs":0,"orderThumbs":0,"overflow":false,"width":375}
+[08:46:50] mobile order detail: {"total":4,"broken":[],"placeholder":4,"media":[],"withImageLoaded":false,"productImgs":4,"posThumbs":0,"orderThumbs":4,"overflow":false,"width":375}
+[08:46:50] mobile order detail thumbs: 4
+[08:46:50] cart add: {"found":false}
+[08:46:50] console errors: (none)
+[08:46:50] == product images check done ==

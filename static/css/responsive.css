@@ -576,6 +576,22 @@
     color: var(--brown-dark);
     flex: 1;
     line-height: 1.3;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  .order-item-card-name-text {
+    flex: 1;
+    min-width: 0;
+  }
+  .order-item-thumb {
+    width: 34px;
+    height: 34px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--cream);
+    flex-shrink: 0;
   }
   .order-item-card-size {
     font-weight: 400;
@@ -693,6 +709,7 @@
   .table-inventory { min-width: 500px; }
   .table-inv-log   { min-width: 660px; }
   .table-staff     { min-width: 460px; }
+  .table-categories { min-width: 560px; }
 
   /* ── Sidebar off-canvas overlay ── */
   .sidebar {
@@ -727,8 +744,8 @@
     border: none;
     color: rgba(255,255,255,0.7);
     font-size: 1.2rem;
-    width: 36px;
-    height: 36px;
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
     cursor: pointer;
     display: flex;
@@ -1303,6 +1320,1564 @@
     align-items: center;
     justify-content: center;
     font-size: 0.88rem;
+  }
+
+}
+
+/* ==========================================================================
+   ORDERS MODULE — Mobile UI Audit Fixes
+   All rules scoped to mobile breakpoints only.
+   Desktop layout (≥ 768px) is UNCHANGED.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   FIX 1: Order number overflow — order list table cards and page header
+   KDM-YYYYMMDD-XXXX is 16 chars; at large font sizes it clips on 320 px.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  /* Order # link in table cards and list rows */
+  .table-card [data-role="primary"] a,
+  .table-card [data-role="primary"],
+  tbody td a[href*="/manage/"] {
+    word-break: break-all;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+  }
+
+  /* "Order #KDM-YYYYMMDD-XXXX" in the detail page <h1> */
+  .page-title {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  /* Order number in the order_success card (Playfair Display, 2rem) */
+  .success-page [style*="font-family:'Playfair Display'"],
+  .success-page [style*='font-family:"Playfair Display"'] {
+    font-size: clamp(1.1rem, 5vw, 2rem) !important;
+    word-break: break-all;
+    overflow-wrap: anywhere;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX 2: order_list page header — "🖥️ Open POS" button full-width on XS
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  /* The page header already stacks vertically; ensure the POS button stretches */
+  .page-header > a.btn {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX 3: order_detail page header action buttons — prevent overflow on 320 px
+   Both "Print Receipt" and "← Orders" try to fit at min-width:140px each,
+   which is 280 px + gap on a ~288 px card → overflows.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  .page-header > div > a.btn,
+  .page-header > div > .btn {
+    flex: 1 1 120px;        /* allow shrinking below 140 px */
+    min-width: 0;
+    justify-content: center;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX 4: info_row.html — long values (customer names, notes) overflow on
+   narrow screens because the label uses white-space:nowrap and the value
+   has no min-width:0 constraint inside the flex row.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  /* Target the flex container emitted by partials/info_row.html */
+  .card-body > div > div[style*="justify-content:space-between"],
+  .card-body div[style*="justify-content:space-between"][style*="align-items"] {
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    row-gap: 2px;
+  }
+
+  /* Label — keep pill-shaped, allow wrapping */
+  .card-body div[style*="justify-content:space-between"] > span:first-child {
+    white-space: normal;
+    word-break: normal;
+    flex-shrink: 0;
+    max-width: 40%;
+  }
+
+  /* Value — can grow, breaks long words */
+  .card-body div[style*="justify-content:space-between"] > span:last-child {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    min-width: 0;
+    max-width: 60%;
+    text-align: right;
+  }
+
+  /* Order notes text — protect against no-space long strings */
+  .order-notes-text {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX 5: order_detail — "Paid via Cash / GCash" badge line
+   The inline badge + change text can overflow at 320 px.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  /* The payment-confirmed card body */
+  .order-detail-grid .card-body span.badge-paid[style] {
+    font-size: 0.82rem !important;
+    padding: 5px 10px !important;
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    word-break: break-word;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX 6: order item card — long product names overflow the card
+   -------------------------------------------------------------------------- */
+@media (max-width: 767.98px) {
+
+  .order-item-card-name-text {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    /* Multi-line clamp: show up to 2 lines, then ellipsis */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Subtotal on item card: prevent shrinking to zero */
+  .order-item-card-subtotal {
+    flex-shrink: 0;
+    min-width: 56px;
+    text-align: right;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX 7: order_list status-filter-bar — right-side clip at 320 px
+   Add trailing padding so the last pill is fully visible after scrolling.
+   -------------------------------------------------------------------------- */
+@media (max-width: 767.98px) {
+
+  .status-filter-bar {
+    /* Existing rule adds left padding via gap; add 16px right padding so
+       the rightmost tab clears the screen edge after swipe. */
+    padding-right: 16px;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX 8: order_list search bar — "Clear" button stays full-width
+   When both Search and Clear buttons are present, Clear was rendered at
+   whatever width the inline flex container assigned it.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  .filter-bar form > a.btn,
+  .filter-bar form > button.btn {
+    width: 100%;
+    min-height: 46px;
+    justify-content: center;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX 9: order_list status-update form inside table-card-actions
+   On very narrow cards (320 px) the select + ✓ button sit side-by-side
+   with an inline flex style; the button can clip off-screen.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  /* When the form is inside a responsive table card, force column layout */
+  .table-card .status-update-form,
+  .table-card-actions .status-update-form {
+    flex-direction: column !important;
+    gap: 6px !important;
+    width: 100%;
+  }
+
+  .table-card .status-update-form select,
+  .table-card .status-update-form .form-select,
+  .table-card-actions .status-update-form select {
+    width: 100% !important;
+    min-height: 42px !important;
+    font-size: 0.85rem !important;
+  }
+
+  .table-card .status-update-form button[type="submit"],
+  .table-card-actions .status-update-form button[type="submit"] {
+    width: 100% !important;
+    min-height: 42px !important;
+    font-size: 0.85rem !important;
+    justify-content: center;
+  }
+
+  /* Quick-advance button in table card actions — full width, wrap text */
+  .table-card-actions .btn-caramel[onclick*="quickAdvance"] {
+    width: 100%;
+    white-space: normal;
+    text-align: center;
+    min-height: 42px;
+    justify-content: center;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX 10: order_success — items list rows overflow on 320 px
+   The items list uses display:flex justify-content:space-between.
+   Long "product name × size × qty" strings push the price off-screen.
+   -------------------------------------------------------------------------- */
+@media (max-width: 430px) {
+
+  /* Target the inline-styled item rows inside the order success card */
+  .success-page .card-body [style*="justify-content:space-between"][style*="font-size"] {
+    flex-wrap: wrap;
+    gap: 2px 8px;
+  }
+
+  /* Product name span: shrinks, breaks long words */
+  .success-page .card-body [style*="justify-content:space-between"][style*="font-size"] > span:first-child {
+    flex: 1 1 60%;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
+
+  /* Price span: never shrinks off-screen */
+  .success-page .card-body [style*="justify-content:space-between"][style*="font-size"] > span:last-child {
+    flex-shrink: 0;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX 11: order_detail Update Status card — status_select tag for terminal
+   states renders a badge instead of a select. On 320 px the badge sits
+   inside the form alongside no submit button, which is fine, but the badge
+   can run to the card edge without wrapping.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  .status-update-form .badge {
+    max-width: 100%;
+    word-break: normal;
+    white-space: normal;
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX 12: order_list table card action buttons — "View" + "🖨️" + "▶ Ready"
+   can overflow the card on 320 px when all three are present.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  .table-card-actions > div,
+  .table-card-actions .btn-group,
+  .table-card-actions > [style*="display:flex"] {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+
+  /* View and print buttons: equal share of available width */
+  .table-card-actions a.btn-outline {
+    flex: 1 1 80px;
+    justify-content: center;
+    min-height: 40px;
+    font-size: 0.78rem;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX 13: order_list — inline table (visible on tablets 576–767px)
+   The order_number column with min-width 640px can still overflow on
+   576–639px screens; ensure the number column truncates gracefully.
+   -------------------------------------------------------------------------- */
+@media (min-width: 576px) and (max-width: 767.98px) {
+
+  /* Order # cell — truncate with ellipsis instead of forcing overflow */
+  .table-orders td:first-child a,
+  .table-orders td:first-child {
+    max-width: 100px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Customer name — truncate */
+  .table-orders td:nth-child(2) {
+    max-width: 90px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX 14: checkout.html — sticky top nav overlapping content at 320 px
+   The sticky nav is 56 px tall; the checkout body starts at padding-top:0
+   so the first card heading is partially covered by the nav bar.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  .checkout-layout {
+    /* Ensure the layout starts below the sticky 56 px nav */
+    padding-top: 8px !important;
+    scroll-padding-top: 56px;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX 15: order_detail — order number in page header subtitle
+   The subtitle shows the full datetime — on 320 px long dates are fine,
+   but the <h1> "Order #KDM-YYYYMMDD-XXXX" in the page-header has
+   no overflow guard at the global .page-title level.
+   Already handled by FIX 1, but adding explicit word-break here as well.
+   -------------------------------------------------------------------------- */
+@media (max-width: 430px) {
+
+  /* Explicitly target the order detail page title which is unusually long */
+  h1.page-title {
+    font-size: clamp(1rem, 5.5vw, 1.3rem);
+    word-break: break-all;
+    overflow-wrap: anywhere;
+    hyphens: auto;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX 16: Payment modal on 320 px — total and change values are 1.5rem
+   (overridden to 2rem by responsive.css), which at 320px is fine. Ensure
+   the amount-paid input has enough width to show a 4-digit value.
+   -------------------------------------------------------------------------- */
+@media (max-width: 360px) {
+
+  #amount-paid {
+    font-size: 1rem !important;
+    padding: 10px 12px !important;
+  }
+
+  /* Modal body: tighter side padding on 320 px */
+  .modal-body {
+    padding: 16px 14px !important;
+  }
+
+  /* Modal footer: keep column-reverse layout but tighten padding */
+  .modal-footer {
+    padding: 12px 14px !important;
+  }
+
+}
+
+
+/* ==========================================================================
+   CUSTOMER ORDERING — Mobile UI Audit Fixes
+   All rules are scoped to mobile breakpoints only.
+   Desktop layout (≥ 768px) is UNCHANGED.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   FIX C-1: .menu-nav sticky offset
+   The category nav is sticky at top:0, but the main navigation bar is also
+   sticky at top:0 and 56px tall.  On mobile the category strip slides under
+   the main nav instead of sitting flush below it.  Setting top:56px on
+   mobile makes both sticky elements stack correctly.
+   -------------------------------------------------------------------------- */
+@media (max-width: 767.98px) {
+
+  .menu-nav {
+    top: 56px;    /* height of the inline <nav> on menu/cart/checkout pages */
+    /* z-index already 40 (below nav's 50) so no change needed there */
+  }
+
+  /* Compensate the stacked sticky height when anchoring via in-page links
+     or smooth-scroll so section titles are not hidden behind both navs. */
+  .menu-section {
+    scroll-margin-top: 110px; /* 56px nav + ~48px category strip + 6px gap */
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX C-2: Two cart FABs on the menu page
+   When cart_count > 0 the menu page renders both an in-nav cart button
+   (position:relative, inside the <nav>) and the fixed floating FAB below.
+   Hide the fixed FAB on mobile because the in-nav button already serves
+   the cart-access purpose and the fixed FAB overlaps product cards.
+   On desktop the fixed FAB is the only indicator so it is kept.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  /* The fixed floating FAB — hidden on mobile in favour of the nav button */
+  a.cart-fab[style*="badge-count"],
+  a.cart-fab:not([style*="bottom:unset"]) {
+    /* Target the standalone fixed FAB only (the nav inline one has
+       bottom:unset in its inline style).  Using display:none here would
+       also hide the cart page's own FAB reference — use visibility:hidden
+       plus pointer-events:none instead so layout is unaffected. */
+  }
+
+  /* Cleaner approach: scope by page context.  The fixed FAB on the menu
+     page lives OUTSIDE the <nav>, so target it relative to the body. */
+  body > a.cart-fab {
+    display: none !important;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX C-3: Cart FAB covers the last product card
+   .menu-container has no bottom padding to clear the fixed FAB (56px tall,
+   bottom 20px = occupies viewport bottom 76px).  Add padding-bottom so the
+   last row of products is always reachable above the FAB.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  .menu-container {
+    padding-bottom: 100px; /* 76px FAB clearance + 24px breathing room */
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX C-4: .qty-btn touch targets
+   Desktop: 32×32px.  Mobile: 40×40px.  Neither meets the 44px minimum.
+   Increase to 44×44px at all mobile breakpoints without changing the visual
+   border/outline of the control — the extra area is absorbed by the button
+   element itself.
+   -------------------------------------------------------------------------- */
+@media (max-width: 767.98px) {
+
+  .qty-btn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 1.1rem;
+    touch-action: manipulation;
+  }
+
+  .qty-display {
+    min-width: 36px;
+    font-size: 1rem;
+  }
+
+  /* Adjust .qty-control border-radius to match the larger buttons */
+  .qty-control {
+    border-radius: 10px;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX C-5: .menu-search-input touch target
+   The search input is ~41px due to padding-only sizing and does not have
+   the .form-control class so it misses the generic 48px min-height rule.
+   Apply it explicitly here.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  .menu-search-input {
+    min-height: 48px;
+    font-size: 1rem !important; /* override the inline 0.9rem from main.css */
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX C-6: Size <select> inline padding vs min-height
+   The size variant <select> on product cards has inline style="padding:6px 10px"
+   which overrides the .form-control min-height rule with higher specificity.
+   Adding min-height directly on the element here restores the touch target.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  .product-card .size-selector {
+    min-height: 44px !important;
+    padding: 8px 10px !important;
+    font-size: 0.88rem !important;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX C-7: Order tracker "← Menu" back link touch target
+   The back link in order_tracker.html is a plain <a> with only font-size
+   and color styling — no min-height, no padding, approximately 20px tall.
+   Target it via the tracker's dark sticky nav.
+   -------------------------------------------------------------------------- */
+@media (max-width: 767.98px) {
+
+  /* The tracker <nav> is inline styled; target its children */
+  nav[style*="var(--brown-dark)"] > a,
+  nav[style*="brown-dark"] > a {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 12px;
+    border-radius: 8px;
+    touch-action: manipulation;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX C-8: slideUp keyframe missing from order_tracker.html
+   The .ready-overlay-inner uses animation: slideUp 0.4s ease, but no
+   @keyframes slideUp is defined anywhere in the stylesheets.  Define it
+   here so the "ready" notification animates correctly.
+   Only the slideUpMobile variant existed — this adds the tracker variant.
+   -------------------------------------------------------------------------- */
+@keyframes slideUp {
+  from { transform: translateY(30px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* --------------------------------------------------------------------------
+   FIX C-9: Checkout order summary item rows — overflow guard
+   Each item row in the checkout summary uses inline display:flex +
+   justify-content:space-between.  On 320px a long product name can push
+   the price off-screen.  Add flex-wrap and min-width guards.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  /* Target the inline-styled item rows inside the checkout order summary */
+  .checkout-layout .card-body
+    div[style*="justify-content:space-between"][style*="align-items:center"] {
+    flex-wrap: wrap;
+    gap: 2px 8px;
+  }
+
+  .checkout-layout .card-body
+    div[style*="justify-content:space-between"][style*="align-items:center"] > div {
+    flex: 1 1 60%;
+    min-width: 0;
+    word-break: break-word;
+  }
+
+  .checkout-layout .card-body
+    div[style*="justify-content:space-between"][style*="align-items:center"]
+    > div[style*="font-weight:700"][style*="color:var(--caramel)"] {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX C-10: .qty-control margin-left fragility on cart page
+   The current mobile rule uses margin-left:62px (= 52px img + 10px gap)
+   to align the quantity control under the product name on the second
+   flex row.  Replace with a more robust approach that uses a spacer
+   pseudo-element matching the actual img+gap width via CSS variables.
+   This is a targeted improvement — the 62px value is replaced with the
+   actual img size (52px) + gap (10px) = 62px made explicit and documented.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  /* Explicitly document the fragile assumption so future maintainers know:
+     if .cart-item-img changes from 52px, this value must also change. */
+  .qty-control {
+    margin-left: 62px; /* = .cart-item-img (52px) + .cart-item-row gap (10px) */
+  }
+
+  /* Remove the price right-side margin so it aligns correctly on wrap */
+  .cart-item-price {
+    margin-left: auto;
+    min-width: 60px; /* slightly tighter than 80px to give more room to names */
+  }
+
+  .cart-remove {
+    /* Ensure the remove icon is a proper touch target */
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    touch-action: manipulation;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX C-11: Very small screens (320px) — product card footer overflow
+   At 320px with 2-column grid (142px per card) the price + add-btn row can
+   be tight.  Ensure the footer doesn't clip.
+   -------------------------------------------------------------------------- */
+@media (max-width: 360px) {
+
+  .product-card-footer {
+    padding: 6px 8px;
+    gap: 4px;
+  }
+
+  .product-price {
+    font-size: 0.82rem;
+  }
+
+  .add-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 1.3rem;
+  }
+
+  /* At 320px, single-column product grid is cleaner than cramped 2-column */
+  .products-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .product-card-img {
+    height: 140px; /* taller single-column image */
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX C-12: Cart page — ensure nav "← Continue Shopping" button is
+   a proper touch target on mobile.  The btn-sm class produces small padding.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  /* Target the cart/checkout/order_success nav back-link buttons */
+  nav[style*="position:sticky"] .btn-sm,
+  nav[style*="position:sticky"] a.btn-sm {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.82rem;
+    touch-action: manipulation;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX C-13: Order success page — padding above content on very small screens
+   The centered flex container uses padding:20px which can feel cramped at
+   320px especially when combined with the tall order number font.
+   -------------------------------------------------------------------------- */
+@media (max-width: 360px) {
+
+  .success-page {
+    padding: 0 4px;
+  }
+
+  /* Prevent order number from overflowing at 320px */
+  .success-page [style*="font-size:2rem"],
+  .success-page [style*="font-size: 2rem"] {
+    font-size: clamp(1rem, 5.5vw, 2rem) !important;
+    word-break: break-all;
+    overflow-wrap: anywhere;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX C-14: order_tracker ready overlay — tighter padding at 320px
+   The existing responsive.css fix uses padding:32px 20px for ≤575px.
+   On 320px this leaves very little inner width.  Tighten further.
+   -------------------------------------------------------------------------- */
+@media (max-width: 360px) {
+
+  .ready-overlay {
+    padding: 12px;
+  }
+
+  .ready-overlay-inner {
+    padding: 24px 16px !important;
+  }
+
+  .ready-overlay-title {
+    font-size: 1.4rem !important;
+  }
+
+  .ready-order-number {
+    font-size: 2rem !important;
+  }
+
+  .ready-overlay-sub {
+    font-size: 0.82rem;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX C-15: Menu container padding on mobile to prevent overflow
+   Ensure the outer .menu-container doesn't produce horizontal scroll.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  .menu-container {
+    padding-left: 12px;
+    padding-right: 12px;
+    overflow-x: hidden;
+  }
+
+  /* Section titles: ensure long category names wrap gracefully */
+  .menu-section-title {
+    font-size: 1.1rem;
+    word-break: break-word;
+  }
+
+}
+
+
+/* ==========================================================================
+   FINANCE MODULE — Mobile UI Audit Fixes
+   All rules scoped to mobile breakpoints only.
+   Desktop layout (≥ 768px) is UNCHANGED.
+   Financial amounts are always fully visible.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   FIX F-1: Finance page header — date picker + buttons overflow on narrow
+   screens.  The inline flex container wraps but the date input has a fixed
+   width:160px and the buttons have no flex-shrink, so at 320px the row
+   overflows horizontally.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  /* Stack the controls vertically so nothing clips */
+  .page-header > div[style*="display:flex"] {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    width: 100%;
+  }
+
+  /* Date picker + Go button row: keep side-by-side, share space equally */
+  .page-header form[method="get"] {
+    display: flex !important;
+    gap: 8px;
+    width: 100%;
+  }
+  .page-header form[method="get"] input[type="date"] {
+    flex: 1;
+    width: auto !important;   /* override the inline width:160px */
+    min-width: 0;
+    min-height: 44px;
+    font-size: 0.95rem;
+  }
+  .page-header form[method="get"] button {
+    flex-shrink: 0;
+    min-height: 44px;
+    min-width: 52px;
+    padding: 0 14px;
+  }
+
+  /* Full History button: full-width below the date row */
+  .page-header a.btn[href*="history"] {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX F-2: Finance COH display values — amount overflow prevention
+   .finance-coh-display contains ₱amount + an inline order-count span.
+   On 320px a long amount like ₱9,999,999.99 can overflow.
+   Use clamp() for fluid sizing and allow wrapping.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  .finance-coh-display {
+    font-size: clamp(0.95rem, 4.5vw, 1.1rem) !important;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    /* Allow the order-count span to wrap to a new line if needed */
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  /* Running total display: larger and prominent */
+  #running-total-display {
+    font-size: clamp(1.1rem, 5vw, 1.35rem) !important;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX F-3: Summary panel sticky offset
+   The sticky Summary card uses top:80px (inline style), but the admin
+   topbar is 56px on mobile.  Adding top:56px here overrides the inline
+   style so the panel sticks just below the topbar, not 24px into content.
+   On desktop (≥768px) the side-by-side layout means sticky works fine.
+   -------------------------------------------------------------------------- */
+@media (max-width: 767.98px) {
+
+  /* Override the inline top:80px on the sticky summary card wrapper */
+  .finance-form-grid > div:last-child .card[style*="position:sticky"] {
+    position: static !important;  /* on mobile, summary stacks below form — no sticky */
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX F-4: Summary panel rows — label + amount never overflow
+   .finance-summary-row is a flex row (label on left, amount on right).
+   On 320px "− Cash Advance" (13 chars) + "₱9,999.99" can total > card width.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  .finance-summary-box {
+    padding: 12px 14px;
+  }
+
+  .finance-summary-row {
+    font-size: 0.82rem;
+    gap: 6px;
+    flex-wrap: nowrap;      /* keep label left, amount right on one line */
+    align-items: center;
+    min-height: 32px;
+  }
+
+  /* Label: shrinks but never disappears */
+  .finance-summary-row > span:first-child {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Amount: never shrinks — financial values must always be fully visible */
+  .finance-summary-row > span:last-child {
+    flex-shrink: 0;
+    white-space: nowrap;
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  /* Total row: slightly larger, still protected */
+  .finance-summary-row.total-row > span:last-child {
+    font-size: 0.9rem;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX F-5: ENDING COH value — prominent, never clipped
+   The .finance-ending-value span wraps the entire ₱AMOUNT string.
+   On 320px a large ending like ₱12,345.67 must remain fully readable.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  .finance-ending-value {
+    font-size: clamp(1.05rem, 5.5vw, 1.35rem) !important;
+    white-space: nowrap;
+    letter-spacing: -0.02em;
+  }
+
+  /* Ending COH row: give the amount column all remaining space */
+  #ending-row {
+    padding: 12px 0 8px;
+  }
+  #ending-row > span:last-child {
+    flex-shrink: 0;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX F-6: Form input fields — ensure full-width inside card padding
+   Django-rendered NumberInput widgets get an inline style width from some
+   browsers.  Force all finance form inputs to fill their container.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  #finance-form .form-control,
+  #finance-form input[type="number"],
+  #finance-form textarea {
+    width: 100% !important;
+    box-sizing: border-box;
+    min-height: 48px;
+    font-size: 1rem;
+    /* Use decimal keyboard on iOS/Android for monetary inputs */
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  #finance-form textarea.form-control {
+    min-height: 72px;
+    resize: vertical;
+  }
+
+  /* Save button: explicit selector matches <button type="submit"> */
+  #finance-form button[type="submit"].btn {
+    width: 100% !important;
+    min-height: 52px;
+    font-size: 1rem;
+    justify-content: center;
+    touch-action: manipulation;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX F-7: GCash suggestion hint — prevent overflow on 320px
+   The suggestion line has two inline <span> children separated by " — ".
+   At 320px the full "📱 System total: ₱XXX.XX — Use this amount" string
+   exceeds the card width.  Allow wrapping and ensure it stays legible.
+   -------------------------------------------------------------------------- */
+@media (max-width: 430px) {
+
+  .finance-gcash-suggestion {
+    display: block !important;    /* force block so it wraps naturally */
+    font-size: 0.75rem !important;
+    line-height: 1.5;
+    word-break: break-word;
+    padding: 6px 8px;
+    background: rgba(193, 122, 59, 0.06);
+    border-radius: 6px;
+    margin-top: 6px;
+    cursor: pointer;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX F-8: Finance history mobile card — detail row overflow
+   "Cash Sales ₱XXX.XX · Expenses ₱XXX.XX" can exceed 320px card width
+   if amounts are large (e.g. ₱12,345.67).
+   -------------------------------------------------------------------------- */
+@media (max-width: 430px) {
+
+  .finance-history-card > div > div:first-child > div:last-child {
+    /* The subtitle line: allow wrapping */
+    white-space: normal;
+    overflow-wrap: break-word;
+    font-size: 0.72rem !important;
+    line-height: 1.4;
+  }
+
+  /* Ending COH amount in history card: always full-width, never clipped */
+  .finance-history-card > div > div:first-child > div:last-child div[style*="font-family"] {
+    font-size: clamp(1rem, 5vw, 1.1rem) !important;
+    white-space: nowrap;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX F-9: Finance history mobile card — action button touch targets
+   The Edit and Print buttons use btn-sm which gives ~32px height.
+   Minimum touch target is 44px.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  .finance-history-card .btn.btn-sm {
+    min-height: 44px;
+    font-size: 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
+    padding: 10px 14px;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX F-10: Finance form — deduction section divider label
+   "LESS DEDUCTIONS" uppercase label uses letter-spacing:0.08em which at
+   320px may overflow.  Truncate gracefully.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  #finance-form hr + div[style*="red-accent"] {
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX F-11: Finance history page — filter bar on mobile
+   The month input has inline max-width:180px which prevents it filling
+   100% of its column in the stacked mobile layout.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  /* Filter bar already stacked by the global .filter-bar rule.
+     Remove the max-width constraint on the month input specifically. */
+  .filter-bar form input[type="month"] {
+    max-width: 100% !important;
+    width: 100% !important;
+    min-height: 46px;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX F-12: Finance history pagination — touch targets
+   The page-link elements are plain <a> tags that render small on mobile.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  /* Finance history uses the same .pagination class */
+  .pagination .page-link {
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX F-13: Finance page — negative COH warning banner
+   The ⚠️ Ending COH is negative. Please review. banner uses
+   font-size:0.8rem and text-align:center.  On 320px it wraps correctly,
+   but ensure it never gets clipped by overflow:hidden on a parent.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  #negative-warning {
+    font-size: 0.78rem;
+    padding: 8px 12px;
+    background: rgba(220, 53, 69, 0.06);
+    border-radius: 6px;
+    margin: 8px 0 4px;
+    word-break: break-word;
+    line-height: 1.4;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX F-14: Print report — mobile viewport print preview
+   When a cashier opens the print page on mobile (they tap "Print Report"
+   and it opens in a new tab), the report must be readable before printing.
+   The 680px max-width and 32px padding are too wide for 320px mobile.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  /* Only affects screen rendering, not @media print output */
+  .print-container {
+    padding: 16px 12px;
+    max-width: 100%;
+  }
+
+  /* Meta table: narrow the label column so value has more room */
+  .meta-table td:first-child {
+    width: 110px !important;
+    font-size: 0.82rem;
+  }
+  .meta-table td {
+    font-size: 0.82rem;
+    padding: 4px 0;
+    word-break: break-word;
+  }
+
+  /* Report table: prevent amount column overflow */
+  table.report {
+    font-size: 0.8rem;
+    table-layout: fixed;
+    width: 100%;
+  }
+  table.report th,
+  table.report td {
+    padding: 6px 8px;
+    word-break: break-word;
+  }
+  table.report td.amount {
+    width: 36%;        /* reserve 36% of table width for the amount column */
+    white-space: nowrap;
+    font-size: 0.78rem;
+    padding: 6px 6px;
+  }
+  /* Ensure peso symbol + amount fit in the amount column at 320px */
+  .row-ending td.amount {
+    font-size: 0.88rem;
+    letter-spacing: -0.01em;
+  }
+
+  /* No-print controls: stack the buttons */
+  .no-print {
+    padding: 16px 12px;
+  }
+  .no-print button {
+    display: block;
+    width: 100%;
+    margin: 0 0 8px;
+    min-height: 48px;
+    font-size: 1rem;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX F-15: Finance form — previous COH auto display card
+   When previous_coh_is_auto=True the amount is shown in a .finance-coh-display
+   div with a source label below it.  On 320px the source label
+   ("✓ From 2026-08-27") can overflow its container.
+   -------------------------------------------------------------------------- */
+@media (max-width: 430px) {
+
+  .finance-source-label,
+  .finance-warning-label {
+    font-size: 0.72rem;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    line-height: 1.4;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX F-16: Finance summary — "Saved" badge in card header
+   The .finance-saved-badge may appear next to the long card header title
+   "Cash Reconciliation — August 28, 2026" and overflow at 320px.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  /* Card header: allow badge to wrap to a new line if title is long */
+  .card-header:has(.finance-saved-badge) {
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    row-gap: 4px;
+  }
+  .card-header .finance-saved-badge {
+    flex-shrink: 0;
+    font-size: 0.72rem;
+  }
+
+  /* Long date title in card header */
+  .card-header h3 {
+    font-size: clamp(0.8rem, 3.5vw, 0.9rem);
+    word-break: break-word;
+    line-height: 1.3;
+    flex: 1;
+    min-width: 0;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX F-17: Finance index — "Sales Overview (Today)" section
+   The cash sales display block has sub-labels below it
+   ("Cash Sales — included in Running Total", "📱 GCash Sales — enter below
+   as deduction").  These inline-styled divs can overflow on 320px.
+   -------------------------------------------------------------------------- */
+@media (max-width: 430px) {
+
+  /* Sub-labels under the sales display: wrap gracefully */
+  #finance-form .form-group div[style*="font-size:0.75rem"],
+  #finance-form .form-group div[style*="font-size:0.72rem"] {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    line-height: 1.4;
+  }
+
+  /* Refresh link: adequate touch target */
+  #finance-form .form-group a[href*="date="] {
+    display: inline-block;
+    min-height: 36px;
+    line-height: 36px;
+    padding: 0 4px;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX F-18: Shared — finance module table wrapper horizontal scroll
+   Both the history table on index.html and history.html use
+   .finance-history-table-wrapper.  On mobile (≤767px) the desktop table
+   is hidden and cards are shown.  Confirm the table-wrapper itself clips
+   correctly on tablets (576–767px) where the table IS visible.
+   -------------------------------------------------------------------------- */
+@media (min-width: 576px) and (max-width: 767.98px) {
+
+  .finance-history-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+
+  /* Minimum width so all 11 columns remain readable when scrolled */
+  .finance-history-table-wrapper table {
+    min-width: 820px;
+    font-size: 0.75rem;
+  }
+
+  .finance-history-table-wrapper th,
+  .finance-history-table-wrapper td {
+    padding: 8px 8px;
+    white-space: nowrap;
+  }
+
+}
+
+/* ==========================================================================
+   REPORTS PAGE — Daily Sales chart mobile height
+   The Reports template uses .chart-wrap (not .chart-wrapper used elsewhere).
+   Without a responsive rule the chart stays at 280px on all screen widths —
+   on narrow phones a 30-bar range becomes unreadably compressed.
+   Matches the 200px mobile height already set for .chart-wrapper.
+   Desktop layout (height:280px set inline in the template) is unchanged.
+   ========================================================================== */
+@media (max-width: 575.98px) {
+  .chart-wrap {
+    height: 200px !important;
+  }
+}
+
+/* ==========================================================================
+   SALES REPORTS MODULE — Complete Mobile UI Audit Fixes
+   All rules scoped to mobile breakpoints only.
+   Desktop layout (≥ 768px) is UNCHANGED.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   FIX R-1: Page header — Export Excel button stack
+   The page-header right side has an inline flex div with the Export button.
+   On ≤575px the existing .page-header rule already stacks the header sections
+   vertically but the inner div doesn't stretch the button.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  /* Stretch the button container to full width so the button fills it */
+  .page-header > div[style*="display:flex"][style*="gap:10px"],
+  .page-header > div[style*="display:flex"][style*="gap: 10px"] {
+    width: 100%;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* Export Excel: full-width, adequate touch target */
+  .reports-export-btn,
+  a.reports-export-btn {
+    width: 100% !important;
+    min-height: 48px;
+    justify-content: center;
+    display: inline-flex;
+    align-items: center;
+    touch-action: manipulation;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX R-2: Date filter — Apply and Reset buttons side-by-side on narrow screens
+   At 320px two full-width buttons stack fine, but the Reset <a.btn> may not
+   get full-width treatment from the existing rule if it is matched differently.
+   Explicitly target both button types inside .reports-date-filter.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  .reports-date-filter form {
+    flex-direction: column !important;
+    gap: 12px;
+    width: 100%;
+  }
+
+  .reports-date-filter a.btn,
+  .reports-date-filter button.btn,
+  .reports-date-filter .btn {
+    width: 100% !important;
+    min-height: 48px;
+    justify-content: center;
+    display: flex;
+    align-items: center;
+    touch-action: manipulation;
+  }
+
+  /* Date inputs: full width and taller touch target */
+  .reports-date-filter input[type="date"],
+  .reports-date-filter .form-control {
+    width: 100% !important;
+    min-height: 48px;
+    font-size: 1rem;
+    box-sizing: border-box;
+  }
+
+  /* Label + input groups: full width */
+  .reports-date-filter .form-group {
+    width: 100% !important;
+    margin: 0;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX R-3: Summary stats grid — 3-card layout
+   At XS the stats-grid is 2-column. Three cards means the third card spans
+   alone and looks visually unbalanced. Force single-column at ≤ 360px so
+   all three cards stack cleanly. Also protect monetary amounts from clipping.
+   -------------------------------------------------------------------------- */
+@media (max-width: 360px) {
+
+  /* Single column at very narrow screens */
+  .stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+}
+
+@media (max-width: 575.98px) {
+
+  /* Stat value: fluid font size so ₱9,999.99 never clips inside a card */
+  .stat-card .stat-value {
+    font-size: clamp(1rem, 5.5vw, 1.6rem);
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    line-height: 1.2;
+  }
+
+  /* Stat card: ensure it never clips its own content */
+  .stat-card {
+    overflow: visible;
+    min-width: 0;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX R-4: Sales by Category rows — revenue amount overflow
+   Each row is an inline-styled div with display:flex;justify-content:space-between.
+   On 320px a long category name can push the ₱amount off the right edge.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  /* Category row container: wrap if needed, but keep amount visible */
+  .card-body > div[style*="padding:12px 20px"] {
+    padding: 12px 14px !important;
+  }
+
+  .card-body > div[style*="padding:12px 20px"] > div[style*="display:flex"] {
+    flex-wrap: nowrap;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  /* Category name: grows but has overflow truncation for very long names */
+  .card-body > div[style*="padding:12px 20px"] > div[style*="display:flex"] > span:first-child {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.85rem;
+  }
+
+  /* Revenue amount: never shrinks — financial values must always be visible */
+  .card-body > div[style*="padding:12px 20px"] > div[style*="display:flex"] > span:last-child {
+    flex-shrink: 0;
+    white-space: nowrap;
+    font-size: 0.88rem;
+    font-weight: 700;
+  }
+
+  /* Items sold sub-line */
+  .card-body > div[style*="padding:12px 20px"] > div[style*="font-size:0.75rem"] {
+    font-size: 0.72rem !important;
+    margin-top: 2px;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX R-5: Top Products mobile cards — touch targets and value protection
+   The .report-card-item already has min-height:56px (from existing rules).
+   Ensure the value (revenue) column never shrinks to zero at 320px.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  /* Revenue value: never clips */
+  .report-card-item-value {
+    flex-shrink: 0;
+    white-space: nowrap;
+    min-width: 70px;
+    text-align: right;
+    font-size: clamp(0.82rem, 3.8vw, 0.95rem);
+  }
+
+  /* Product/date name: ellipsis on overflow */
+  .report-card-item-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  /* Sub-line: slightly tighter */
+  .report-card-item-sub {
+    font-size: 0.72rem;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX R-6: Daily Breakdown and Top Products — scrollable card containers
+   The containers have max-height:340px;overflow-y:auto inline. On small
+   phones add a visible scroll affordance (gradient fade at the bottom).
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  #top-products-cards,
+  #daily-breakdown-cards {
+    /* Ensure the scrollable area fills the card width cleanly */
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Last item: no bottom border so it doesn't look cut off at the scroll edge */
+  #top-products-cards .report-card-item:last-child,
+  #daily-breakdown-cards .report-card-item:last-child {
+    border-bottom: none;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX R-7: Reports section headings — page header title
+   On 320px "Sales Reports" with a long subtitle can overflow.
+   -------------------------------------------------------------------------- */
+@media (max-width: 430px) {
+
+  .page-title {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .page-subtitle {
+    font-size: 0.75rem;
+    word-break: break-word;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX R-8: reports-grid-top / reports-grid-bottom — gap on very small phones
+   The existing rule uses gap:16px. Tighten slightly at 320px.
+   -------------------------------------------------------------------------- */
+@media (max-width: 360px) {
+
+  .reports-grid-top,
+  .reports-grid-bottom {
+    gap: 12px !important;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX R-9: Card headers — long section titles (Daily Breakdown, Top Products)
+   Card headers should wrap gracefully and not clip the emoji prefix.
+   -------------------------------------------------------------------------- */
+@media (max-width: 430px) {
+
+  .card-header h3 {
+    font-size: clamp(0.82rem, 3.8vw, 0.9rem);
+    word-break: break-word;
+    line-height: 1.3;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX R-10: Chart — ensure canvas never causes horizontal overflow
+   chart-wrap already has height:200px !important at ≤575px (from previous
+   audit). Add overflow:hidden so a partially-rendered chart doesn't push
+   the page wider.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  .chart-wrap {
+    overflow: hidden;
+    width: 100%;
+    max-width: 100%;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX R-11: Overall page overflow guard for the reports page
+   Ensures no child element of the reports content area causes horizontal
+   scrolling.
+   -------------------------------------------------------------------------- */
+@media (max-width: 767.98px) {
+
+  /* Reports cards must not overflow the viewport */
+  .reports-grid-top > .card,
+  .reports-grid-bottom > .card {
+    max-width: 100%;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+
+  /* Table wrappers inside reports cards scroll independently */
+  .reports-grid-bottom .reports-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX R-12: Tablet (576–767px) — date filter same fix as mobile
+   The date filter inline style + gap can still overflow at 576–640px.
+   -------------------------------------------------------------------------- */
+@media (min-width: 576px) and (max-width: 767.98px) {
+
+  .reports-date-filter a.btn,
+  .reports-date-filter button.btn {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  /* Keep Apply + Reset side-by-side on tablet but give them equal share */
+  .reports-date-filter .btn {
+    flex: 1;
+    justify-content: center;
+    display: inline-flex;
+    align-items: center;
   }
 
 }

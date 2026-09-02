@@ -1,4 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="200" height="160" viewBox="0 0 200 160">
   <rect width="200" height="160" fill="#F5EDD8"/>
-  <text x="100" y="90" font-size="60" text-anchor="middle" dominant-baseline="middle">☕</text>
+  <rect x="45" y="34" width="110" height="92" rx="8" fill="#FEFCF8" stroke="#D8CBB8" stroke-width="3"/>
+  <circle cx="86" cy="66" r="10" fill="#D4A853"/>
+  <path d="M55 116 L86 84 L106 102 L122 88 L145 116 Z" fill="#C17A3B" opacity="0.85"/>
+  <rect x="45" y="106" width="110" height="12" rx="6" fill="#E8DDD0"/>
 </svg>

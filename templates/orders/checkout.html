@@ -15,8 +15,11 @@
     <div class="card">
       <div class="card-header"><h3>Your Details</h3></div>
       <div class="card-body">
-        <form method="post" id="checkout-form">
+        <form method="post" id="checkout-form" autocomplete="off">
           {% csrf_token %}
+          <!-- Idempotency key: the server answers a replay of this token with
+               the original order's success page instead of a duplicate. -->
+          <input type="hidden" name="request_token" value="{{ request_token }}">
           <div class="form-group">
             <label class="form-label">Your Name *</label>
             {{ form.customer_name }}
@@ -25,6 +28,7 @@
           <div class="form-group">
             <label class="form-label">Phone Number</label>
             {{ form.customer_phone }}
+            {% if form.customer_phone.errors %}<small style="color:var(--red-accent)">{{ form.customer_phone.errors.0 }}</small>{% endif %}
           </div>
           <div class="form-group">
             <label class="form-label">Order Type *</label>
@@ -35,16 +39,19 @@
               </label>
               {% endfor %}
             </div>
+            {% if form.order_type.errors %}<small style="color:var(--red-accent)">{{ form.order_type.errors.0 }}</small>{% endif %}
           </div>
           <div class="form-group" id="table-group">
             <label class="form-label">Table Number</label>
             {{ form.table_number }}
+            {% if form.table_number.errors %}<small style="color:var(--red-accent)">{{ form.table_number.errors.0 }}</small>{% endif %}
           </div>
           <div class="form-group">
             <label class="form-label">Special Instructions</label>
             {{ form.notes }}
+            {% if form.notes.errors %}<small style="color:var(--red-accent)">{{ form.notes.errors.0 }}</small>{% endif %}
           </div>
-          <button type="submit" class="btn btn-primary btn-block btn-lg">Place Order →</button>
+          <button type="submit" class="btn btn-primary btn-block btn-lg" style="touch-action:manipulation">Place Order →</button>
         </form>
       </div>
     </div>
@@ -93,7 +100,6 @@
   {% endfor %}
 </div>
 {% endif %}
-<script src="{% static 'js/main.js' %}"></script>
 {% block extra_js %}
 <script>
 // ── Pill selector active state (JS fallback for :has() ──
@@ -127,8 +133,9 @@
       order_type: orderType,
       items: JSON.stringify(cartData.items)
     });
+    const feeUrl = (window.KDM_URLS && window.KDM_URLS.packagingFee) || '/orders/api/packaging-fee/';
     try {
-      const r = await fetch('/orders/api/packaging-fee/?' + params.toString());
+      const r = await fetch(feeUrl + '?' + params.toString());
       const data = await r.json();
       if (data.packaging_fee > 0) {
         feeRow.style.display = 'flex';
@@ -142,7 +149,25 @@
         grandTotal.textContent = '₱' + cartData.subtotal.toFixed(2);
       }
     } catch(e) {
+      // The packaging fee preview endpoint failed (network issue or server
+      // error).  Show a clear warning so the customer knows the total shown
+      // is approximate — the server recalculates the authoritative total
+      // at order creation anyway.
       console.error('Packaging fee error:', e);
+      const grandTotal = document.getElementById('checkout-grand-total');
+      if (grandTotal) {
+        grandTotal.style.color = 'var(--red-accent, #dc3545)';
+      }
+      // Insert a small notice if one isn't already there
+      const existingNotice = document.getElementById('packaging-fee-error');
+      if (!existingNotice) {
+        const notice = document.createElement('p');
+        notice.id = 'packaging-fee-error';
+        notice.style.cssText = 'color:var(--red-accent,#dc3545);font-size:0.78rem;margin-top:6px';
+        notice.textContent = '⚠️ Could not load packaging fee — the correct total will be calculated when you place your order.';
+        const container = document.getElementById('packaging-fee-row')?.parentNode;
+        if (container) container.appendChild(notice);
+      }
     }
   }
 

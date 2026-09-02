@@ -266,7 +266,7 @@
           <td>₱{{ rec.cash_advance|floatformat:2 }}</td>
           <td>₱{{ rec.floating_cash|floatformat:2 }}</td>
           <td style="font-weight:700;color:var(--caramel)">
-            {% with ec=rec.ending_coh %}
+            {% with ec=rec.annotated_ending_coh %}
             <span {% if ec < 0 %}style="color:var(--red-accent)"{% endif %}>
               ₱{{ ec|floatformat:2 }}
             </span>
@@ -300,8 +300,8 @@
         </div>
         <div style="text-align:right">
           <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:1.1rem;
-            {% if rec.ending_coh < 0 %}color:var(--red-accent){% else %}color:var(--caramel){% endif %}">
-            ₱{{ rec.ending_coh|floatformat:2 }}
+            {% if rec.annotated_ending_coh < 0 %}color:var(--red-accent){% else %}color:var(--caramel){% endif %}">
+            ₱{{ rec.annotated_ending_coh|floatformat:2 }}
           </div>
           <div style="font-size:0.7rem;color:#aaa">Ending COH</div>
         </div>
@@ -388,6 +388,21 @@
 
   recompute();
 
+  // ── Double-click / rapid-resubmit protection ─────────────────────────────
+  // Disable the Save button the moment the form is submitted so a second click
+  // (double-click, slow network, impatient retry) cannot fire a second POST.
+  // The button is NOT re-enabled here — the page will reload via the server's
+  // PRG redirect, giving the button its normal enabled state again.
+  // If Django re-renders the page with form errors (no redirect), the page
+  // reloads from scratch so the button is naturally re-enabled.
+  form.addEventListener('submit', function() {
+    const btn = form.querySelector('button[type="submit"]');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '💾 Saving…';
+    }
+  });
+
   // ── GCash suggestion via API ──────────────────────────────────────────────
   const selectedDate = '{{ selected_date|date:"Y-m-d" }}';
   const gcashSuggestionEl    = document.getElementById('gcash-suggestion');
@@ -396,7 +411,8 @@
 
   if (gcashSuggestionEl && gcashSuggestionValue && gcashInput) {
     // Fetch sales data including GCash
-    fetch(`/finance/api/cash-sales/?date=${selectedDate}`)
+    const cashSalesUrl = '{% url "finance:api_cash_sales" %}';
+    fetch(`${cashSalesUrl}?date=${selectedDate}`)
       .then(r => r.json())
       .then(data => {
         if (data.gcash_sales && data.gcash_order_count > 0) {

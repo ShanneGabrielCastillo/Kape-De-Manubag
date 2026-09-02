@@ -1,0 +1,12 @@
+{% if is_terminal %}
+{# Terminal state: show the current status as read-only text — no dropdown, no submit button. #}
+<span class="badge {% if order.status == 'completed' %}badge-ready{% else %}badge-cancelled{% endif %}" style="font-size:0.8rem;padding:5px 10px">
+  {{ order.get_status_display }}
+</span>
+{% else %}
+<select name="status" class="form-control form-select {{ form_classes }}"{% if select_style %} style="{{ select_style }}"{% endif %}>
+  {% for opt in options %}
+  <option value="{{ opt.value }}"{% if opt.selected %} selected{% endif %}>{{ opt.label }}</option>
+  {% endfor %}
+</select>
+{% endif %}

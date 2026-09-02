@@ -2,41 +2,130 @@
 Finance views — Daily Cash Reconciliation for Kape De Manubag.
 """
 import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
-from django.db.models import Sum, OuterRef, Subquery, DecimalField
+from django.db import IntegrityError
+from django.db.models import (
+    Sum, Count, OuterRef, Subquery, DecimalField, ExpressionWrapper, F, Value,
+)
+from django.db.models.functions import Coalesce
 from django.core.paginator import Paginator
 from django.utils import timezone
 
 from apps.accounts.decorators import cashier_or_admin_required
+from apps.audit.services import log_action
 from apps.orders.models import Order
 from .models import DailyFinance
 from .forms import DailyFinanceForm
 
 
-# ── Helper ────────────────────────────────────────────────────────────────────
+# ── Shared annotation helpers ─────────────────────────────────────────────────
+
+def _cash_sales_subquery():
+    """
+    Returns a Subquery that aggregates completed cash-order totals for the
+    date that matches the outer DailyFinance row.  Used in annotate() calls
+    so the history tables compute cash_sales in SQL rather than via N Python
+    property calls.
+    """
+    return Subquery(
+        Order.objects.filter(
+            created_at__date=OuterRef('date'),
+            is_paid=True,
+            payment_method='cash',
+            status='completed',
+        )
+        .values('created_at__date')
+        .annotate(total=Sum('total'))
+        .values('total')[:1],
+        output_field=DecimalField(max_digits=12, decimal_places=2),
+    )
+
+
+def _annotate_history_qs(qs):
+    """
+    Attach two annotations to a DailyFinance queryset:
+
+    • annotated_cash_sales  — cash sales total from Order table (one subquery)
+    • annotated_ending_coh  — ending COH computed entirely in SQL
+                              (previous_coh + cash_sales - all deductions)
+
+    Using these annotations in templates avoids the N+1 pattern caused by
+    calling the `ending_coh` Python property, which fires a DB query per row.
+    """
+    cash_sales_sq = _cash_sales_subquery()
+    # COALESCE so dates with zero cash orders contribute 0, not NULL
+    cash_sales_expr = Coalesce(
+        cash_sales_sq,
+        Value(Decimal('0.00')),
+        output_field=DecimalField(max_digits=12, decimal_places=2),
+    )
+    ending_coh_expr = ExpressionWrapper(
+        F('previous_coh')
+        + cash_sales_expr
+        - F('expenses')
+        - F('gcash_payments')
+        - F('coins')
+        - F('cash_advance')
+        - F('floating_cash'),
+        output_field=DecimalField(max_digits=12, decimal_places=2),
+    )
+    return qs.annotate(
+        annotated_cash_sales=cash_sales_expr,
+        annotated_ending_coh=ending_coh_expr,
+    )
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _get_cash_sales_for_date(date):
-    """Return (total Decimal, order count int) for a given date."""
-    qs = Order.objects.filter(
+    """Return (total Decimal, order count int) for a given date.
+
+    OPT-1: single aggregate query — Sum and Count in one DB round-trip instead
+    of two separate queries (.aggregate() then .count()).
+    """
+    result = Order.objects.filter(
         created_at__date=date,
         is_paid=True,
         payment_method='cash',
         status='completed',
+    ).aggregate(
+        total=Sum('total'),
+        count=Count('id'),
     )
-    total = qs.aggregate(total=Sum('total'))['total'] or Decimal('0.00')
-    count = qs.count()
-    return total, count
+    return result['total'] or Decimal('0.00'), result['count'] or 0
+
+
+def _get_gcash_sales_for_date(date):
+    """Return (total Decimal, order count int) for GCash orders on a given date.
+
+    Mirrors _get_cash_sales_for_date but filters for payment_method='gcash'.
+    GCash revenue is shown as a deduction hint on the Finance index page —
+    it does NOT contribute to running_total (which counts physical cash only).
+    Uses a single aggregate query returning both Sum and Count.
+    """
+    result = Order.objects.filter(
+        created_at__date=date,
+        is_paid=True,
+        payment_method='gcash',
+        status='completed',
+    ).aggregate(
+        total=Sum('total'),
+        count=Count('id'),
+    )
+    return result['total'] or Decimal('0.00'), result['count'] or 0
 
 
 def _get_previous_coh_info(selected_date):
     """
     Returns (suggested_value, source_label, is_auto).
     Looks for yesterday's record first, then the most recent past record.
+    Uses the model's ending_coh property (single-record lookup, not a list —
+    no N+1 concern here).
     """
     yesterday = selected_date - datetime.timedelta(days=1)
     try:
@@ -65,7 +154,7 @@ def _get_previous_coh_info(selected_date):
 @login_required
 @cashier_or_admin_required
 def finance_index(request):
-    today = timezone.now().date()
+    today = timezone.localdate()
 
     # Resolve selected date from GET param
     date_str = request.GET.get('date', '')
@@ -85,15 +174,8 @@ def finance_index(request):
     # Cash sales for selected date
     cash_sales, order_count = _get_cash_sales_for_date(selected_date)
 
-    # GCash sales for selected date (for suggestion only — not in running total)
-    gcash_qs = Order.objects.filter(
-        created_at__date=selected_date,
-        is_paid=True,
-        payment_method='gcash',
-        status='completed',
-    )
-    gcash_sales = gcash_qs.aggregate(total=Sum('total'))['total'] or Decimal('0.00')
-    gcash_order_count = gcash_qs.count()
+    # GCash sales for selected date — OPT-2: single aggregate query
+    gcash_sales, gcash_order_count = _get_gcash_sales_for_date(selected_date)
 
     # ── POST: save / update ───────────────────────────────────────────────────
     if request.method == 'POST':
@@ -104,15 +186,72 @@ def finance_index(request):
 
         if form.is_valid():
             record = form.save(commit=False)
-            if not existing_record:
-                record.prepared_by = request.user
-            record.previous_coh_is_manual = not previous_coh_is_auto
-            record.save()
-            messages.success(
-                request,
-                f"Finance record for {record.date} saved successfully."
-            )
-            return redirect(f"{request.path}?date={record.date}")
+
+            # ── BUG-1 guard: date-lock on updates ────────────────────────────
+            # DailyFinanceForm drops the date field when updating an existing
+            # instance (see forms.py __init__), so the form never writes a new
+            # date on the record.  This view-level check is a belt-and-
+            # suspenders guard: if the saved record's date diverges from the
+            # URL's selected_date (e.g. a crafted POST that somehow bypasses
+            # the form), we refuse the save rather than silently moving the
+            # record to a different day and corrupting the COH chain.
+            if existing_record and record.date != selected_date:
+                form.add_error(
+                    None,
+                    "The date of an existing finance record cannot be changed.",
+                )
+            else:
+                if not existing_record:
+                    record.prepared_by = request.user
+
+                # ── BUG-2 fix: only set the manual flag on CREATE ─────────────
+                # On an update the flag must reflect the ORIGINAL save context,
+                # not the current state of whether yesterday now has a record.
+                # Re-evaluating it on every save would flip the flag if a
+                # previous-day record was created after this one was first saved.
+                if not existing_record:
+                    record.previous_coh_is_manual = not previous_coh_is_auto
+
+                try:
+                    record.save()
+                    log_action(
+                        request.user,
+                        'finance.update' if existing_record else 'finance.create',
+                        record,
+                    )
+                    messages.success(
+                        request,
+                        f"Finance record for {record.date} saved successfully."
+                    )
+                    return redirect(f"{request.path}?date={record.date}")
+                except IntegrityError:
+                    # Two concurrent requests both reached the INSERT path
+                    # (neither saw an existing record when they loaded the page).
+                    # The DB unique constraint on DailyFinance.date stopped the
+                    # second one from creating a duplicate — no data was lost or
+                    # corrupted.  Treat this as a transparent idempotent save:
+                    # reload the record the first request created and redirect to
+                    # it so the user sees a normal success state instead of 500.
+                    saved_record = DailyFinance.objects.filter(
+                        date=selected_date
+                    ).first()
+                    if saved_record:
+                        messages.success(
+                            request,
+                            f"Finance record for {saved_record.date} "
+                            "saved successfully."
+                        )
+                        return redirect(
+                            f"{request.path}?date={saved_record.date}"
+                        )
+                    # Extremely unlikely: constraint fired but record still not
+                    # found (e.g. immediately deleted by another process).
+                    # Fall through to a generic error rather than crashing.
+                    messages.error(
+                        request,
+                        "The finance record could not be saved. Please try again.",
+                    )
+                    return redirect(f"{request.path}?date={selected_date}")
         # fall through to render with form errors
     else:
         # ── GET: pre-populate ─────────────────────────────────────────────────
@@ -125,27 +264,13 @@ def finance_index(request):
             })
 
     # ── Finance history (last 31 records) ─────────────────────────────────────
-    cash_sales_subquery = (
-        Order.objects.filter(
-            created_at__date=OuterRef('date'),
-            is_paid=True,
-            payment_method='cash',
-            status='completed',
-        )
-        .values('created_at__date')
-        .annotate(total=Sum('total'))
-        .values('total')[:1]
-    )
-
+    # _annotate_history_qs adds annotated_cash_sales and annotated_ending_coh
+    # in a single SQL pass, eliminating the N+1 caused by rec.ending_coh in
+    # the template calling get_cash_sales() per row.
     finance_history = (
-        DailyFinance.objects
-        .annotate(
-            annotated_cash_sales=Subquery(
-                cash_sales_subquery,
-                output_field=DecimalField(max_digits=12, decimal_places=2),
-            )
+        _annotate_history_qs(
+            DailyFinance.objects.select_related('prepared_by')
         )
-        .select_related('prepared_by')
         .order_by('-date')[:31]
     )
 
@@ -165,9 +290,14 @@ def finance_index(request):
         'order_count': order_count,
         'gcash_sales': gcash_sales,
         'gcash_order_count': gcash_order_count,
+        # previous_coh_suggested: the raw value from yesterday's ending_coh.
+        # Used by COH-chain tests to assert carry-forward correctness.
+        # Templates use prev_coh_display instead (which equals this when no
+        # existing record is present, or the stored previous_coh on edit).
         'previous_coh_suggested': previous_coh_suggested,
         'previous_coh_source': previous_coh_source,
         'previous_coh_is_auto': previous_coh_is_auto,
+        # prev_coh_display: the value rendered in the UI.
         'prev_coh_display': prev_coh_display,
         'running_total': running_total,
         'finance_history': finance_history,
@@ -188,21 +318,17 @@ def finance_api_cash_sales(request):
 
     cash_total, cash_count = _get_cash_sales_for_date(date)
 
-    # GCash sales for the same date
-    gcash_qs = Order.objects.filter(
-        created_at__date=date,
-        is_paid=True,
-        payment_method='gcash',
-        status='completed',
-    )
-    gcash_total = gcash_qs.aggregate(total=Sum('total'))['total'] or Decimal('0.00')
-    gcash_count = gcash_qs.count()
+    # GCash sales — OPT-2: single aggregate query via shared helper
+    gcash_total, gcash_count = _get_gcash_sales_for_date(date)
 
     return JsonResponse({
-        'cash_sales':           float(cash_total),
+        # String values preserve Decimal precision for JS parseFloat().
+        # float() conversion can introduce IEEE 754 imprecision on amounts
+        # like ₱123.10 → 123.09999999999999.  parseFloat("123.10") is exact.
+        'cash_sales':           str(cash_total),
         'cash_sales_formatted': f'₱{cash_total:.2f}',
         'cash_order_count':     cash_count,
-        'gcash_sales':           float(gcash_total),
+        'gcash_sales':           str(gcash_total),
         'gcash_sales_formatted': f'₱{gcash_total:.2f}',
         'gcash_order_count':     gcash_count,
     })
@@ -214,22 +340,26 @@ def finance_api_cash_sales(request):
 @cashier_or_admin_required
 def finance_print(request, pk):
     record = get_object_or_404(DailyFinance, pk=pk)
+
+    # OPT-3: call _get_cash_sales_for_date exactly ONCE and derive all
+    # dependent values from it.  The previous implementation delegated to
+    # record.cash_sales / record.running_total / record.ending_coh, which
+    # each call get_cash_sales() internally — executing the same DB query
+    # three times.  We compute the formula here using the model's field
+    # values; the arithmetic is identical to the model properties.
     cash_sales, order_count = _get_cash_sales_for_date(record.date)
-    running_total = record.previous_coh + cash_sales
-    total_deductions = (
-        record.expenses + record.gcash_payments + record.coins +
-        record.cash_advance + record.floating_cash
-    )
-    ending_coh = running_total - total_deductions
+    running_total    = record.previous_coh + cash_sales
+    total_deductions = record.total_deductions  # pure Python, no DB query
+    ending_coh       = running_total - total_deductions
 
     context = {
         'record': record,
-        'cash_sales': cash_sales,
-        'order_count': order_count,
-        'running_total': running_total,
+        'cash_sales':       cash_sales,
+        'order_count':      order_count,
+        'running_total':    running_total,
         'total_deductions': total_deductions,
-        'ending_coh': ending_coh,
-        'printed_at': timezone.now(),
+        'ending_coh':       ending_coh,
+        'printed_at':       timezone.now(),
     }
     return render(request, 'finance/print.html', context)
 
@@ -239,27 +369,12 @@ def finance_print(request, pk):
 @login_required
 @cashier_or_admin_required
 def finance_history(request):
-    cash_sales_subquery = (
-        Order.objects.filter(
-            created_at__date=OuterRef('date'),
-            is_paid=True,
-            payment_method='cash',
-            status='completed',
-        )
-        .values('created_at__date')
-        .annotate(total=Sum('total'))
-        .values('total')[:1]
-    )
-
+    # _annotate_history_qs adds annotated_cash_sales and annotated_ending_coh
+    # in a single SQL pass — no N+1 from rec.ending_coh in the template.
     records = (
-        DailyFinance.objects
-        .annotate(
-            annotated_cash_sales=Subquery(
-                cash_sales_subquery,
-                output_field=DecimalField(max_digits=12, decimal_places=2),
-            )
+        _annotate_history_qs(
+            DailyFinance.objects.select_related('prepared_by')
         )
-        .select_related('prepared_by')
         .order_by('-date')
     )
 

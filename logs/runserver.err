@@ -1,0 +1,2 @@
+C:\Users\Shecile\kape_de_manubag_system\kape_de_manubag\settings.py:65: UserWarning: SECRET_KEY is not set - using an insecure development-only key. Set SECRET_KEY in your .env file (see .env.example).
+  warnings.warn(

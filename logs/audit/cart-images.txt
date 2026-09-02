@@ -1,0 +1,6 @@
+== cart images check ==
+[08:48:56] ids: [55]
+[08:49:05] mobile cart: {"thumbs":1,"broken":[],"media":1,"placeholder":0,"overflow":false}
+[08:49:11] desktop cart: {"thumbs":1,"broken":[],"media":1,"placeholder":0,"overflow":false}
+[08:49:11] console errors: (none)
+[08:49:11] == cart images check done ==

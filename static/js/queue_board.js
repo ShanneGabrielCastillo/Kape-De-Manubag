@@ -58,6 +58,74 @@
     return `${h}:${m} ${ampm}`;
   }
 
+  // ── Column sync (diff-based: only affected tiles are touched) ───────────
+  // Instead of wiping and rebuilding a column on every poll (which flashes
+  // the whole board and forces a reflow of every tile), each poll diffs the
+  // incoming orders against the tiles already on screen:
+  //   - unchanged tiles keep their DOM element untouched;
+  //   - new orders get a tile appended;
+  //   - only orders that left the list are removed.
+  function syncColumn(container, countEl, items, tileClass, opts) {
+    if (!container) return;
+    const emptyIcon  = (opts && opts.emptyIcon)  || '🍳';
+    const emptyText  = (opts && opts.emptyText)  || 'No orders';
+    const markNew    = !!(opts && opts.markNew);
+
+    const existing = new Map();
+    container.querySelectorAll('.order-tile').forEach(tile => {
+      const numEl = tile.querySelector('.tile-number');
+      if (!numEl) return;
+      const n = parseInt(numEl.textContent.replace('#', ''), 10);
+      if (!isNaN(n)) existing.set(n, tile);
+    });
+
+    if (!items || items.length === 0) {
+      // Empty column: drop any tiles and show the empty state.
+      existing.forEach(tile => tile.remove());
+      if (!container.querySelector('.empty-state')) {
+        container.appendChild(emptyState(emptyIcon, emptyText));
+      }
+      if (countEl) countEl.textContent = '0';
+      return;
+    }
+
+    // Non-empty: the empty state (if any) goes away.
+    container.querySelectorAll('.empty-state').forEach(el => el.remove());
+
+    const seen = new Set();
+    items.forEach(item => {
+      const qn = item.queue_number;
+      seen.add(qn);
+      const tile = existing.get(qn);
+      if (tile) {
+        // Keep the existing element; refresh its text only if the underlying
+        // data changed (customer name / order type).
+        const prev = tile._data || {};
+        if (prev.customer_name !== item.customer_name || prev.order_type !== item.order_type) {
+          const nameEl  = tile.querySelector('.tile-name');
+          const typeEl  = tile.querySelector('.tile-type');
+          if (nameEl) nameEl.textContent = (item.customer_name || '').substring(0, 12);
+          if (typeEl) typeEl.textContent = item.order_type === 'dine_in' ? 'Dine-In' : 'Take-Out';
+        }
+        tile._data = item;
+      } else {
+        // A brand-new tile (newly arrived order, or one that just moved into
+        // this column) — highlight newly-ready orders as before.
+        const isNew = markNew && !knownReadyNums.has(qn) && knownReadyNums.size > 0;
+        const tileEl = makeTile(item, tileClass, isNew);
+        tileEl._data = item;
+        container.appendChild(tileEl);
+      }
+    });
+
+    // Remove only the tiles whose queue number left the list.
+    existing.forEach((tile, qn) => {
+      if (!seen.has(qn)) tile.remove();
+    });
+
+    if (countEl) countEl.textContent = items.length;
+  }
+
   // ── Main poll ──
   async function poll() {
     if (isPolling) return;
@@ -68,54 +136,37 @@
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
 
-      // ── Preparing tiles ──
-      const prepTiles = document.getElementById('preparing-tiles');
-      const prepCount = document.getElementById('preparing-count');
-      if (prepTiles) {
-        prepTiles.innerHTML = '';
-        if (!data.preparing || data.preparing.length === 0) {
-          prepTiles.appendChild(emptyState('🍳', 'No orders preparing'));
-        } else {
-          data.preparing.forEach(item => {
-            prepTiles.appendChild(makeTile(item, 'preparing-tile', false));
-          });
-        }
-      }
-      if (prepCount) prepCount.textContent = data.preparing ? data.preparing.length : 0;
+      // ── Preparing column ──
+      syncColumn(
+        document.getElementById('preparing-tiles'),
+        document.getElementById('preparing-count'),
+        data.preparing,
+        'preparing-tile',
+        { emptyIcon: '🍳', emptyText: 'No orders preparing' }
+      );
 
-      // ── Ready tiles ──
-      const readyTiles = document.getElementById('ready-tiles');
-      const readyCount = document.getElementById('ready-count');
-      const newReadyNums = new Set((data.ready || []).map(i => i.queue_number));
+      // ── Ready column ──
+      syncColumn(
+        document.getElementById('ready-tiles'),
+        document.getElementById('ready-count'),
+        data.ready,
+        'ready-tile',
+        { emptyIcon: '✅', emptyText: 'No orders ready yet', markNew: true }
+      );
+      knownReadyNums = new Set((data.ready || []).map(i => i.queue_number));
 
-      if (readyTiles) {
-        readyTiles.innerHTML = '';
-        if (!data.ready || data.ready.length === 0) {
-          readyTiles.appendChild(emptyState('✅', 'No orders ready yet'));
-        } else {
-          data.ready.forEach(item => {
-            const isNew = !knownReadyNums.has(item.queue_number) && knownReadyNums.size > 0;
-            readyTiles.appendChild(makeTile(item, 'ready-tile', isNew));
-          });
-        }
-      }
-      if (readyCount) readyCount.textContent = data.ready ? data.ready.length : 0;
-      knownReadyNums = newReadyNums;
-
-      // ── Waiting badge ──
+      // ── Waiting badge (only when the text actually changed) ──
       const badge = document.getElementById('waiting-count-badge');
       if (badge) {
-        if (data.waiting_count > 0) {
-          badge.textContent = `⏳ ${data.waiting_count} waiting`;
-        } else {
-          badge.textContent = 'No orders waiting';
-        }
+        const text = data.waiting_count > 0 ? `⏳ ${data.waiting_count} waiting` : 'No orders waiting';
+        if (badge.textContent !== text) badge.textContent = text;
       }
 
-      // ── Last updated ──
+      // ── Last updated (only when it changed) ──
       const lastUpdated = document.getElementById('last-updated-text');
       if (lastUpdated) {
-        lastUpdated.textContent = 'Last updated: ' + formatTime(data.last_updated);
+        const text = 'Last updated: ' + formatTime(data.last_updated);
+        if (lastUpdated.textContent !== text) lastUpdated.textContent = text;
       }
 
     } catch (err) {
@@ -136,8 +187,17 @@
       }
     });
 
+    // Pause polling while the tab is hidden (a kitchen screen covered by
+    // another window shouldn't hammer the API), and refresh immediately on
+    // return so the board is never stale when it becomes visible again.
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) poll();
+    });
+
     poll();
-    setInterval(poll, config.pollInterval);
+    setInterval(() => {
+      if (!document.hidden) poll();
+    }, config.pollInterval);
   });
 
 })();

@@ -1,10 +1,20 @@
 {% extends "base_admin.html" %}
+{% load product_images %}
 {% block page_title %}Products{% endblock %}
 {% block content %}
 <div class="page-header">
   <div><h1 class="page-title">Products</h1><p class="page-subtitle">Manage your menu items</p></div>
   <a href="{% url 'menu:product_create' %}" class="btn btn-primary">+ Add Product</a>
 </div>
+
+{% if products_in_active_orders %}
+<div class="alert alert-warning">
+  ⚠️ <strong>{{ products_in_active_orders }}</strong> product{{ products_in_active_orders|pluralize }}
+  {{ products_in_active_orders|pluralize:"is,are" }} currently referenced by active orders
+  (pending, preparing, or ready). Deactivating or marking one unavailable hides it from the
+  menu and POS immediately — those orders keep their saved line items and remain fulfillable.
+</div>
+{% endif %}
 
 <div class="filter-bar">
   <form method="get" style="display:flex;gap:10px;flex-wrap:wrap">
@@ -28,11 +38,11 @@
       </thead>
       <tbody>
         {% for product in products %}
-        <tr>
+        <tr {% if not product.is_active %}style="opacity:.65"{% endif %}>
           <td>
             <div style="display:flex;align-items:center;gap:12px">
-              <div style="width:40px;height:40px;border-radius:8px;background:var(--cream);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.2rem">
-                {% if product.image %}<img src="{{ product.image.url }}" alt="" style="width:100%;height:100%;object-fit:cover">{% else %}{{ product.category.icon }}{% endif %}
+              <div style="width:40px;height:40px;border-radius:8px;background:var(--cream);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center">
+                {% product_image product %}
               </div>
               <div>
                 <div style="font-weight:700">{{ product.name }}</div>
@@ -43,22 +53,42 @@
           <td>{{ product.category.name }}</td>
           <td style="font-weight:700;color:var(--caramel)">₱{{ product.price }}</td>
           <td>
-            <span class="stock-indicator {% if product.stock_quantity <= 5 %}stock-critical{% elif product.stock_quantity <= 10 %}stock-low{% else %}stock-ok{% endif %}">
+            <span class="stock-indicator {% if product.stock_status == 'critical' %}stock-critical{% elif product.stock_status == 'low' %}stock-low{% else %}stock-ok{% endif %}">
               {{ product.stock_quantity }}
             </span>
           </td>
           <td>
-            <span class="badge {% if product.is_available %}badge-ready{% else %}badge-cancelled{% endif %} toggle-product-btn"
-                  data-product-id="{{ product.pk }}" style="cursor:pointer" title="Click to toggle">
-              {% if product.is_available %}Available{% else %}Unavailable{% endif %}
-            </span>
+            <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start">
+              <span class="badge {% if product.is_active %}badge-ready{% else %}badge-cancelled{% endif %}">
+                {% if product.is_active %}Active{% else %}Inactive{% endif %}
+              </span>
+              <span class="badge {% if product.is_available %}badge-ready{% else %}badge-cancelled{% endif %} toggle-product-btn"
+                    data-product-id="{{ product.pk }}" data-url="{% url 'menu:product_toggle' product.pk %}"
+                    data-active-orders="{{ product.active_order_count|default:0 }}" style="cursor:pointer" title="Click to toggle availability">
+                {% if product.is_available %}Available{% else %}Unavailable{% endif %}
+              </span>
+              {% if product.active_order_count %}
+              <span class="badge badge-pending" title="This product is in {{ product.active_order_count }} active order(s) that are still being fulfilled. Historical (completed/cancelled) orders: {{ product.total_order_count }}">
+                ⚠ in {{ product.active_order_count }} active order{{ product.active_order_count|pluralize }}
+              </span>
+              {% elif product.total_order_count %}
+              <span class="badge" style="background:#eee;color:#666" title="Only historical (completed/cancelled) orders reference this product">
+                {{ product.total_order_count }} historical order{{ product.total_order_count|pluralize }}
+              </span>
+              {% endif %}
+            </div>
           </td>
           <td>
-            <div style="display:flex;gap:6px">
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
               <a href="{% url 'menu:product_edit' product.pk %}" class="btn btn-sm btn-outline">Edit</a>
               <a href="{% url 'inventory:restock' product.pk %}" class="btn btn-sm btn-outline">Stock</a>
-              <button class="btn btn-sm btn-danger delete-btn" data-id="{{ product.pk }}" data-name="{{ product.name }}"
-                onclick="confirmDelete('{% url 'menu:product_delete' product.pk %}','{{ product.name }}')">Delete</button>
+              <button class="btn btn-sm {% if product.is_active %}{% if product.active_order_count %}btn-warning{% else %}btn-danger{% endif %}{% else %}btn-caramel{% endif %} toggle-active-btn"
+                      data-id="{{ product.pk }}" data-name="{{ product.name|escapejs }}"
+                      data-url="{% url 'menu:product_toggle_active' product.pk %}"
+                      data-is-active="{{ product.is_active|yesno:'true,false' }}"
+                      data-active-orders="{{ product.active_order_count|default:0 }}">
+                {% if product.is_active %}Deactivate{% else %}Reactivate{% endif %}
+              </button>
             </div>
           </td>
         </tr>
@@ -72,11 +102,64 @@
 {% endblock %}
 {% block extra_js %}
 <script>
-async function confirmDelete(url, name) {
-  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
-  const r = await fetch(url, {method:'POST',headers:{'X-CSRFToken':'{{ csrf_token }}'}});
-  const d = await r.json();
-  if(d.success){showToast('Product deleted','success');setTimeout(()=>location.reload(),800);}
+async function toggleProductActive(btn) {
+  const name = btn.dataset.name;
+  const willDeactivate = btn.dataset.isActive === 'true';
+  const activeOrders = parseInt(btn.dataset.activeOrders || '0', 10);
+  if (willDeactivate) {
+    const base = `Deactivate "${name}"? It will be hidden from the customer menu and the POS, but its history is kept and it can be reactivated anytime.`;
+    const warned = activeOrders > 0
+      ? `Deactivate "${name}"? It is currently in ${activeOrders} active order(s) that are still being fulfilled. It will be hidden from the menu and POS immediately, but those orders keep their saved line items and remain fulfillable. Its history is kept and it can be reactivated anytime.`
+      : base;
+    if (!confirm(warned)) return;
+  } else if (!confirm(`Reactivate "${name}"? It will become visible and sellable again.`)) {
+    return;
+  }
+  try {
+    // When live orders reference the product the server requires an explicit
+    // confirm flag even after the dialog above (defence against stale pages).
+    const body = willDeactivate && activeOrders > 0
+      ? new URLSearchParams({confirm: '1'})
+      : new URLSearchParams();
+    const r = await fetch(btn.dataset.url, {
+      method: 'POST',
+      headers: {'X-CSRFToken':'{{ csrf_token }}'},
+      body,
+    });
+    const d = await r.json();
+    if (d.success) {
+      showToast(willDeactivate ? 'Product deactivated' : 'Product reactivated', 'success');
+      setTimeout(() => location.reload(), 800);
+    } else if (d.requires_confirmation) {
+      // Page data was stale (an order referencing this product was created
+      // after load): surface the server-side count and ask once more.
+      if (confirm(`${d.message}\n\nClick OK to confirm deactivation.`)) {
+        const r2 = await fetch(btn.dataset.url, {
+          method: 'POST',
+          headers: {'X-CSRFToken':'{{ csrf_token }}'},
+          body: new URLSearchParams({confirm: '1'}),
+        });
+        const d2 = await r2.json();
+        if (d2.success) {
+          showToast('Product deactivated', 'success');
+          setTimeout(() => location.reload(), 800);
+        } else {
+          showToast(d2.error || 'Action failed', 'error');
+        }
+      }
+    } else {
+      showToast(d.error || 'Action failed', 'error');
+    }
+  } catch (err) {
+    showToast('Network error. Try again.', 'error');
+  }
 }
+// Delegated listener: the responsive-tables system clones table rows into
+// mobile cards AFTER this script runs, so a direct binding would leave the
+// Deactivate/Reactivate button inside generated cards without a handler.
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.toggle-active-btn');
+  if (btn) toggleProductActive(btn);
+});
 </script>
 {% endblock %}

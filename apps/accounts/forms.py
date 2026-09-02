@@ -1,6 +1,11 @@
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from .models import CustomUser
+from .validators import (
+    MAX_SIZE_MB,
+    SUPPORTED_FORMATS_LABEL,
+    validate_profile_image_upload,
+)
 
 
 class LoginForm(AuthenticationForm):
@@ -40,6 +45,19 @@ class StaffCreateForm(UserCreationForm):
 
 
 class ProfileUpdateForm(forms.ModelForm):
+    # profile_image is declared explicitly to attach the upload validation
+    # (see apps/accounts/validators.py). The widget stays the standard
+    # ClearableFileInput, so the existing upload workflow is unchanged.
+    profile_image = forms.ImageField(
+        required=False,
+        validators=[validate_profile_image_upload],
+        widget=forms.ClearableFileInput(attrs={
+            # Client-side picker hint only -- the server always re-validates.
+            'accept': 'image/jpeg,image/png,image/gif,image/webp',
+        }),
+        help_text=f'{SUPPORTED_FORMATS_LABEL}, up to {MAX_SIZE_MB} MB.',
+    )
+
     class Meta:
         model = CustomUser
         fields = ['first_name', 'last_name', 'email', 'phone', 'profile_image']

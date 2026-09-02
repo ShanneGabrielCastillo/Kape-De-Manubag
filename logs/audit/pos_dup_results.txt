@@ -1,0 +1,8 @@
+[10:23:42] login -> /dashboard/
+[10:23:46] initial: {"items":0,"btnLabel":"Place Order ✓","products":41}
+[10:23:47] cart after add: 1 item(s)
+[10:23:47] double-click: double-clicked
+[10:23:47] button during flight: {"disabled":true,"text":"Placing Order…","hasSpinner":true}
+[10:23:51] button after: {"disabled":false,"text":"Place Order ✓","itemsLeft":0}
+[10:23:51] POS create POSTs seen by the browser: 1 ([{"t":1786703027422,"method":"POST"}])
+[10:23:51] PASS: exactly one POST fired under rapid double-click + slow network

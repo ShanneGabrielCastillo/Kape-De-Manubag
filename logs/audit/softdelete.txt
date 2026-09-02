@@ -1,0 +1,18 @@
+== soft-delete check start ==
+[07:58:22] login form ready: true
+[07:58:25] logged in: true path=/dashboard/
+[07:58:27] create form ready: true
+[07:58:33] after create, path=/manage/products/
+[07:58:33] row after create: {"found":true,"id":"47","hasActive":true,"deactivateBtn":true,"hasDeleteBtn":false} | deleteBtnsOnPage=0
+[07:58:40] after deactivate click, path=/manage/products/
+[07:58:40] row after deactivate: {"found":true,"inactiveBadge":true,"reactivateBtn":true}
+[07:58:45] customer menu hides product: true
+[07:58:50] POS hides product: true
+[07:58:51] POS order with inactive product: {"id":47,"success":false,"error":"Audit Soft-Delete Test is no longer available. Please refresh the POS and try again."}
+[07:58:51] add_to_cart with inactive product (expect 404): 404
+[07:59:04] row after reactivate: {"found":true,"activeBadge":true,"deactivateBtn":true} | path=clicked
+[07:59:09] customer menu shows reactivated product: true
+[07:59:16] mobile cards: {"cardsTotal":45,"found":true,"hasBtn":true}
+[07:59:23] mobile card after deactivate: {"found":true,"inactiveBadge":true,"reactBtn":true}
+[07:59:30] console errors: (none)
+[07:59:30] == soft-delete check done ==

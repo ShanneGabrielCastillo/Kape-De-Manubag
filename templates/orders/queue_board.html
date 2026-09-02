@@ -310,7 +310,7 @@
 
 <script>
 window.BOARD_CONFIG = {
-  apiUrl:       '/orders/api/queue-board/',
+  apiUrl:       '{% url "orders:api_queue_board" %}',
   pollInterval: 5000,
 };
 </script>

@@ -50,7 +50,7 @@
           <td>₱{{ rec.cash_advance|floatformat:2 }}</td>
           <td>₱{{ rec.floating_cash|floatformat:2 }}</td>
           <td style="font-weight:700">
-            {% with ec=rec.ending_coh %}
+            {% with ec=rec.annotated_ending_coh %}
             <span {% if ec < 0 %}style="color:var(--red-accent)"{% else %}style="color:var(--caramel)"{% endif %}>
               ₱{{ ec|floatformat:2 }}
             </span>
@@ -84,8 +84,8 @@
         </div>
         <div style="text-align:right">
           <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:1.1rem;
-            {% if rec.ending_coh < 0 %}color:var(--red-accent){% else %}color:var(--caramel){% endif %}">
-            ₱{{ rec.ending_coh|floatformat:2 }}
+            {% if rec.annotated_ending_coh < 0 %}color:var(--red-accent){% else %}color:var(--caramel){% endif %}">
+            ₱{{ rec.annotated_ending_coh|floatformat:2 }}
           </div>
           <div style="font-size:0.7rem;color:#aaa">Ending COH</div>
         </div>

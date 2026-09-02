@@ -11,14 +11,25 @@
       <thead><tr><th data-role="primary">Name</th><th data-role="secondary">Username</th><th data-role="status">Role</th><th data-role="secondary">Email</th><th data-role="hide">Status</th><th data-role="actions">Actions</th></tr></thead>
       <tbody>
         {% for member in staff %}
-        <tr>
+        <tr {% if not member.is_active %}class="row-inactive" title="Inactive account — retained for historical records"{% endif %}>
           <td>{{ member.get_full_name|default:member.username }}</td>
           <td>{{ member.username }}</td>
           <td><span class="badge {% if member.role == 'admin' %}badge-ready{% else %}badge-preparing{% endif %}">{{ member.get_role_display }}</span></td>
           <td>{{ member.email|default:"—" }}</td>
-          <td><span class="badge {% if member.is_active %}badge-paid{% else %}badge-cancelled{% endif %}">{% if member.is_active %}Active{% else %}Inactive{% endif %}</span></td>
           <td>
-            <button onclick="toggleStaff({{ member.pk }})" class="btn btn-sm btn-outline">Toggle</button>
+            <span class="badge {% if member.is_active %}badge-paid{% else %}badge-cancelled{% endif %}">{% if member.is_active %}Active{% else %}Inactive{% endif %}</span>
+            {% if member.deactivated_at %}
+              <small style="display:block;color:#999;margin-top:2px">since {{ member.deactivated_at|date:"M j, Y g:i A" }}</small>
+            {% endif %}
+          </td>
+          <td>
+            {% if member == user %}
+              <span class="badge badge-preparing" title="You cannot deactivate your own account">You</span>
+            {% else %}
+              <button onclick="toggleStaff('{% url 'accounts:staff_toggle' member.pk %}', {{ member.is_active|yesno:'true,false' }})" class="btn btn-sm {% if member.is_active %}btn-outline{% else %}btn-primary{% endif %}">
+                {% if member.is_active %}Deactivate{% else %}Activate{% endif %}
+              </button>
+            {% endif %}
           </td>
         </tr>
         {% empty %}
@@ -31,10 +42,13 @@
 {% endblock %}
 {% block extra_js %}
 <script>
-async function toggleStaff(id) {
-  const r = await fetch(`/accounts/staff/${id}/toggle/`, {method:'POST',headers:{'X-CSRFToken':'{{ csrf_token }}'}});
+async function toggleStaff(url, isActive) {
+  const action = isActive ? 'deactivate' : 'activate';
+  if (isActive && !confirm('Deactivate this staff account? They will be blocked from logging in, but their order and report history stays intact.')) return;
+  const r = await fetch(url, {method:'POST',headers:{'X-CSRFToken':'{{ csrf_token }}'}});
   const d = await r.json();
   if(d.success){showToast(`Staff ${d.status}`, 'success'); setTimeout(()=>location.reload(),1000);}
+  else { showToast(d.error || 'Action failed', 'error'); }
 }
 </script>
 {% endblock %}

@@ -13,39 +13,259 @@
 .dot-ready { background:#198754; }
 .dot-completed { background:#198754; }
 .dot-cancelled { background:#dc3545; }
+
+/* ── Dashboard loading skeletons ────────────────────────────────────────────
+   The dashboard is server-rendered, so the skeleton placeholders cover the
+   window until the page is interactive: while the HTML streams in, while the
+   (synchronous) Chart.js CDN script loads, and while the chart initializes.
+   The #dashboard-content wrapper carries .dash-loading in the markup itself,
+   so the FIRST paint already shows skeletons (never a flash of content →
+   skeleton → content). A tiny script flips it to .dash-ready the moment the
+   page's synchronous work (incl. the chart) has finished.
+   Defaults (no class / no JS) show the real content — see the <noscript>
+   fallback at the end of the content block. */
+.dash-skeleton { display: none; }
+.dash-content  { display: block; }
+.dash-loading .dash-skeleton { display: block; }
+.dash-loading .dash-content  { display: none; }
+.dash-ready .dash-content { animation: dashFadeIn 0.45s ease; }
+@keyframes dashFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* Skeleton row that mirrors the real list rows (name left, value right) */
+.sk-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--cream);
+}
+.sk-row:last-child { border-bottom: none; }
+.dash-list > .sk-row:first-child { padding-top: 24px; }
+.dash-list > .sk-row:last-child { padding-bottom: 24px; }
+
+/* Chart loading overlay — shown while a period fetch is in flight */
+.chart-loading {
+  position: absolute;
+  inset: 0;
+  display: none;
+  border-radius: 8px;
+  z-index: 5;
+}
+.chart-loading.show { display: block; }
+
+/* Chart empty state — shown (via JS) when the selected period has no sales.
+   Sits under the loading overlay (z-index 2 < 5) so period switches keep
+   their skeleton while fetching. */
+.chart-empty {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+  color: #aaa;
+  padding: 20px;
+  z-index: 2;
+}
+.chart-empty .empty-icon { font-size: 2.2rem; opacity: 0.5; }
+.chart-empty p { font-size: 0.9rem; margin: 0; max-width: 340px; line-height: 1.5; }
+
+/* Smaller icon inside the Recent Orders table empty row */
+.table-empty-state .empty-icon { font-size: 2.2rem; margin-bottom: 8px; }
+.table-empty-state p { margin: 0; }
+
+/* Widget error fallback — shown when one dashboard dataset fails to load.
+   Mirrors the empty-state look (so the card keeps its height/layout) but
+   communicates a temporary problem rather than "no data". */
+.widget-error { color: #b08d57; }
+.widget-error .empty-icon { opacity: 0.6; }
+.widget-error p { margin: 0; max-width: 320px; }
+.widget-error .dash-row { color: inherit; }
+.dash-list > .widget-error { flex: 1; }
+.dash-list > .widget-error,
+.table-empty-state.widget-error { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; }
+
+/* ── Dashboard card layout consistency ─────────────────────────────────────
+   List cards (Top Products, Low Stock) and the Recent Orders table align
+   their content to the standard .card-body gutter (24px) so every card in a
+   row shares one vertical rhythm: 24px below the header divider to the
+   first content line, 12px+12px between rows, 24px above the card bottom. */
+.dash-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--cream);
+}
+.dash-row:last-child { border-bottom: none; }
+.dash-list > .dash-row:first-child { padding-top: 24px; }
+.dash-list > .dash-row:last-child { padding-bottom: 24px; }
+
+/* Dashboard cards are flex columns so their content area fills the whole
+   card (grid rows stretch both cards to the same height). Scoped to
+   .dash-ready + .dash-content so the skeleton-vs-content reveal rules
+   (.dash-loading .dash-skeleton / .dash-content) keep their cascade
+   priority — an unscoped display rule would defeat them. */
+.dash-ready .dashboard-grid-main .card.dash-content,
+.dash-ready .dashboard-grid-secondary .card.dash-content { display: flex; flex-direction: column; }
+.dash-ready .dashboard-grid-main .card > .card-body,
+.dash-ready .dashboard-grid-secondary .card > .card-body,
+.dash-ready .dashboard-grid-secondary .card > .table-wrapper { flex: 1; }
+
+/* Balanced empty lists: the message fills the card and centers itself, so
+   a short/empty list never leaves a lopsided gap next to a taller
+   neighbour card in the same grid row. */
+.dash-list { display: flex; flex-direction: column; }
+.dash-list > .empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+}
+
+.dash-table thead th { padding: 24px 24px 12px; }
+.dash-table tbody td { padding: 12px 24px; }
+.dash-table tbody tr:last-child td { padding-bottom: 24px; }
+
+/* Grid children can always shrink below their content width */
+.dashboard-grid-main > *, .dashboard-grid-secondary > * { min-width: 0; }
+.stat-card { min-width: 0; }
+
+/* Mobile: follow the 16px mobile design-system gutter (desktop untouched) */
+@media (max-width: 575.98px) {
+  .dash-row, .dash-table thead th, .dash-table tbody td,
+  .sk-row { padding-left: 16px; padding-right: 16px; }
+  .dash-list > .dash-row:first-child,
+  .dash-list > .sk-row:first-child { padding-top: 16px; }
+  .dash-list > .dash-row:last-child,
+  .dash-list > .sk-row:last-child { padding-bottom: 16px; }
+  .dash-list > .empty-state { padding: 40px 16px; }
+  .dash-table thead th { padding-top: 16px; }
+  .dash-table tbody tr:last-child td { padding-bottom: 16px; }
+
+  /* Stat cards: in the 2-column phone layout the decorative corner icon
+     overlaps the value/sub text (the amount fills the card width), so it is
+     hidden on phones. Desktop keeps it. */
+  .stat-icon { display: none; }
+
+  /* Stat values: long peso amounts (₱1,234,567.89) must never overflow the
+     ~110px content column of a 2-column card on a 320px phone. Scale the
+     clamp down slightly vs. responsive.css and allow an emergency wrap so
+     text always stays inside the card. Desktop keeps the 1.8rem size. */
+  .stat-value {
+    font-size: clamp(1rem, 4.5vw, 1.5rem);
+    line-height: 1.15;            /* desktop line-height:1 would overlap a wrapped 2nd line */
+    overflow-wrap: anywhere;
+  }
+
+  /* Chart card: proper touch targets for the Week/Month toggle, and the
+     mobile chart height from the design system (200px) instead of the
+     desktop 260px — the template's <style> loads after responsive.css, so
+     this override actually applies (the skeleton card matches via the same
+     rule). */
+  .period-btn { min-height: 44px; padding: 8px 16px; }
+  .chart-wrapper { height: 200px; }
+
+  /* Dashboard card headers (chart period toggle, View All / Inventory
+     links): let the title and its controls wrap onto a second line on very
+     narrow screens instead of squeezing the title. Scoped to the dashboard
+     grids so other pages' headers keep their current look. */
+  .dashboard-grid-main .card-header,
+  .dashboard-grid-secondary .card-header {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  /* Card spacing: the global mobile .card rule adds margin-bottom:16px, and
+     the dashboard grids also use a 16px row gap — combined they space cards
+     32px apart. Inside the dashboard grids the grid gap is the single source
+     of spacing, so the extra margin is cancelled (desktop untouched).
+     NOTE: this relies on the grid gap — the JS-generated .table-mobile-cards
+     container is inserted as an extra grid item (after its card), so it too
+     is spaced by the 16px gap. */
+  .dashboard-grid-main .card,
+  .dashboard-grid-secondary .card { margin-bottom: 0; }
+}
+
+/* Recent Orders mobile cards are generated by JS and inserted as a SIBLING
+   of their .card — outside the skeleton/reveal system (.dash-loading hides
+   only .dash-content children). Keep them hidden while the page is still
+   showing skeletons so real order data never flashes beside shimmer
+   placeholders. Covers phones AND tablets: mobile cards are displayed for
+   every width below 768px (see mobile-design-system.css Section 8). */
+@media (max-width: 767.98px) {
+  #dashboard-content.dash-loading .table-mobile-cards { display: none; }
+}
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .loading-skeleton, .chart-loading { animation: none !important; }
+  .dash-ready .dash-content { animation: none !important; }
+}
 </style>
 {% endblock %}
 
 {% block content %}
+<div id="dashboard-content" class="dash-loading" aria-busy="true">
+
 <!-- Stats Grid -->
 <div class="stats-grid">
-  <div class="stat-card">
+  <!-- Skeleton placeholders (visible only while the page loads) -->
+  <div class="stat-card dash-skeleton" aria-hidden="true">
+    <div class="loading-skeleton" style="width:45%;height:12px;margin-bottom:10px"></div>
+    <div class="loading-skeleton" style="width:60%;height:26px;margin-bottom:8px"></div>
+    <div class="loading-skeleton" style="width:35%;height:12px"></div>
+  </div>
+  <div class="stat-card dash-skeleton" aria-hidden="true">
+    <div class="loading-skeleton" style="width:50%;height:12px;margin-bottom:10px"></div>
+    <div class="loading-skeleton" style="width:55%;height:26px;margin-bottom:8px"></div>
+    <div class="loading-skeleton" style="width:40%;height:12px"></div>
+  </div>
+  <div class="stat-card dash-skeleton" aria-hidden="true">
+    <div class="loading-skeleton" style="width:42%;height:12px;margin-bottom:10px"></div>
+    <div class="loading-skeleton" style="width:65%;height:26px;margin-bottom:8px"></div>
+    <div class="loading-skeleton" style="width:38%;height:12px"></div>
+  </div>
+  <div class="stat-card dash-skeleton" aria-hidden="true">
+    <div class="loading-skeleton" style="width:48%;height:12px;margin-bottom:10px"></div>
+    <div class="loading-skeleton" style="width:58%;height:26px;margin-bottom:8px"></div>
+    <div class="loading-skeleton" style="width:42%;height:12px"></div>
+  </div>
+
+  <!-- Real content -->
+  <div class="stat-card dash-content" data-stat="daily">
     <div class="stat-label">Today's Sales</div>
-    <div class="stat-value">₱{{ daily_sales|floatformat:2 }}</div>
-    <div class="stat-sub">{{ daily_orders }} order{{ daily_orders|pluralize }} today</div>
+    <div class="stat-value">{% if 'stats' in widget_errors %}—{% else %}₱{{ daily_sales|floatformat:2 }}{% endif %}</div>
+    <div class="stat-sub">{% if 'stats' in widget_errors %}Unavailable{% elif daily_orders %}{{ daily_orders }} order{{ daily_orders|pluralize }} today{% else %}No orders yet today{% endif %}</div>
     <div class="stat-icon">☀️</div>
   </div>
-  <div class="stat-card green">
+  <div class="stat-card green dash-content" data-stat="weekly">
     <div class="stat-label">Weekly Sales</div>
-    <div class="stat-value">₱{{ weekly_sales|floatformat:2 }}</div>
-    <div class="stat-sub">{{ weekly_orders }} order{{ weekly_orders|pluralize }} this week</div>
+    <div class="stat-value">{% if 'stats' in widget_errors %}—{% else %}₱{{ weekly_sales|floatformat:2 }}{% endif %}</div>
+    <div class="stat-sub">{% if 'stats' in widget_errors %}Unavailable{% elif weekly_orders %}{{ weekly_orders }} order{{ weekly_orders|pluralize }} this week{% else %}No orders this week{% endif %}</div>
     <div class="stat-icon">📅</div>
   </div>
-  <div class="stat-card blue">
+  <div class="stat-card blue dash-content" data-stat="monthly">
     <div class="stat-label">Monthly Sales</div>
-    <div class="stat-value">₱{{ monthly_sales|floatformat:2 }}</div>
-    <div class="stat-sub">{{ monthly_orders }} order{{ monthly_orders|pluralize }} this month</div>
+    <div class="stat-value">{% if 'stats' in widget_errors %}—{% else %}₱{{ monthly_sales|floatformat:2 }}{% endif %}</div>
+    <div class="stat-sub">{% if 'stats' in widget_errors %}Unavailable{% elif monthly_orders %}{{ monthly_orders }} order{{ monthly_orders|pluralize }} this month{% else %}No orders this month{% endif %}</div>
     <div class="stat-icon">📆</div>
   </div>
-  <div class="stat-card">
+  <div class="stat-card dash-content" data-stat="total">
     <div class="stat-label">Total Revenue</div>
-    <div class="stat-value">₱{{ total_sales|floatformat:2 }}</div>
-    <div class="stat-sub">{{ total_orders }} total orders</div>
+    <div class="stat-value">{% if 'stats' in widget_errors %}—{% else %}₱{{ total_sales|floatformat:2 }}{% endif %}</div>
+    <div class="stat-sub">{% if 'stats' in widget_errors %}Unavailable{% elif total_orders %}{{ total_orders }} total order{{ total_orders|pluralize }}{% else %}No orders recorded yet{% endif %}</div>
     <div class="stat-icon">💰</div>
   </div>
 </div>
 
-<!-- Quick Actions -->
+<!-- Quick Actions (always visible — they are navigation, not data) -->
 <div class="dashboard-quick-actions" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px">
   <a href="{% url 'orders:pos' %}" class="btn btn-caramel"><span>🖥️</span> Open POS</a>
   <a href="{% url 'orders:order_list' %}" class="btn btn-primary">
@@ -60,28 +280,75 @@
 
 <!-- Charts + Recent Orders -->
 <div class="dashboard-grid-main">
-  <!-- Sales Chart -->
-  <div class="card">
-    <div class="card-header">
-      <h3>Sales Overview</h3>
-      <div style="display:flex;gap:6px">
-        <button class="period-btn active" onclick="loadChart('week',this)">Week</button>
-        <button class="period-btn" onclick="loadChart('month',this)">Month</button>
-      </div>
-    </div>
+  <!-- Sales Chart — skeleton -->
+  <div class="card dash-skeleton" aria-hidden="true">
+    <div class="card-header"><h3>Sales Overview</h3></div>
     <div class="card-body">
       <div class="chart-wrapper">
-        <canvas id="sales-chart"></canvas>
+        <div class="loading-skeleton" style="width:100%;height:100%"></div>
       </div>
     </div>
   </div>
 
-  <!-- Top Products -->
-  <div class="card">
+  <!-- Top Products — skeleton -->
+  <div class="card dash-skeleton" aria-hidden="true">
     <div class="card-header"><h3>🏆 Top Products</h3></div>
-    <div class="card-body" style="padding:0">
+    <div class="card-body dash-list" style="padding:0">
+      {% for i in "12345" %}
+      <div class="sk-row">
+        <div style="flex:1">
+          <div class="loading-skeleton" style="width:55%;height:12px;margin-bottom:6px"></div>
+          <div class="loading-skeleton" style="width:30%;height:10px"></div>
+        </div>
+        <div class="loading-skeleton" style="width:70px;height:14px"></div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Sales Chart — real content -->
+  <div class="card dash-content">
+    <div class="card-header">
+      <h3>Sales Overview</h3>
+      <div style="display:flex;gap:6px">
+        <button class="period-btn active" data-period="week" onclick="loadChart('week',this)">Week</button>
+        <button class="period-btn" data-period="month" onclick="loadChart('month',this)">Month</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="chart-wrapper">
+        {# The canvas is ALWAYS rendered so a later period-switch or realtime
+           refresh can rebuild the chart after a transient failure without a
+           page reload; the JS shows the error/empty overlay instead. #}
+        <canvas id="sales-chart"></canvas>
+        {% if 'chart' in widget_errors %}
+        <div class="chart-empty" id="chart-empty" style="display:flex">
+          <div class="empty-icon">⚠️</div>
+          <p>Chart data is temporarily unavailable. Please try again later.</p>
+        </div>
+        {% else %}
+        <div class="chart-empty" id="chart-empty">
+          <div class="empty-icon">📊</div>
+          <p>No sales data yet — the chart will appear here once orders are placed.</p>
+        </div>
+        {% endif %}
+        <div class="chart-loading loading-skeleton" id="chart-loading" aria-hidden="true"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Products — real content -->
+  <div class="card dash-content">
+    <div class="card-header"><h3>🏆 Top Products</h3></div>
+    <div class="card-body dash-list" id="top-products-list" style="padding:0">
+      {% if 'top_products' in widget_errors %}
+      <div class="empty-state widget-error">
+        <div class="empty-icon">⚠️</div>
+        <p>Top products are temporarily unavailable. Please try again later.</p>
+      </div>
+      {% else %}
       {% for p in top_products %}
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid var(--cream)">
+      <div class="dash-row">
         <div>
           <div style="font-weight:600;font-size:0.88rem">{{ p.product_name }}</div>
           <div style="font-size:0.75rem;color:#aaa">{{ p.total_qty }} sold</div>
@@ -89,28 +356,82 @@
         <div style="font-weight:700;color:var(--caramel)">₱{{ p.total_revenue|floatformat:2 }}</div>
       </div>
       {% empty %}
-      <div class="empty-state" style="padding:32px"><p>No sales data yet</p></div>
+      <div class="empty-state">
+        <div class="empty-icon">🏆</div>
+        <p>No best-sellers yet — top products will appear here once orders are placed.</p>
+      </div>
       {% endfor %}
+      {% endif %}
     </div>
   </div>
 </div>
 
 <!-- Recent Orders + Low Stock -->
 <div class="dashboard-grid-secondary">
-  <!-- Recent Orders -->
-  <div class="card">
+  <!-- Recent Orders — skeleton -->
+  <div class="card dash-skeleton" aria-hidden="true">
+    <div class="card-header"><h3>Recent Orders</h3></div>
+    <div class="table-wrapper">
+      <table class="dash-table">
+        <thead>
+          <tr><th>Order #</th><th>Customer</th><th>Type</th><th>Total</th><th>Status</th><th>Time</th></tr>
+        </thead>
+        <tbody>
+          {% for i in "12345" %}
+          <tr>
+            <td><div class="loading-skeleton" style="width:70px;height:12px"></div></td>
+            <td><div class="loading-skeleton" style="width:90px;height:12px"></div></td>
+            <td><div class="loading-skeleton" style="width:60px;height:12px"></div></td>
+            <td><div class="loading-skeleton" style="width:50px;height:12px"></div></td>
+            <td><div class="loading-skeleton" style="width:70px;height:12px"></div></td>
+            <td><div class="loading-skeleton" style="width:60px;height:12px"></div></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Low Stock — skeleton -->
+  <div class="card dash-skeleton" aria-hidden="true">
+    <div class="card-header"><h3>⚠️ Low Stock</h3></div>
+    <div class="card-body dash-list" style="padding:0">
+      {% for i in "12345" %}
+      <div class="sk-row">
+        <div style="flex:1">
+          <div class="loading-skeleton" style="width:50%;height:12px;margin-bottom:6px"></div>
+          <div class="loading-skeleton" style="width:35%;height:10px"></div>
+        </div>
+        <div class="loading-skeleton" style="width:60px;height:18px;border-radius:20px"></div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Recent Orders — real content -->
+  <div class="card dash-content">
     <div class="card-header">
       <h3>Recent Orders</h3>
       <a href="{% url 'orders:order_list' %}" class="btn btn-sm btn-outline">View All</a>
     </div>
     <div class="table-wrapper">
-      <table data-mobile-cards="true">
+      <table class="dash-table" data-mobile-cards="true">
         <thead>
           <tr><th data-role="primary">Order #</th><th data-role="secondary">Customer</th><th data-role="secondary">Type</th><th data-role="amount">Total</th><th data-role="status">Status</th><th data-role="date">Time</th></tr>
         </thead>
         <tbody id="recent-orders-body">
+          {% if 'recent_orders' in widget_errors %}
+          <tr id="recent-orders-error">
+            <td colspan="6">
+              <div class="empty-state table-empty-state widget-error" style="padding:32px">
+                <div class="empty-icon">⚠️</div>
+                <p>Recent orders are temporarily unavailable. Please try again later.</p>
+              </div>
+            </td>
+          </tr>
+          {% else %}
           {% for order in recent_orders %}
-          <tr>
+          <tr data-order-id="{{ order.pk }}">
             <td><a href="{% url 'orders:order_detail' order.pk %}" style="font-weight:700;color:var(--caramel)">{{ order.order_number }}</a></td>
             <td>{{ order.customer_name }}</td>
             <td><span class="badge badge-preparing">{{ order.get_order_type_display }}</span></td>
@@ -124,45 +445,144 @@
             <td style="color:#aaa;font-size:0.8rem">{{ order.created_at|timesince }} ago</td>
           </tr>
           {% empty %}
-          <tr><td colspan="6" style="text-align:center;color:#aaa;padding:32px">No orders yet</td></tr>
+          <tr id="recent-orders-empty">
+            <td colspan="6">
+              <div class="empty-state table-empty-state" style="padding:32px">
+                <div class="empty-icon">📋</div>
+                <p>No orders yet — new orders will appear here.</p>
+              </div>
+            </td>
+          </tr>
           {% endfor %}
+          {% endif %}
         </tbody>
       </table>
     </div>
   </div>
 
-  <!-- Low Stock -->
-  <div class="card">
+  <!-- Low Stock — real content -->
+  <div class="card dash-content">
     <div class="card-header">
       <h3>⚠️ Low Stock</h3>
       <a href="{% url 'inventory:list' %}" class="btn btn-sm btn-outline">Inventory</a>
     </div>
-    <div class="card-body" style="padding:0">
+    <div class="card-body dash-list" id="low-stock-list" style="padding:0">
+      {% if 'low_stock' in widget_errors %}
+      <div class="empty-state widget-error">
+        <div class="empty-icon">⚠️</div>
+        <p>Low stock data is temporarily unavailable. Please try again later.</p>
+      </div>
+      {% else %}
       {% for product in low_stock %}
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid var(--cream)">
+      <div class="dash-row">
         <div>
           <div style="font-weight:600;font-size:0.85rem">{{ product.name }}</div>
           <div style="font-size:0.75rem;color:#aaa">{{ product.category.name }}</div>
         </div>
-        <span class="badge {% if product.stock_quantity <= 5 %}badge-cancelled{% else %}badge-pending{% endif %}">
-          {{ product.stock_quantity }} left
+        <span class="badge {% if product.is_critical_stock %}badge-cancelled{% else %}badge-pending{% endif %}">
+          {% if product.is_critical_stock %}Critical: {% else %}Low: {% endif %}{{ product.stock_quantity }} left
         </span>
       </div>
       {% empty %}
-      <div class="empty-state" style="padding:32px"><div class="empty-icon">✅</div><p>All items well-stocked</p></div>
+      <div class="empty-state"><div class="empty-icon">✅</div><p>All items well-stocked</p></div>
       {% endfor %}
+      {% endif %}
     </div>
   </div>
 </div>
+
+</div><!-- /#dashboard-content -->
+
+<noscript>
+  <style>
+    /* No-JS fallback: always show the real content, never the skeletons */
+    #dashboard-content.dash-loading .dash-skeleton { display: none !important; }
+    #dashboard-content.dash-loading .dash-content  { display: block !important; }
+  </style>
+</noscript>
 {% endblock %}
 
 {% block extra_js %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script>
-  // Initialize chart with server data
+  // ── Loading-state reveal ─────────────────────────────────────────────────
+  // #dashboard-content starts with class .dash-loading (skeletons visible,
+  // real content hidden). The chart data is server-rendered and the chart is
+  // initialized by the inline script below, which runs synchronously — so by
+  // DOMContentLoaded the page's data work is done. Flip to .dash-ready then,
+  // and never leave skeletons up: a failsafe reveals after 4s even if a
+  // resource stalls or the chart script errors.
+  (function () {
+    var root = document.getElementById('dashboard-content');
+    if (!root) return;
+    var revealed = false;
+    function reveal() {
+      if (revealed) return;
+      revealed = true;
+      root.classList.remove('dash-loading');
+      root.classList.add('dash-ready');
+      root.setAttribute('aria-busy', 'false');
+      // Belt-and-suspenders: the chart initializes while its canvas is hidden
+      // (display:none inside .dash-content). Chart.js v4 auto-resizes via
+      // ResizeObserver once visible, but an explicit resize guarantees a
+      // correct first paint in every browser.
+      if (typeof Chart !== 'undefined') {
+        var canvas = document.getElementById('sales-chart');
+        var chart = canvas && Chart.getChart(canvas);
+        if (chart) chart.resize();
+      }
+    }
+    document.addEventListener('DOMContentLoaded', reveal);
+    setTimeout(reveal, 4000); // failsafe
+  })();
+
+  // URL prefix for order detail rows built in JS (e.g. /orders/manage/123/)
+  const orderDetailPrefix = '{% url "orders:order_detail" 0 %}'.replace(/\/0\/$/, '/');
+  const chartDataUrl = (window.KDM_URLS && window.KDM_URLS.chartData) || '/dashboard/chart-data/';
+  const summaryUrl = (window.KDM_URLS && window.KDM_URLS.dashboardSummary) || '/dashboard/summary/';
+
+  // Toggle between the chart and a friendly empty state depending on whether
+  // the selected period has any sales. The chart may be created while its
+  // canvas is hidden (empty state showing), so it is explicitly resized once
+  // it becomes visible again.
+  function updateChartEmptyState(values) {
+    const empty = document.getElementById('chart-empty');
+    const canvas = document.getElementById('sales-chart');
+    if (!empty || !canvas) return;
+    const hasSales = values.some(v => parseFloat(v) > 0);
+    empty.style.display = hasSales ? 'none' : 'flex';
+    canvas.style.display = hasSales ? 'block' : 'none';
+    if (!hasSales) {
+      // Restore the "no sales yet" message — an earlier transient failure may
+      // have left the error text in the empty-state div (see showChartError).
+      const p = empty.querySelector('p');
+      if (p) p.textContent = 'No sales data yet — the chart will appear here once orders are placed.';
+    }
+    if (hasSales && typeof Chart !== 'undefined') {
+      const chart = Chart.getChart(canvas);
+      if (chart) chart.resize();
+    }
+  }
+
+  // Initialize chart with server data. When the chart widget failed
+  // server-side the canvas is still in the DOM (so a later period-switch or
+  // realtime refresh can rebuild it), but the error state is shown instead
+  // of an empty chart.
   const labels = {{ chart_labels|safe }};
   const data = {{ chart_data|safe }};
-  initSalesChart(labels, data);
+  // Tracks the data the chart currently shows, so realtime refreshes only
+  // re-init the chart when the values for the active period actually changed.
+  // showChartError() clears it to null, so a later recovered summary is
+  // always seen as a change and rebuilds the chart even if the values match
+  // the last ones shown before the failure.
+  let currentChartData = data;
+  const chartFailed = {% if 'chart' in widget_errors %}true{% else %}false{% endif %};
+  if (chartFailed) {
+    showChartError();
+  } else {
+    initSalesChart(labels, data);
+    updateChartEmptyState(data);
+  }
 
   async function loadChart(period, btn) {
     // Update active button state
@@ -174,68 +594,318 @@
     btn.textContent = '...';
     btn.disabled = true;
 
+    // Show the chart-area skeleton while the fetch is in flight
+    const chartLoading = document.getElementById('chart-loading');
+    if (chartLoading) chartLoading.classList.add('show');
+
     try {
-      const r = await fetch(`/dashboard/chart-data/?period=${period}`);
+      const r = await fetch(`${chartDataUrl}?period=${period}`);
       if (!r.ok) throw new Error(`Server error: ${r.status}`);
       const d = await r.json();
       if (!d.labels || !d.data) throw new Error('Invalid response format');
       // initSalesChart now correctly destroys the old chart via Chart.getChart()
       initSalesChart(d.labels, d.data);
+      updateChartEmptyState(d.data);
+      currentChartData = d.data;
     } catch (err) {
       console.error('Chart load error:', err);
+      // Show the chart card's fallback instead of leaving a stale canvas.
+      showChartError();
       btn.classList.remove('active');
     } finally {
+      if (chartLoading) chartLoading.classList.remove('show');
       btn.textContent = originalText;
       btn.disabled = false;
     }
   }
 
+  // ── Real-time: dashboard statistics refresh ───────────────────────────────
+  // Event-driven, NEVER polled: any SSE event that can change a widget
+  // schedules ONE debounced fetch of /dashboard/summary/, which returns every
+  // widget's value from the same consolidated queries the page render uses.
+  // Each widget is rewritten only when its value actually changed, so a burst
+  // of events (create + pay + status) coalesces into a single request.
+  let summaryTimer = null;
+
+  function scheduleSummaryRefresh() {
+    if (summaryTimer) clearTimeout(summaryTimer);
+    summaryTimer = setTimeout(fetchDashboardSummary, 600);
+  }
+
+  async function fetchDashboardSummary() {
+    const active = document.querySelector('.period-btn.active');
+    const period = active ? (active.dataset.period || 'week') : 'week';
+    try {
+      const r = await fetch(`${summaryUrl}?period=${period}`);
+      if (!r.ok) throw new Error(`Server error: ${r.status}`);
+      applyDashboardSummary(await r.json());
+    } catch (err) {
+      console.error('Dashboard summary refresh failed:', err);
+    }
+  }
+
+  // Escape user-entered text before injecting it into rebuilt widget markup.
+  function escHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // Stat-card hint line, mirroring the server template's pluralize + empty
+  // text (e.g. "3 orders today" / "No orders today yet").
+  function statSub(count, kind) {
+    const n = count || 0;
+    const plural = n === 1 ? '' : 's';
+    if (kind === 'total') {
+      return n ? `${n} total order${plural}` : 'No orders recorded ' + 'yet';
+    }
+    if (kind === 'daily') {
+      return n ? `${n} order${plural} today` : 'No orders ' + 'yet today';
+    }
+    if (kind === 'weekly') {
+      return n ? `${n} order${plural} this week` : 'No orders ' + 'this week';
+    }
+    return n ? `${n} order${plural} this month` : 'No orders ' + 'this month';
+  }
+
+  // Run one widget update in isolation: a failure (or a missing/failed
+  // dataset) in one widget logs the error and shows a fallback message,
+  // while every other widget still updates. This is the client-side half of
+  // the dashboard's error resilience (server-side: _widget in views.py).
+  function safeWidgetUpdate(label, fn) {
+    try {
+      fn();
+    } catch (err) {
+      console.error('Dashboard widget failed (' + label + '):', err);
+    }
+  }
+
+  // Friendly fallback shown inside a widget when its dataset failed to load.
+  function widgetErrorHtml(message) {
+    return '<div class="empty-state widget-error">' +
+      '<div class="empty-icon">⚠️</div>' +
+      '<p>' + escHtml(message) + '</p></div>';
+  }
+
+  function applyDashboardSummary(s) {
+    // Each widget update is wrapped so one bad dataset can never abort the
+    // remaining widgets (stat cards → badge → chart → lists).
+    safeWidgetUpdate('stat cards', function () { updateStatCards(s); });
+    safeWidgetUpdate('pending badge', function () { updatePendingBadge(s.pending_count); });
+    safeWidgetUpdate('chart', function () { updateChartFromSummary(s); });
+    safeWidgetUpdate('top products', function () { rebuildTopProducts(s.top_products); });
+    safeWidgetUpdate('low stock', function () { rebuildLowStock(s.low_stock); });
+  }
+
+  function updateStatCards(s) {
+    const statDefs = [
+      { key: 'daily',   value: s.daily_sales,   count: s.daily_orders,   kind: 'daily' },
+      { key: 'weekly',  value: s.weekly_sales,  count: s.weekly_orders,  kind: 'weekly' },
+      { key: 'monthly', value: s.monthly_sales, count: s.monthly_orders, kind: 'monthly' },
+      { key: 'total',   value: s.total_sales,   count: s.total_orders,   kind: 'total' },
+    ];
+    statDefs.forEach(function (def) {
+      const card = document.querySelector(`[data-stat="${def.key}"]`);
+      if (!card) return;
+      const valueEl = card.querySelector('.stat-value');
+      const subEl = card.querySelector('.stat-sub');
+      // A null payload means the server reported a failure for this widget:
+      // show a friendly placeholder instead of a bogus ₱0 / "No orders".
+      const failed = def.value === null || def.value === undefined;
+      const valueText = failed ? '—' : '₱' + Number(def.value).toFixed(2);
+      const subText = failed ? 'Unavailable' : statSub(def.count, def.kind);
+      if (valueEl && valueEl.textContent !== valueText) valueEl.textContent = valueText;
+      if (subEl && subEl.textContent !== subText) subEl.textContent = subText;
+    });
+  }
+
+  function updateChartFromSummary(s) {
+    // Only re-initialized when the active period's data changed. If the
+    // chart dataset failed server-side (null), show the chart error state.
+    if (s.chart_data === null || s.chart_data === undefined ||
+        s.chart_labels === null || s.chart_labels === undefined) {
+      showChartError();
+      return;
+    }
+    if (JSON.stringify(s.chart_data) !== JSON.stringify(currentChartData)) {
+      currentChartData = s.chart_data;
+      initSalesChart(s.chart_labels, s.chart_data);
+      updateChartEmptyState(s.chart_data);
+    }
+  }
+
+  // Show the chart card's fallback message (server error, not "no data").
+  function showChartError() {
+    const empty = document.getElementById('chart-empty');
+    const canvas = document.getElementById('sales-chart');
+    if (empty) {
+      empty.style.display = 'flex';
+      const p = empty.querySelector('p');
+      if (p) p.textContent = 'Chart data is temporarily unavailable. Please try again later.';
+    }
+    if (canvas) canvas.style.display = 'none';
+    // Forget the last good dataset so the next recovered summary (even with
+    // identical values) is treated as a change and rebuilds the chart.
+    currentChartData = null;
+  }
+
+  function updatePendingBadge(count) {
+    // A null payload means the counts widget failed server-side: leave the
+    // badge untouched (stale-but-accurate) rather than clearing it.
+    if (count === null || count === undefined) return;
+    // The Orders button specifically -- a[href*="orders"] would match the
+    // Open POS button too (/orders/pos/ comes first in the DOM).
+    const btn = document.querySelector('.dashboard-quick-actions a[href*="/orders/manage/"]');
+    let badge = document.getElementById('pending-count-value');
+    if (count > 0) {
+      if (!badge && btn) {
+        badge = document.createElement('span');
+        badge.className = 'badge badge-pending';
+        badge.id = 'pending-count-value';
+        badge.style.marginLeft = '4px';
+        btn.appendChild(badge);
+      }
+      if (badge) badge.textContent = count + ' pending';
+    } else if (badge) {
+      badge.remove();
+    }
+    // Sidebar badge on every staff page (only when the page rendered one)
+    const side = document.getElementById('sidebar-pending-count');
+    if (side) {
+      side.textContent = count > 0 ? count : '';
+      side.style.display = count > 0 ? '' : 'none';
+    }
+  }
+
+  function rebuildTopProducts(items) {
+    const list = document.getElementById('top-products-list');
+    if (!list) return;
+    let html;
+    if (items === null || items === undefined) {
+      // Dataset failed server-side: friendly fallback, keep the card layout.
+      html = widgetErrorHtml('Top products are temporarily unavailable. Please try again later.');
+    } else if (!items.length) {
+      html = '<div class="empty-state"><div class="empty-icon">🏆</div>' +
+             '<p>No best-sellers ' + 'yet — top products will appear here once orders are placed.</p></div>';
+    } else {
+      html = items.map(function (p) {
+        return '<div class="dash-row">' +
+          '<div><div style="font-weight:600;font-size:0.88rem">' + escHtml(p.product_name) + '</div>' +
+          '<div style="font-size:0.75rem;color:#aaa">' + p.total_qty + ' sold</div></div>' +
+          '<div style="font-weight:700;color:var(--caramel)">₱' + Number(p.total_revenue).toFixed(2) + '</div>' +
+          '</div>';
+      }).join('');
+    }
+    if (list.innerHTML !== html) list.innerHTML = html;
+  }
+
+  function rebuildLowStock(items) {
+    const list = document.getElementById('low-stock-list');
+    if (!list) return;
+    let html;
+    if (items === null || items === undefined) {
+      // Dataset failed server-side: friendly fallback, keep the card layout.
+      html = widgetErrorHtml('Low stock data is temporarily unavailable. Please try again later.');
+    } else if (!items.length) {
+      html = '<div class="empty-state"><div class="empty-icon">✅</div><p>All items well-' + 'stocked</p></div>';
+    } else {
+      html = items.map(function (p) {
+        const cls = p.is_critical ? 'badge-cancelled' : 'badge-pending';
+        const label = p.is_critical ? 'Critical' : 'Low';
+        return '<div class="dash-row">' +
+          '<div><div style="font-weight:600;font-size:0.85rem">' + escHtml(p.name) + '</div>' +
+          '<div style="font-size:0.75rem;color:#aaa">' + escHtml(p.category) + '</div></div>' +
+          '<span class="badge ' + cls + '">' + label + ': ' + p.stock_quantity + ' left</span>' +
+          '</div>';
+      }).join('');
+    }
+    if (list.innerHTML !== html) list.innerHTML = html;
+  }
+
   // ── Real-time: new order received ─────────────────────────────────────────
   RealtimeConnection.on('new_order', function(order) {
-    // Increment pending count badge
-    const pendingBadge = document.getElementById('pending-count-value');
-    if (pendingBadge) {
-      const current = parseInt(pendingBadge.textContent) || 0;
-      pendingBadge.textContent = (current + 1) + ' pending';
-    }
-
-    // Prepend new row to Recent Orders table
-    const recentTable = document.getElementById('recent-orders-body');
-    if (recentTable) {
-      const row = document.createElement('tr');
-      row.className = 'new-order-highlight';
-      row.innerHTML = `
-        <td><a href="/orders/manage/${order.order_id}/"
-               style="font-weight:700;color:var(--caramel)">${order.order_number}</a></td>
-        <td>${order.customer_name}</td>
-        <td><span class="badge badge-preparing">${order.order_type}</span></td>
-        <td style="font-weight:700">₱${order.total.toFixed(2)}</td>
-        <td><span class="badge badge-pending">
-          <span class="order-status-dot dot-pending"></span>Pending
-        </span></td>
-        <td style="color:#aaa;font-size:0.8rem">Just now</td>
-      `;
-      recentTable.prepend(row);
-      setTimeout(() => row.classList.remove('new-order-highlight'), 3000);
-      // Keep table at max 10 rows
-      const rows = recentTable.querySelectorAll('tr');
-      if (rows.length > 10) rows[rows.length - 1].remove();
-      // Regenerate mobile cards after table update
-      if (typeof window.initResponsiveTables === 'function') {
-        window.initResponsiveTables();
+    // Row prepend is cosmetic: if the event payload is malformed, log and
+    // still refresh the authoritative stats below.
+    try {
+      if (!order || order.order_id === undefined) throw new Error('malformed payload');
+      const recentTable = document.getElementById('recent-orders-body');
+      if (recentTable) {
+        const row = document.createElement('tr');
+        row.className = 'new-order-highlight';
+        row.dataset.orderId = order.order_id;
+        row.innerHTML = `
+          <td><a href="${orderDetailPrefix}${order.order_id}/"
+                 style="font-weight:700;color:var(--caramel)">${escHtml(order.order_number)}</a></td>
+          <td>${escHtml(order.customer_name)}</td>
+          <td><span class="badge badge-preparing">${escHtml(order.order_type)}</span></td>
+          <td style="font-weight:700">₱${Number(order.total).toFixed(2)}</td>
+          <td><span class="badge badge-pending">
+            <span class="order-status-dot dot-pending"></span>Pending
+          </span></td>
+          <td style="color:#aaa;font-size:0.8rem">Just now</td>
+        `;
+        // Remove the empty placeholder row: the list is no longer empty.
+        const emptyRow = document.getElementById('recent-orders-empty');
+        if (emptyRow) emptyRow.remove();
+        recentTable.prepend(row);
+        setTimeout(() => row.classList.remove('new-order-highlight'), 3000);
+        // Keep table at max 10 rows
+        const rows = recentTable.querySelectorAll('tr');
+        if (rows.length > 10) rows[rows.length - 1].remove();
+        // Regenerate mobile cards after table update
+        if (typeof window.initResponsiveTables === 'function') {
+          window.initResponsiveTables();
+        }
       }
+    } catch (err) {
+      console.error('Dashboard new-order row failed:', err);
     }
+    // Authoritative stats refresh (pending count, sales, chart, lists)
+    scheduleSummaryRefresh();
   });
 
-  // ── Real-time: low stock alert ────────────────────────────────────────────
-  RealtimeConnection.on('inventory_low', function(product) {
-    if (typeof showToast === 'function') {
-      showToast(
-        `⚠️ Low stock: ${product.product_name} (${product.stock_quantity} left)`,
-        'warning',
-        5000
+  // ── Real-time: order status changed — update the row badge in place ──────
+  RealtimeConnection.on('status_changed', function(data) {
+    try {
+      if (!data || data.order_id === undefined) throw new Error('malformed payload');
+      const row = document.querySelector(
+        `#recent-orders-body tr[data-order-id="${data.order_id}"]`
       );
+      if (row) {
+        const badge = row.querySelector('.badge .order-status-dot')?.closest('.badge');
+        if (badge) {
+          badge.className = 'badge badge-' + data.new_status;
+          badge.innerHTML =
+            '<span class="order-status-dot dot-' + data.new_status + '"></span> ' +
+            escHtml(data.new_status_display);
+        }
+        // Keep the mobile card view in sync
+        if (typeof window.initResponsiveTables === 'function') {
+          window.initResponsiveTables();
+        }
+      }
+    } catch (err) {
+      console.error('Dashboard status change failed:', err);
     }
+    // Counts / sales / chart may have changed — fetch authoritative values
+    scheduleSummaryRefresh();
+  });
+
+  // ── Real-time: low stock alert + list refresh ─────────────────────────────
+  RealtimeConnection.on('inventory_low', function(product) {
+    try {
+      if (typeof showToast === 'function') {
+        showToast(
+          `⚠️ Low stock: ${product && product.product_name ? product.product_name : 'Item'} (${product ? product.stock_quantity : '?'} left)`,
+          'warning',
+          5000
+        );
+      }
+    } catch (err) {
+      console.error('Dashboard low-stock toast failed:', err);
+    }
+    // Refresh the Low Stock list (and any stats that changed with the sale)
+    scheduleSummaryRefresh();
   });
 </script>
 {% endblock %}

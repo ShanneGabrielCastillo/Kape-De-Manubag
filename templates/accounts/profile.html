@@ -12,6 +12,7 @@
       <div class="form-group">
         <label class="form-label">{{ field.label }}</label>
         {{ field }}
+        {% if field.help_text %}<small class="text-muted">{{ field.help_text }}</small>{% endif %}
         {% if field.errors %}<small style="color:var(--red-accent)">{{ field.errors.0 }}</small>{% endif %}
       </div>
       {% endfor %}

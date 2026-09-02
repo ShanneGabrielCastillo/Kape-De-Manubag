@@ -1,0 +1,51 @@
+[07:10:02] login: {"path":"/dashboard/","hasSidebar":true}
+[07:10:08] inventory-list @320px: ok
+[07:10:08]    overflow=false (0 els)
+[07:10:08]    table=none cards=block rows=57 cards=57 clipped=[] scrollX=visible
+[07:10:08]    header=column headerBtn=288/320 bannerFits=true cardBtn=257/320 cardGap=12 cardHeaderWrap=wrap filterDir=MISSING
+[07:10:12] inventory-log @320px: ok
+[07:10:12]    overflow=false (0 els)
+[07:10:12]    table=none cards=block rows=28 cards=28 clipped=[] scrollX=visible
+[07:10:12]    header=column headerBtn=288/320 bannerFits=null cardBtn=none cardGap=12 cardHeaderWrap=wrap filterDir=column
+[07:10:15] inventory-list @375px: ok
+[07:10:15]    overflow=false (0 els)
+[07:10:15]    table=none cards=block rows=57 cards=57 clipped=[] scrollX=visible
+[07:10:15]    header=column headerBtn=343/375 bannerFits=true cardBtn=312/375 cardGap=12 cardHeaderWrap=wrap filterDir=MISSING
+[07:10:19] inventory-log @375px: ok
+[07:10:19]    overflow=false (0 els)
+[07:10:19]    table=none cards=block rows=28 cards=28 clipped=[] scrollX=visible
+[07:10:19]    header=column headerBtn=343/375 bannerFits=null cardBtn=none cardGap=12 cardHeaderWrap=wrap filterDir=column
+[07:10:23] inventory-list @414px: ok
+[07:10:23]    overflow=false (0 els)
+[07:10:23]    table=none cards=block rows=57 cards=57 clipped=[] scrollX=visible
+[07:10:23]    header=column headerBtn=382/414 bannerFits=true cardBtn=351/414 cardGap=12 cardHeaderWrap=wrap filterDir=MISSING
+[07:10:26] inventory-log @414px: ok
+[07:10:26]    overflow=false (0 els)
+[07:10:26]    table=none cards=block rows=28 cards=28 clipped=[] scrollX=visible
+[07:10:26]    header=column headerBtn=382/414 bannerFits=null cardBtn=none cardGap=12 cardHeaderWrap=wrap filterDir=column
+[07:10:29] inventory-list @768px: ok
+[07:10:29]    overflow=false (0 els)
+[07:10:29]    table=table cards=none rows=57 cards=57 clipped=[] scrollX=auto
+[07:10:29]    header=row headerBtn=105/768 bannerFits=true cardBtn=0/768 cardGap=0 cardHeaderWrap=nowrap filterDir=MISSING
+[07:10:32] inventory-log @768px: ok
+[07:10:32]    overflow=false (0 els)
+[07:10:32]    table=table cards=none rows=28 cards=28 clipped=[] scrollX=auto
+[07:10:32]    header=row headerBtn=184/768 bannerFits=null cardBtn=none cardGap=0 cardHeaderWrap=nowrap filterDir=row
+[07:10:35] inventory-list @1024px: ok
+[07:10:35]    overflow=false (0 els)
+[07:10:35]    table=table cards=none rows=57 cards=57 clipped=[] scrollX=auto
+[07:10:35]    header=row headerBtn=105/1024 bannerFits=true cardBtn=0/1024 cardGap=0 cardHeaderWrap=nowrap filterDir=MISSING
+[07:10:37] inventory-log @1024px: ok
+[07:10:37]    overflow=false (0 els)
+[07:10:37]    table=table cards=none rows=28 cards=28 clipped=[] scrollX=auto
+[07:10:37]    header=row headerBtn=184/1024 bannerFits=null cardBtn=none cardGap=0 cardHeaderWrap=nowrap filterDir=row
+[07:10:40] inventory-list @1440px: ok
+[07:10:40]    overflow=false (0 els)
+[07:10:40]    table=table cards=none rows=57 cards=57 clipped=[] scrollX=auto
+[07:10:40]    header=row headerBtn=105/1440 bannerFits=true cardBtn=0/1440 cardGap=0 cardHeaderWrap=nowrap filterDir=MISSING
+[07:10:43] inventory-log @1440px: ok
+[07:10:43]    overflow=false (0 els)
+[07:10:43]    table=table cards=none rows=28 cards=28 clipped=[] scrollX=auto
+[07:10:43]    header=row headerBtn=184/1440 bannerFits=null cardBtn=none cardGap=0 cardHeaderWrap=nowrap filterDir=row
+[07:10:48] restock-modal @375px: {"display":"flex","backdropRight":375,"backdropLeft":0,"dialogBottom":832,"viewportH":844,"dialogWidth":351,"inputWidths":[315,315],"footerBtnWidths":[315,315],"footerDir":"column-reverse"}
+[07:10:48] audit complete

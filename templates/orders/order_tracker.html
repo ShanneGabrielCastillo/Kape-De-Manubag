@@ -8,7 +8,6 @@
   <link rel="icon" type="image/svg+xml" href="{% static 'images/favicon.svg' %}">
   <link rel="stylesheet" href="{% static 'css/main.css' %}">
   <link rel="stylesheet" href="{% static 'css/mobile-design-system.css' %}">
-  <link rel="stylesheet" href="{% static 'css/mobile-design-system.css' %}">
   <link rel="stylesheet" href="{% static 'css/responsive.css' %}">
   <style>
     body { background: var(--cream-light); }
@@ -208,7 +207,7 @@
   <div class="tracker-card">
     <div class="tracker-card-label" style="text-align:left;margin-bottom:12px">Your Order</div>
     <div class="order-items-list">
-      {% for item in order.items.all %}
+      {% for item in items %}
       <div class="order-item-row">
         <span>{{ item.quantity }}× {{ item.product_name }}{% if item.size != 'none' %} <span style="color:#aaa;font-size:0.8rem">({{ item.get_size_display }})</span>{% endif %}</span>
         <span style="font-weight:600;color:var(--caramel)">₱{{ item.subtotal|floatformat:2 }}</span>
@@ -227,8 +226,8 @@
     </div>
   </div>
 
-  <p style="text-align:center;font-size:0.75rem;color:#bbb;margin-top:8px">
-    🔄 Auto-refreshes every 5 seconds
+  <p style="text-align:center;font-size:0.75rem;color:#bbb;margin-top:8px" id="tracker-connection-hint">
+    🔄 Connecting for live updates…
   </p>
 </div>
 
@@ -245,7 +244,7 @@
 
 <!-- Audio (optional chime when order is ready) -->
 <audio id="ready-sound" preload="auto">
-  <source src="/static/sounds/order_ready.mp3" type="audio/mpeg">
+  <source src="{% static 'sounds/order_ready.mp3' %}" type="audio/mpeg">
 </audio>
 
 <script>
@@ -254,6 +253,10 @@ window.TRACKER_CONFIG = {
   queueNumber:   {{ order.queue_number }},
   initialStatus: '{{ order.status }}',
   apiUrl:        '{% url "orders:api_track_order" order.order_number %}',
+  // SSE endpoint: push-based updates from the server.  The JS connects here
+  // first; if the browser or network does not support SSE it falls back to
+  // polling automatically.
+  sseUrl:        '{% url "realtime:customer_order_stream" %}?order_number={{ order.order_number|urlencode }}',
   pollInterval:  5000,
 };
 </script>

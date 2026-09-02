@@ -171,7 +171,7 @@
 
   /* Small buttons: increase tap area via padding */
   .btn-sm {
-    min-height: 36px;
+    min-height: 40px;
     padding: 6px 12px;
   }
 }
@@ -188,6 +188,7 @@
   input[type="password"],
   input[type="date"],
   input[type="tel"],
+  input[type="file"],
   textarea,
   select {
     width: 100%;
@@ -252,6 +253,12 @@
 /**
  * ── SECTION 8: TABLES ──
  */
+/* Global default: cards hidden (desktop-first). Must come BEFORE the
+   media queries: an unscoped rule at the same specificity that appears
+   later in the file would otherwise win the cascade and permanently hide
+   the JS-generated mobile cards on every screen size. */
+.table-mobile-cards { display: none; }
+
 /* Mobile XS and SM: Hide table, show cards */
 @media (max-width: 575.98px) {
   /* Only make wrappers containing mobile-card tables overflow visible
@@ -359,12 +366,20 @@
     gap: 6px;
     flex-wrap: wrap;
   }
+  /* Action cells are usually a nested flex wrapper (so the desktop table
+     stays tidy); stretch it to the card width so the buttons inside share
+     the row evenly instead of clustering at their natural width. */
+  .table-card-actions > div {
+    flex: 1 1 0%;
+    width: 100%;
+    min-width: 0;
+  }
   .table-card-actions .btn,
   .table-card-actions a.btn,
   .table-card-actions button {
     flex: 1;
     min-width: 60px;
-    min-height: 36px;
+    min-height: 44px;
     font-size: 0.78rem;
     padding: 6px 8px;
     justify-content: center;
@@ -373,6 +388,13 @@
     white-space: nowrap !important;
     display: inline-flex;
     align-items: center;
+  }
+  /* Empty-state colspan rows rendered as a full-card note */
+  .table-card-empty {
+    padding: 28px 16px;
+    text-align: center;
+    color: #aaa;
+    font-size: 0.85rem;
   }
 }
 
@@ -422,7 +444,18 @@
   .table-card-value { font-size: 0.88rem; text-align: right; flex: 1; }
   .table-card-footer { padding: 10px 16px; background: var(--cream); border-top: 1px solid #e8ddd0; }
   .table-card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-  .table-card-actions .btn { min-height: 38px; font-size: 0.82rem; }
+  .table-card-actions > div {
+    flex: 1 1 0%;
+    width: 100%;
+    min-width: 0;
+  }
+  .table-card-actions .btn { min-height: 44px; font-size: 0.82rem; }
+  .table-card-empty {
+    padding: 28px 16px;
+    text-align: center;
+    color: #aaa;
+    font-size: 0.85rem;
+  }
 }
 
 /* Tablet MD and up: Show traditional table, hide cards */
@@ -443,9 +476,6 @@
   .table-mobile-cards { display: none; }
   .table-wrapper table { display: table !important; }
 }
-
-/* Global: cards hidden by default (desktop-first) */
-.table-mobile-cards { display: none; }
 
 /**
  * ── SECTION 9: STATS GRID ──
@@ -639,6 +669,16 @@
     gap: var(--mobile-space-xs);
     flex-shrink: 0;
   }
+
+  /* Topbar icon links: proper 44px touch targets */
+  .topbar-actions a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+  }
 }
 
 /**
@@ -772,5 +812,32 @@
 
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/**
+ * ── SECTION 16: FIXED OVERLAYS (toasts + Django messages) ──
+ * The desktop widths (340px messages / 320px toasts) are wider than a small
+ * phone screen, so on mobile they were overflowing the left edge. Scoped to
+ * mobile only — desktop positioning is untouched.
+ */
+@media (max-width: 575.98px) {
+  /* Django messages: fit inside the viewport gutter on any phone width. */
+  .messages-container {
+    width: calc(100vw - 32px);
+    max-width: 340px;
+    right: 16px;
+    top: 64px;
+  }
+
+  /* Toasts: full-width within the 16px gutter. */
+  .toast-container {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+  }
+  .toast-container .toast {
+    width: 100%;
+    max-width: 100%;
   }
 }

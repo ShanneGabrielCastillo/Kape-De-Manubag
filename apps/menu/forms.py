@@ -2,7 +2,34 @@ from django import forms
 from .models import Product, Category
 
 
+def _price_input():
+    """NumberInput widget shared by the four price fields (one price per
+    size variant, all with the same attributes)."""
+    return forms.NumberInput(attrs={
+        'class': 'form-control', 'step': '0.01', 'inputmode': 'decimal',
+    })
+
+
+def _stock_input():
+    """NumberInput widget shared by the stock fields."""
+    return forms.NumberInput(attrs={'class': 'form-control', 'inputmode': 'numeric'})
+
+
 class ProductForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Product creation offers only active categories; inactive (soft-
+        # deleted) categories stay hidden from the dropdown. Exception: when
+        # editing a product that already belongs to an inactive category, that
+        # category remains selectable so the edit doesn't silently move the
+        # product -- the admin can keep or change it explicitly.
+        categories = Category.objects.active()
+        if self.instance.pk and self.instance.category_id:
+            categories = categories | Category.objects.filter(
+                pk=self.instance.category_id,
+            )
+        self.fields['category'].queryset = categories
+
     class Meta:
         model = Product
         fields = ['category', 'name', 'description', 'image', 'price', 'price_medium',
@@ -12,12 +39,12 @@ class ProductForm(forms.ModelForm):
             'category': forms.Select(attrs={'class': 'form-control'}),
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Product name'}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'price': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'inputmode': 'decimal'}),
-            'price_medium': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'inputmode': 'decimal'}),
-            'price_large': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'inputmode': 'decimal'}),
-            'price_hot': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'inputmode': 'decimal'}),
-            'stock_quantity': forms.NumberInput(attrs={'class': 'form-control', 'inputmode': 'numeric'}),
-            'low_stock_threshold': forms.NumberInput(attrs={'class': 'form-control', 'inputmode': 'numeric'}),
+            'price': _price_input(),
+            'price_medium': _price_input(),
+            'price_large': _price_input(),
+            'price_hot': _price_input(),
+            'stock_quantity': _stock_input(),
+            'low_stock_threshold': _stock_input(),
         }
 
 

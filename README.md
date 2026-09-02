@@ -109,6 +109,23 @@ kape_de_manubag_system/
 └── sample_data/           # Seed data script
 ```
 
+## ⚙️ Configuration (environment variables)
+
+All settings are read from a `.env` file in the project root — copy `.env.example` to `.env` and edit.
+
+| Variable | Development | Production |
+|----------|-------------|------------|
+| `DEBUG` | `True` recommended (defaults to `False`) | **Must be `False`** |
+| `SECRET_KEY` | Optional (safe dev-only fallback + startup warning) | **Required** — startup fails if missing |
+| `ALLOWED_HOSTS` | Optional (defaults to `localhost, 127.0.0.1, [::1]`) | **Required** — startup fails if missing or set to `*` |
+| `CSRF_TRUSTED_ORIGINS` | Optional | Set to `https://yourdomain.com` (needed for CSRF on HTTPS) |
+
+When `DEBUG=False` (production), the app refuses to start with a clear error message if `SECRET_KEY` or `ALLOWED_HOSTS` is missing, so an insecure configuration can never silently go live. Generate a secret key with:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(50))"
+```
+
 ## 🌐 Deployment
 
 ### PythonAnywhere

@@ -1,0 +1,43 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Something Went Wrong — Kape De Manubag</title>
+  <link rel="icon" type="image/svg+xml" href="{% static 'images/favicon.svg' %}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preload" as="style"
+        href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Sans:wght@400;600&display=swap"
+        onload="this.onload=null;this.rel='stylesheet'">
+  <noscript>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Sans:wght@400;600&display=swap">
+  </noscript>
+  <link rel="stylesheet" href="{% static 'css/main.css' %}">
+  <link rel="stylesheet" href="{% static 'css/mobile-design-system.css' %}">
+  <link rel="stylesheet" href="{% static 'css/responsive.css' %}">
+</head>
+<body style="background:var(--cream-light);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center;font-family:'DM Sans',sans-serif">
+
+  <div style="font-size:4rem;margin-bottom:16px">☕</div>
+  <h1 style="font-family:'Playfair Display',serif;font-size:clamp(1.8rem,5vw,3rem);color:var(--brown-dark);margin-bottom:12px">
+    Something Went Wrong
+  </h1>
+  <p style="color:#888;font-size:1rem;max-width:400px;margin-bottom:8px;line-height:1.6">
+    We're sorry — an unexpected error occurred. Your order was <strong>not</strong> placed and your cart has been preserved.
+  </p>
+  <p style="color:#aaa;font-size:0.85rem;max-width:380px;margin-bottom:32px;line-height:1.6">
+    Please try again. If the problem continues, let a staff member know.
+  </p>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
+    <a href="/" style="background:var(--brown-mid);color:var(--cream);padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:600;font-size:1rem;display:inline-flex;align-items:center;gap:8px">
+      🍽️ Return to Menu
+    </a>
+    <a href="javascript:history.back()" style="background:transparent;color:var(--brown-mid);padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:600;font-size:1rem;border:2px solid var(--brown-mid);display:inline-flex;align-items:center;gap:8px">
+      ← Try Again
+    </a>
+  </div>
+
+</body>
+</html>

@@ -26,7 +26,7 @@
       <div class="nav-section-title">Orders</div>
       <a href="{% url 'orders:order_list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'orders' and 'pos' not in request.path %}active{% endif %}">
         <span class="nav-icon">📋</span> Order Management
-        {% with count=pending_count %}{% if count %}<span class="badge badge-pending" style="margin-left:auto">{{ count }}</span>{% endif %}{% endwith %}
+        {% with count=pending_count %}<span id="sidebar-pending-count" class="badge badge-pending" style="margin-left:auto;{% if not count %}display:none{% endif %}">{% if count %}{{ count }}{% endif %}</span>{% endwith %}
       </a>
       <a href="{% url 'orders:pos' %}" class="sidebar-link {% if 'pos' in request.path %}active{% endif %}">
         <span class="nav-icon">🖥️</span> POS Terminal
@@ -111,9 +111,11 @@
     </div>
   </main>
 </div>
+{% endblock %}
 
-{# Audio + realtime.js loads after main.js (which is in base.html's body close) #}
-{# Use a dedicated block so child extra_js blocks don't clobber this #}
+{# Audio + realtime.js load once, after main.js but before child extra_js blocks #}
+{# base.html declares the realtime_js block before extra_js, so inline scripts
+   in extra_js blocks can safely call RealtimeConnection.on(...). #}
 {% block realtime_js %}
 <audio id="new-order-sound" preload="auto">
   <source src="{% static 'sounds/new_order.mp3' %}" type="audio/mpeg">
@@ -121,5 +123,3 @@
 <script src="{% static 'js/realtime.js' %}"></script>
 <script src="{% static 'js/responsive-tables.js' %}"></script>
 {% endblock realtime_js %}
-
-{% endblock %}

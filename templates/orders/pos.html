@@ -1,11 +1,14 @@
 {% extends "base_admin.html" %}
 {% load static %}
+{% load product_images %}
 {% block page_title %}POS Terminal{% endblock %}
 
 {% block extra_css %}
 <style>
 /* ── POS Desktop layout ── */
 .pos-layout { display:grid; grid-template-columns:1fr 380px; height:calc(100vh - 65px); overflow:hidden; }
+/* Product thumbnail (product image or placeholder) — aspect ratio kept via object-fit */
+.pos-item-thumb { height:52px; border-radius:6px; overflow:hidden; background:var(--cream); margin-bottom:6px; }
 .pos-left { overflow-y:auto; padding:16px; background:var(--cream-light); }
 .pos-right { background:var(--cream-white); border-left:2px solid var(--cream); display:flex; flex-direction:column; }
 .pos-header { padding:14px 16px; background:var(--brown-dark); color:var(--cream); font-weight:700; }
@@ -14,14 +17,31 @@
 .cat-tab { padding:8px 14px; border-radius:20px; border:2px solid var(--cream); background:transparent; cursor:pointer; font-size:0.8rem; font-weight:600; color:var(--brown-mid); transition:all .2s; font-family:inherit; }
 .cat-tab.active { background:var(--brown-mid); color:var(--cream); border-color:var(--brown-mid); }
 .pos-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:8px; }
-.pos-item { background:var(--cream-white); border:2px solid var(--cream); border-radius:8px; padding:10px 8px; cursor:pointer; text-align:center; transition:all .2s; }
+.pos-item { background:var(--cream-white); border:2px solid var(--cream); border-radius:8px; padding:10px 8px; cursor:pointer; text-align:center; transition:all .2s; display:flex; flex-direction:column; }
 .pos-item:hover { border-color:var(--caramel); background:rgba(193,122,59,.06); transform:translateY(-2px); }
-.pos-item .item-name { font-weight:600; font-size:0.78rem; line-height:1.3; }
-.pos-item .item-price { color:var(--caramel); font-weight:700; font-size:0.82rem; margin-top:4px; }
+.pos-item .item-name { font-weight:600; font-size:0.78rem; line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:break-word; }
+.pos-item .item-price { color:var(--caramel); font-weight:700; font-size:0.82rem; margin-top:auto; padding-top:4px; }
+/* ── POS Product Search ── */
+.pos-search-row { margin-bottom:12px; }
+.pos-search-input {
+  width:100%;
+  padding:10px 14px;
+  border:2px solid var(--cream);
+  border-radius:24px;
+  font-family:'DM Sans',sans-serif;
+  font-size:0.85rem;
+  background:var(--cream-white);
+  transition:all .2s;
+}
+.pos-search-input:focus { outline:none; border-color:var(--caramel); }
 .order-line { display:flex; align-items:center; gap:6px; padding:8px 0; border-bottom:1px solid var(--cream); font-size:0.85rem; }
 .qty-ctrl { display:flex; align-items:center; gap:4px; }
 .qb { width:22px; height:22px; border:none; border-radius:4px; background:var(--cream); cursor:pointer; font-weight:700; font-size:0.9rem; color:var(--brown-mid); }
 .qb:hover { background:var(--caramel); color:#fff; }
+/* POS order-line quantity buttons: the cart markup no longer carries inline
+   sizes, so keep the desktop size exactly as before here (mobile enlarges
+   these to 40px touch targets inside the media query below). */
+.pos-item-qty .qty-btn { width:24px; height:24px; font-size:0.8rem; }
 
 /* ── POS Mobile: bottom drawer layout ── */
 @media (max-width: 767.98px) {
@@ -81,6 +101,8 @@
     white-space: nowrap;
     flex-shrink: 0;
   }
+  /* Bigger search touch target on mobile */
+  .pos-search-input { min-height: 44px; font-size: 0.95rem; }
   /* Product grid always 2 columns */
   .pos-grid {
     grid-template-columns: repeat(2, 1fr) !important;
@@ -91,6 +113,18 @@
   /* Customer info inputs */
   #pos-customer-name,
   #pos-table { min-height: 44px; font-size: 0.9rem; }
+  /* ── Order line: two-row layout so every control is a 40px+ touch target ── */
+  .pos-order-item { flex-wrap: wrap; }
+  .pos-item-name   { order: 1; flex: 1 1 60%; }
+  .pos-item-price  { order: 2; flex-shrink: 0; }
+  .pos-item-remove { order: 3; width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; touch-action: manipulation; }
+  .pos-item-qty    { order: 4; flex: 0 0 100%; justify-content: flex-end; gap: 6px; margin-top: 4px; }
+  .pos-item-qty .qty-btn { width: 40px; height: 40px; font-size: 1.05rem; border-radius: 8px; touch-action: manipulation; }
+  .pos-item-qty span { min-width: 28px; }
+  /* Clear button: comfortable tap target in the drawer header */
+  .pos-clear-btn { min-height: 40px; padding: 8px 14px !important; display: inline-flex; align-items: center; }
+  /* Order-type radios: tappable pills */
+  .pos-order-type label { min-height: 44px; display: inline-flex; align-items: center; gap: 6px; padding: 10px 14px; border-radius: 10px; background: rgba(255,255,255,.6); }
 }
 </style>
 {% endblock %}
@@ -99,40 +133,52 @@
 <div class="pos-layout" style="margin:-28px">
   <!-- Left: Products -->
   <div class="pos-left">
-    <!-- Category Tabs -->
+    <!-- Search -->
+    <div class="pos-search-row">
+      <input type="search" id="pos-search" class="pos-search-input" placeholder="🔍 Search products..." autocomplete="off" aria-label="Search products">
+    </div>
+
+    <!-- Category Tabs ("All" is the default view so search spans the whole catalog) -->
     <div class="cat-tabs-row" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+      <button class="cat-tab active" data-cat="all" onclick="filterCat('all',this)">🍽️ All</button>
       {% for cat in categories %}
-      <button class="cat-tab {% if forloop.first %}active{% endif %}" onclick="filterCat('{{ cat.slug }}',this)">{{ cat.icon }} {{ cat.name }}</button>
+      <button class="cat-tab" data-cat="{{ cat.slug }}" onclick="filterCat('{{ cat.slug }}',this)">{{ cat.icon }} {{ cat.name }}</button>
       {% endfor %}
     </div>
 
-    <!-- Products by category -->
+    <!-- Products by category (all rendered; the active tab / search controls visibility) -->
     {% for cat in categories %}
-    <div class="cat-section" data-cat="{{ cat.slug }}" {% if not forloop.first %}style="display:none"{% endif %}>
+    <div class="cat-section" data-cat="{{ cat.slug }}">
       <div class="pos-grid">
         {% for product in cat.products.all %}
-        {% if product.is_available %}
+        {% if product.is_available and product.is_active %}
         <div class="pos-item {% if product.stock_quantity == 0 %}pos-item--out{% endif %}"
              {% if product.stock_quantity == 0 %}
              onclick="showToast('{{ product.name|escapejs }} is out of stock', 'error')"
              {% else %}
-             onclick="handlePosAdd({{ product.pk }}, '{{ product.name|escapejs }}', {{ product.price }}, '{% if product.has_sizes %}yes{% endif %}', this)"
+             onclick="handlePosAdd({{ product.pk }}, '{{ product.name|escapejs }}', {{ product.price }}, this)"
              {% endif %}
              data-product-id="{{ product.pk }}" data-name="{{ product.name|escapejs }}" data-base-price="{{ product.price }}"
              data-has-sizes="{% if product.has_sizes %}1{% else %}0{% endif %}"
+             data-stock="{{ product.stock_quantity }}"
+             {% if product.stock_quantity == 0 %}data-out="1"{% endif %}
              {% if product.has_sizes %}
              data-price-medium="{{ product.price_medium|default:product.price }}"
              data-price-large="{{ product.price_large|default:product.price }}"
              data-price-hot="{{ product.price_hot|default:product.price }}"
              {% endif %}>
-          <div style="font-size:1.5rem;margin-bottom:4px">{{ cat.icon }}</div>
+          <div class="pos-item-thumb">
+            {% product_image product alt=product.name %}
+          </div>
           <div class="item-name">{{ product.name }}</div>
-          <div class="item-price">₱{{ product.price }}</div>
           {% if product.stock_quantity == 0 %}
             <span class="stock-badge stock-badge--out">Out of Stock</span>
-          {% elif product.stock_quantity <= 5 %}
+          {% elif product.stock_status == 'critical' %}
+            <span class="stock-badge stock-badge--critical">{{ product.stock_quantity }} left</span>
+          {% elif product.stock_status == 'low' %}
             <span class="stock-badge stock-badge--low">{{ product.stock_quantity }} left</span>
           {% endif %}
+          <div class="item-price">₱{{ product.price }}</div>
         </div>
         {% endif %}
         {% endfor %}
@@ -148,7 +194,7 @@
         <span>🧾 Current Order<span id="pos-item-count-badge" style="font-size:0.75rem;opacity:0.7"></span></span>
         <div style="display:flex;align-items:center;gap:12px">
           <span id="pos-total-preview" style="font-size:1rem;font-weight:700;color:var(--gold)">₱0.00</span>
-          <button onclick="POS.items=[];POS.render()" style="background:rgba(255,255,255,.15);border:none;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:0.75rem">Clear</button>
+          <button onclick="POS.clear()" class="pos-clear-btn" style="background:rgba(255,255,255,.15);border:none;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:0.75rem">Clear</button>
           <span id="pos-drawer-toggle-icon" style="font-size:0.9rem">▲</span>
         </div>
       </div>
@@ -160,7 +206,7 @@
         <input type="text" id="pos-customer-name" placeholder="Customer name" class="form-control" style="font-size:0.82rem;padding:6px 10px">
         <input type="text" id="pos-table" placeholder="Table #" class="form-control" inputmode="numeric" style="font-size:0.82rem;padding:6px 10px">
       </div>
-      <div style="display:flex;gap:12px">
+      <div class="pos-order-type" style="display:flex;gap:12px">
         <label style="display:flex;align-items:center;gap:5px;font-size:0.82rem;cursor:pointer;font-weight:600">
           <input type="radio" name="pos-order-type" value="dine_in" checked> Dine-In
         </label>
@@ -183,7 +229,7 @@
         <span style="font-weight:700;font-size:1rem">TOTAL</span>
         <span style="font-size:1.4rem;font-weight:700;color:var(--caramel);font-family:'Playfair Display',serif" id="pos-total">₱0.00</span>
       </div>
-      <button onclick="POS.submitOrder()" class="btn btn-caramel btn-block btn-lg">Place Order ✓</button>
+      <button id="pos-submit-btn" onclick="POS.submitOrder()" class="btn btn-caramel btn-block btn-lg">Place Order ✓</button>
     </div>
   </div>
 </div>
@@ -202,15 +248,70 @@
 
 {% block extra_js %}
 <script>
-function filterCat(slug, btn) {
-  document.querySelectorAll('.cat-tab').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  document.querySelectorAll('.cat-section').forEach(s => {
-    s.style.display = s.dataset.cat === slug ? '' : 'none';
+// ── POS Product Search ──
+// One search box filters the catalog (or the active category tab) in real
+// time. Cards are cached ONCE on load, so every keystroke filters
+// precomputed data instead of re-querying the DOM -- this stays fast even
+// with hundreds of products. Matching is case-insensitive and partial: the
+// query and each product name are normalized (lowercased, trimmed,
+// whitespace collapsed) and any substring of the name matches.
+const posSearchInput = document.getElementById('pos-search');
+const posSections = Array.from(document.querySelectorAll('.cat-section'));
+
+// Cache each product card, its normalized searchable name and its section.
+const posSearchCards = Array.from(document.querySelectorAll('.pos-item')).map(el => ({
+  el,
+  section: el.closest('.cat-section'),
+  name: normalizeSearchText(el.querySelector('.item-name')?.textContent),
+}));
+
+function activePosCategory() {
+  const active = document.querySelector('.cat-tab.active');
+  // Tabs carry a data-cat attribute; fall back to 'all' if one is missing.
+  return active && active.dataset.cat ? active.dataset.cat : 'all';
+}
+
+function applyPosSearch() {
+  const query = posSearchInput ? normalizeSearchText(posSearchInput.value) : '';
+  const cat = activePosCategory();
+  // One pass over the cached cards: toggle visibility and count matches per
+  // section so sections with no hits can be hidden while a query is active.
+  const visiblePerSection = new Map();
+  posSearchCards.forEach(({ el, section, name }) => {
+    if (cat !== 'all' && section.dataset.cat !== cat) return;
+    const show = !query || name.includes(query);
+    el.style.display = show ? '' : 'none';
+    visiblePerSection.set(section, (visiblePerSection.get(section) || 0) + (show ? 1 : 0));
+  });
+  // Hide tab-shown sections with no visible cards while searching; clearing
+  // the query restores every card the tab had shown.
+  posSections.forEach(section => {
+    if (cat !== 'all' && section.dataset.cat !== cat) return;
+    section.style.display = (query && !visiblePerSection.get(section)) ? 'none' : '';
   });
 }
 
-function handlePosAdd(id, name, price, hasSizes, el) {
+if (posSearchInput) {
+  posSearchInput.addEventListener('input', applyPosSearch);
+}
+
+function filterCat(slug, btn) {
+  document.querySelectorAll('.cat-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  posSections.forEach(s => {
+    s.style.display = (slug === 'all' || s.dataset.cat === slug) ? '' : 'none';
+  });
+  // Re-apply the active search query so the tabs and the search box agree.
+  applyPosSearch();
+}
+
+function handlePosAdd(id, name, price, el) {
+  // Availability gate: a card that ran out of stock (live, via realtime) is
+  // kept clickable-but-blocked here even if its onclick predates the change.
+  if (el.dataset.out === '1' || parseInt(el.dataset.stock || '0', 10) <= 0) {
+    toastOutOfStock(name);
+    return;
+  }
   if (el.dataset.hasSizes === '1') {
     // Show size modal
     document.getElementById('size-modal-title').textContent = name;
@@ -230,7 +331,7 @@ function handlePosAdd(id, name, price, hasSizes, el) {
     sizes.forEach(s => {
       html += `<button onclick="POS.addItem(${id},'${name}',${s.price},'${s.val}');document.getElementById('size-modal').style.display='none'"
                class="btn btn-outline" style="justify-content:space-between;text-align:left">
-               <span>${s.label}</span><span style="color:var(--caramel);font-weight:700">₱${s.price.toFixed(2)}</span></button>`;
+               <span>${s.label}</span><span style="color:var(--caramel);font-weight:700">${formatPeso(s.price)}</span></button>`;
     });
     html += '</div>';
     document.getElementById('size-modal-body').innerHTML = html;
@@ -239,11 +340,6 @@ function handlePosAdd(id, name, price, hasSizes, el) {
     POS.addItem(id, name, price, 'none');
   }
 }
-
-// Update packaging fee when order type changes
-document.querySelectorAll('[name=pos-order-type]').forEach(r =>
-  r.addEventListener('change', () => { POS.updatePackagingFee(); })
-);
 
 // ── POS Mobile Drawer Toggle ──
 (function() {
@@ -264,22 +360,10 @@ document.querySelectorAll('[name=pos-order-type]').forEach(r =>
     if (icon) icon.textContent = isExpanded ? '▼' : '▲';
   });
 
-  // Wrap POS.render to update preview and auto-expand on first item
-  const originalRender = POS.render.bind(POS);
-  POS.render = function() {
-    originalRender();
-    // Update header preview total
-    const preview = document.getElementById('pos-total-preview');
-    const badge   = document.getElementById('pos-item-count-badge');
-    if (preview) {
-      preview.textContent = '₱' + POS.getTotal().toFixed(2);
-    }
-    if (badge) {
-      const count = POS.items.reduce((s, i) => s + i.qty, 0);
-      badge.textContent = count > 0
-        ? ` (${count} item${count !== 1 ? 's' : ''})`
-        : '';
-    }
+  // Keep the drawer expand/collapse state in sync after every render.
+  // Assigned to POS._afterRender (a stable hook) instead of monkey-patching
+  // POS.render via closure reassignment so the override chain stays simple.
+  POS._afterRender = function() {
     // Auto-expand on first item add (mobile only)
     if (POS.items.length > 0 && !isExpanded && window.innerWidth <= 767) {
       isExpanded = true;
@@ -295,11 +379,70 @@ document.querySelectorAll('[name=pos-order-type]').forEach(r =>
   };
 })();
 
-// ── Real-time: notify cashier of new orders (lightweight — no reload) ──────
-RealtimeConnection.on('new_order', function(order) {
-  if (typeof showToast === 'function') {
-    showToast(`🔔 New order: #${order.queue_number}`, 'info');
-  }
+// ── Draft persistence: survive accidental refreshes ────────────────────────
+// The current order is mirrored to sessionStorage after every change; on load
+// it is restored unless it is stale or its idempotency token already placed
+// the order. Cleared after a successful order or manual Clear.
+POS.initDraftPersistence();
+POS.restoreDraft();
+
+// ── Mobile keyboard: keep the order drawer above the on-screen keyboard ────
+// The drawer is position:fixed at the bottom of the layout viewport. On
+// Android the keyboard overlays the page (layout viewport does not resize), so
+// while a drawer input is focused we lift the drawer by the keyboard height
+// measured via the visual viewport. iOS Safari resizes the page itself when
+// the keyboard opens, so the measured gap is ~0 there and nothing changes.
+(function() {
+  if (typeof window.visualViewport === 'undefined') return;
+  const drawer = document.querySelector('.pos-right');
+  if (!drawer) return;
+  let focusedInDrawer = false;
+  const lift = () => {
+    if (window.innerWidth > 767) { drawer.style.bottom = ''; return; }
+    if (!focusedInDrawer) { drawer.style.bottom = ''; return; }
+    const vv = window.visualViewport;
+    const kb = Math.max(0, window.innerHeight - vv.height);
+    drawer.style.bottom = kb > 0 ? (kb + 4) + 'px' : '';
+  };
+  const isEditable = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA');
+  document.addEventListener('focusin', (e) => {
+    if (drawer.contains(e.target) && isEditable(e.target)) {
+      focusedInDrawer = true;
+      setTimeout(lift, 250);   // wait for the keyboard to start opening
+    }
+  });
+  document.addEventListener('focusout', (e) => {
+    if (drawer.contains(e.target) && isEditable(e.target)) {
+      focusedInDrawer = false;
+      setTimeout(lift, 150);
+    }
+  });
+  window.visualViewport.addEventListener('resize', lift);
+  window.visualViewport.addEventListener('scroll', lift);
+  // Testable handle for automated UI audits (no-op in normal use).
+  window.__kdmPosLift = lift;
+})();
+
+// ── Real-time stock: keep cards and the current order in sync ──────────────
+RealtimeConnection.on('inventory_changed', function(data) {
+  if (typeof POS !== 'undefined' && POS.updateStock) POS.updateStock(data);
+});
+
+// ── Navigation guard: warn before leaving with unsaved cart items ───────────
+// The handler fires on page refresh (F5 / Ctrl-R), browser back/forward, tab
+// close, and any link navigation away from this page. It is a no-op when the
+// cart is empty or when the page is unloading as part of a successful order
+// placement (POS._checkoutSuccess is set just before clearDraft() on the
+// success path in submitOrder).
+//
+// Modern browsers ignore the returnValue string and show their own generic
+// "Changes you made may not be saved" message, which is exactly what we want.
+window.addEventListener('beforeunload', function(e) {
+  if (POS._checkoutSuccess) return;          // normal post-order reload: no prompt
+  if (!POS.items || POS.items.length === 0) return;  // empty cart: no prompt
+  e.preventDefault();
+  // Required for legacy browsers (Chrome <119, Firefox) to trigger the dialog.
+  e.returnValue = '';
 });
 </script>
 {% endblock %}

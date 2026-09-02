@@ -1,0 +1,28 @@
+[07:15:50] PASS cashier login POST — status=0
+[07:15:50] PASS POS page loaded with product cards
+[07:16:23] PASS POS SSE stream connected
+[07:16:23] PASS A: added 2 units of product to the order — qty=2
+[07:16:24] PASS A: order submitted successfully
+[07:16:25] PASS A: NO notification about own order — toasts=["✓\n    Order KDM-20260818-0018 created!\n    ×"]
+[07:16:25] PASS A: "created" toast shown — toasts=["✓\n    Order KDM-20260818-0018 created!\n    ×"]
+[07:16:25] PASS A: own sale still updated the product card (5 -> 3) — stock=3 (before=5)
+[07:16:27] PASS B: customer checkout created an order — status=302 location=/orders/success/71/
+[07:16:27] PASS B: POS notified of the customer order — new-order toasts=["✓\n    🔔 New Order #19 — RT Customer\n    ×"]
+[07:16:27] PASS B: notification names the customer — ✓
+    🔔 New Order #19 — RT Customer
+    ×
+[07:16:27] PASS B: customer order updated the POS card (5 -> 4) — stock=4
+[07:16:31] PASS C: bulk customer checkout created an order — /orders/success/72/
+[07:16:31] PASS C: all 5 cards updated to the correct stock after the burst — {"476":"2","478":"7","479":"11","480":"2","481":"6"}
+[07:16:31] PASS C: burst coalesced into few DOM passes — flushes=1 (5 events)
+[07:16:31] PASS C: 6 synchronous stock events flushed in ONE pass — flushes=1 (queued=queued)
+[07:16:31] PASS C: batched pass updated every card
+[07:16:39] PASS D: seeded preparing order visible on the board — marked
+[07:16:50] PASS D: existing tiles survive polls (incremental, no full rebuild) — marker=42
+[07:16:52] PASS D: order Z created — /orders/success/73/
+[07:16:55] PASS D: order Z tile appeared in Preparing — ["#997","#21"]
+[07:17:00] PASS D: order Z tile moved to Ready — {"readyNums":["#6","#10","#17","#21"],"prepNums":["#997"]}
+[07:17:00] PASS D: sentinel tile still intact after all updates — marker=42
+[07:17:01] PASS POS page: no console errors
+[07:17:01] PASS Board page: no console errors
+[07:17:01] ALL CHECKS PASSED

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
+{% load product_images %}
 {% block title %}Menu — Kape De Manubag{% endblock %}
 
 {% block body %}
@@ -49,18 +50,18 @@
       <h2 class="menu-section-title">{{ cat.icon }} {{ cat.name }}</h2>
       <div class="products-grid">
         {% for product in cat_products %}
-        {% if product.is_available %}
+        {% if product.is_available and product.is_active %}
         <div class="product-col">
-          <div class="product-card">
+          <div class="product-card" data-product-id="{{ product.pk }}">
             <div class="product-card-img">
-              {% if product.image %}<img src="{{ product.image.url }}" alt="{{ product.name }}" loading="lazy">{% else %}<span>{{ cat.icon }}</span>{% endif %}
+              {% product_image product alt=product.name %}
             </div>
             <div class="product-card-body">
               <div class="product-card-name">{{ product.name }}</div>
               {% if product.description %}<div class="product-card-cat">{{ product.description|truncatechars:60 }}</div>{% endif %}
               {% if product.has_sizes %}
               <div style="margin-top:8px">
-                <select class="form-control size-selector" id="size-select-{{ product.pk }}" data-product-id="{{ product.pk }}" style="font-size:0.8rem;padding:6px 10px">
+                <select class="form-control size-selector" id="size-select-{{ product.pk }}" data-product-id="{{ product.pk }}" data-url="{% url 'menu:product_price' product.pk %}" style="font-size:0.8rem;padding:6px 10px">
                   <option value="none">Regular — ₱{{ product.price }}</option>
                   {% if product.price_medium %}<option value="medium">Medium — ₱{{ product.price_medium }}</option>{% endif %}
                   {% if product.price_large %}<option value="large">Large — ₱{{ product.price_large }}</option>{% endif %}
@@ -71,16 +72,16 @@
             </div>
             <div class="product-card-footer">
               <span class="product-price" id="price-{{ product.pk }}">₱{{ product.price }}</span>
+              {% if product.stock_quantity == 0 %}
+              <span class="out-of-stock-label">Out of Stock</span>
+              {% else %}
               <form class="add-to-cart-form" action="{% url 'orders:add_to_cart' product.pk %}" method="post" style="display:inline">
                 {% csrf_token %}
                 <input type="hidden" name="quantity" value="1">
                 <input type="hidden" name="size" id="size-input-{{ product.pk }}" value="none">
-                {% if product.stock_quantity == 0 %}
-                <button type="button" class="add-btn" disabled style="background:#ccc;cursor:not-allowed" title="Out of stock">✕</button>
-                {% else %}
                 <button type="submit" class="add-btn" title="Add to cart">+</button>
-                {% endif %}
               </form>
+              {% endif %}
             </div>
           </div>
         </div>
@@ -111,15 +112,74 @@
 </div>
 {% endif %}
 
-<script src="{% static 'js/main.js' %}"></script>
 <script>
-// Sync size selector with hidden input
+// ── Size selector → hidden input sync ─────────────────────────────────────
 document.querySelectorAll('.size-selector').forEach(sel => {
   sel.addEventListener('change', function() {
-    const productId = this.dataset.productId;
-    const sizeInput = document.getElementById(`size-input-${productId}`);
+    const sizeInput = document.getElementById(`size-input-${this.dataset.productId}`);
     if (sizeInput) sizeInput.value = this.value;
   });
 });
+
+// ── Live availability polling ──────────────────────────────────────────────
+// Updates the "Add" button / "Out of Stock" label when stock changes between
+// page loads.  The server always re-validates on add-to-cart and checkout, so
+// this is a UX layer only — never a security boundary.
+//
+// Performance notes:
+//  - The first poll is deferred by 5 s so it does not compete with the
+//    initial page render, images, and fonts on slow connections.
+//  - Subsequent polls use an ETag conditional GET: if nothing changed the
+//    server returns 304 (empty body) and the browser skips JSON parsing.
+//  - The poll is paused while the tab is hidden and resumes on visibility.
+(function() {
+  const stockUrl = '{% url "menu:product_stock" %}';
+  let lastEtag = '';
+
+  function applyStock(id, info) {
+    const card = document.querySelector(`.product-card[data-product-id="${id}"]`);
+    if (!card) return;
+    const out = !info.is_active || !info.is_available || info.stock_quantity <= 0;
+    card.classList.toggle('product-card--out', out);
+    const form  = card.querySelector('.add-to-cart-form');
+    const label = card.querySelector('.out-of-stock-label');
+    if (out) {
+      if (form)  form.style.display = 'none';
+      if (!label) {
+        const el = document.createElement('span');
+        el.className = 'out-of-stock-label';
+        el.textContent = 'Out of Stock';
+        const footer = card.querySelector('.product-card-footer');
+        if (footer) footer.appendChild(el);
+      }
+    } else {
+      if (form)  form.style.display = '';
+      if (label) label.remove();
+    }
+  }
+
+  async function refresh() {
+    // Skip poll when the tab is backgrounded — no point updating hidden UI.
+    if (document.hidden) return;
+    try {
+      const headers = { 'Accept': 'application/json' };
+      if (lastEtag) headers['If-None-Match'] = lastEtag;
+      const r = await fetch(stockUrl, { headers });
+      if (r.status === 304) return;               // nothing changed
+      const etag = r.headers.get('ETag');
+      if (etag) lastEtag = etag;
+      const data = await r.json();
+      if (data.products) {
+        Object.entries(data.products).forEach(([id, info]) => applyStock(id, info));
+      }
+    } catch (e) { /* keep the last known state on network errors */ }
+  }
+
+  // Defer the first poll — the server already rendered accurate stock levels.
+  // 5 s gives the page time to paint and images time to start loading before
+  // we fire an additional network request.
+  setTimeout(refresh, 5000);
+  setInterval(refresh, 15000);
+})();
 </script>
 {% endblock %}

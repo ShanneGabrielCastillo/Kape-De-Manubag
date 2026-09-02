@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
+{% load product_images %}
 {% block title %}Cart — Kape De Manubag{% endblock %}
 
 {% block body %}
@@ -20,7 +21,7 @@
       {% for item in items %}
       <div class="cart-item-row">
         <div class="cart-item-img">
-          {% if item.product.image %}<img src="{{ item.product.image.url }}" alt="">{% else %}<span>{{ item.product.category.icon }}</span>{% endif %}
+          {% product_image item.product %}
         </div>
         <div class="cart-item-info">
           <div class="cart-item-name">{{ item.product.name }}</div>
@@ -28,13 +29,16 @@
           <div style="font-size:0.8rem;color:#aaa">₱{{ item.unit_price }} each</div>
         </div>
         <div class="qty-control">
-          <button class="qty-btn" data-item-id="{{ item.pk }}" data-action="decrease">−</button>
+          <button class="qty-btn" data-item-id="{{ item.pk }}" data-action="decrease" data-url="{% url 'orders:update_cart' item.pk %}">−</button>
           <span class="qty-display">{{ item.quantity }}</span>
-          <button class="qty-btn" data-item-id="{{ item.pk }}" data-action="increase">+</button>
+          <button class="qty-btn" data-item-id="{{ item.pk }}" data-action="increase" data-url="{% url 'orders:update_cart' item.pk %}">+</button>
         </div>
         <div class="cart-item-price">₱{{ item.subtotal|floatformat:2 }}</div>
-        <span class="cart-remove" data-item-id="{{ item.pk }}" title="Remove">🗑️</span>
+        <span class="cart-remove" data-item-id="{{ item.pk }}" data-url="{% url 'orders:remove_from_cart' item.pk %}" title="Remove">🗑️</span>
       </div>
+      {% if item.product.stock_quantity == 0 or not item.product.is_available %}
+      <div class="cart-item-notice">⚠️ {{ item.product.name }} is {% if item.product.stock_quantity == 0 %}out of stock{% else %}no longer available{% endif %} and will be removed at checkout.</div>
+      {% endif %}
       {% endfor %}
     </div>
   </div>
@@ -51,9 +55,26 @@
     <a href="{% url 'orders:checkout' %}" class="btn btn-primary btn-block btn-lg" style="margin-top:16px">
       Proceed to Checkout →
     </a>
+    {# Clear-cart: POST form so the action is CSRF-protected and cannot be
+       triggered by a stray GET request (e.g. a link prefetcher). #}
+    <form method="post" action="{% url 'orders:clear_cart' %}" id="clear-cart-form" style="margin-top:10px">
+      {% csrf_token %}
+      <button type="button" id="clear-cart-btn"
+              class="btn btn-outline btn-block"
+              style="color:var(--red-accent);border-color:var(--red-accent)">
+        🗑️ Clear Cart
+      </button>
+    </form>
   </div>
 
   {% else %}
+  {# Stale-session notice: shown by JS when localStorage says items existed
+     but the server returned an empty cart (session cookie expired). #}
+  <div id="stale-session-notice"
+       style="display:none;background:#fff8e1;border:1px solid #ffe082;border-radius:10px;padding:16px 20px;margin-bottom:16px;font-size:0.88rem;color:#7a5c00">
+    ⏱️ It looks like your previous session expired and your cart was reset.
+    <a href="{% url 'menu:index' %}" style="color:var(--caramel);font-weight:700;margin-left:4px">Browse the menu to add items again →</a>
+  </div>
   <div class="empty-state">
     <div class="empty-icon">🛒</div>
     <h3>Your cart is empty</h3>
@@ -70,5 +91,44 @@
   {% endfor %}
 </div>
 {% endif %}
-<script src="{% static 'js/main.js' %}"></script>
+
+{% block extra_js %}
+<script>
+// ── Stale-session detection ────────────────────────────────────────────────
+// main.js stores the server-confirmed cart count in localStorage after every
+// successful add/update/remove.  If the server-side cart is now empty but
+// localStorage remembers a non-zero count, the session has likely expired
+// and the customer's cart items were lost — show a gentle explanation.
+(function () {
+  var serverCount = {{ items|length }};
+  var remembered  = parseInt(localStorage.getItem('kdm_cart_count') || '0', 10);
+  if (serverCount === 0 && remembered > 0) {
+    var el = document.getElementById('stale-session-notice');
+    if (el) el.style.display = 'block';
+  }
+  // Keep the hint in sync with the current server count.
+  if (serverCount > 0) {
+    localStorage.setItem('kdm_cart_count', serverCount);
+  } else {
+    localStorage.removeItem('kdm_cart_count');
+  }
+})();
+
+// ── Clear-cart confirmation ────────────────────────────────────────────────
+// Submit the form only after the customer confirms, preventing accidental
+// taps from clearing a full cart.
+(function () {
+  var btn  = document.getElementById('clear-cart-btn');
+  var form = document.getElementById('clear-cart-form');
+  if (!btn || !form) return;
+  btn.addEventListener('click', function () {
+    if (!confirm('Remove all items from your cart?')) return;
+    // Clear the localStorage hint immediately so the stale-session notice
+    // does not appear on the next page load — this was intentional.
+    localStorage.removeItem('kdm_cart_count');
+    form.submit();
+  });
+})();
+</script>
+{% endblock %}
 {% endblock %}

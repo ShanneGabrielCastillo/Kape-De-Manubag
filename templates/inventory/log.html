@@ -5,26 +5,34 @@
   <div><h1 class="page-title">Inventory Log</h1><p class="page-subtitle">History of all stock changes</p></div>
   <a href="{% url 'inventory:list' %}" class="btn btn-outline">← Back to Inventory</a>
 </div>
+<div class="filter-bar">
+  <form method="get" style="display:flex;gap:10px;flex-wrap:wrap">
+    <input type="text" name="q" value="{{ q }}" placeholder="Search product, reason or notes..." class="form-control">
+    <button type="submit" class="btn btn-primary">Search</button>
+    {% if q %}<a href="{% url 'inventory:log' %}" class="btn btn-outline">Clear</a>{% endif %}
+  </form>
+</div>
 <div class="card">
   <div class="table-wrapper">
     <table class="table-inv-log" data-mobile-cards="true">
-      <thead><tr><th data-role="primary">Product</th><th data-role="status">Action</th><th data-role="amount">Change</th><th data-role="secondary">Before</th><th data-role="secondary">After</th><th data-role="secondary">Notes</th><th data-role="secondary">By</th><th data-role="date">Date</th></tr></thead>
+      <thead><tr><th data-role="primary">Product</th><th data-role="status">Action</th><th data-role="secondary">Source</th><th data-role="secondary">Reason</th><th data-role="amount">Change</th><th data-role="secondary">Before</th><th data-role="secondary">After</th><th data-role="secondary">By</th><th data-role="date">Date</th></tr></thead>
       <tbody>
         {% for log in logs %}
         <tr>
           <td style="font-weight:600">{{ log.product.name }}</td>
           <td><span class="badge {% if log.action == 'restock' %}badge-ready{% elif log.action == 'waste' %}badge-cancelled{% else %}badge-preparing{% endif %}">{{ log.get_action_display }}</span></td>
+          <td><span class="badge badge-muted">{{ log.get_source_display }}</span></td>
+          <td style="font-size:0.85rem">{{ log.reason|default:"—" }}{% if log.notes %}<div style="color:#aaa;font-size:0.75rem">{{ log.notes }}</div>{% endif %}</td>
           <td style="font-weight:700;color:{% if log.quantity_change > 0 %}var(--green-success){% else %}var(--red-accent){% endif %}">
             {% if log.quantity_change > 0 %}+{% endif %}{{ log.quantity_change }}
           </td>
           <td>{{ log.quantity_before }}</td>
           <td style="font-weight:600">{{ log.quantity_after }}</td>
-          <td style="color:#aaa;font-size:0.85rem">{{ log.notes|default:"—" }}</td>
           <td>{{ log.performed_by.username|default:"System" }}</td>
           <td style="font-size:0.8rem;color:#aaa">{{ log.created_at|date:"M d, Y g:i A" }}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="8" style="text-align:center;color:#aaa;padding:32px">No inventory logs yet</td></tr>
+        <tr><td colspan="9" style="text-align:center;color:#aaa;padding:32px">{% if q %}No inventory logs match "{{ q }}"{% else %}No inventory logs yet{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>

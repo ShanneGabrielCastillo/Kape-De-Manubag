@@ -32,7 +32,9 @@ class CheckoutForm(forms.Form):
         })
     )
     order_type = forms.ChoiceField(
-        choices=[('dine_in', 'Dine-In'), ('takeout', 'Take-Out')],
+        # Reference the model's canonical choices so a future order-type
+        # addition only needs updating in one place.
+        choices=Order.ORDER_TYPE_CHOICES,
         widget=forms.RadioSelect(attrs={'class': 'form-check-input'})
     )
     notes = forms.CharField(
@@ -43,10 +45,3 @@ class CheckoutForm(forms.Form):
             'placeholder': 'Special instructions...',
         })
     )
-
-
-class OrderStatusForm(forms.ModelForm):
-    class Meta:
-        model = Order
-        fields = ['status']
-        widgets = {'status': forms.Select(attrs={'class': 'form-control'})}

@@ -6,13 +6,23 @@
 <div style="min-height:100vh;background:var(--cream-light);display:flex;align-items:center;justify-content:center;padding:20px">
   <div class="success-page" style="max-width:560px;width:100%">
     <div class="success-icon">✅</div>
-    <h1 class="success-number">Order Placed!</h1>
+    <h1 class="success-number">Order Received!</h1>
+
     <div class="card" style="margin:24px 0;text-align:left">
       <div class="card-body">
+
+        {# ── Order number (prominent, centred) ── #}
         <div style="text-align:center;margin-bottom:20px">
-          <div style="font-size:0.85rem;color:#aaa">Order Number</div>
+          <div style="font-size:0.75rem;color:#aaa;font-weight:700;text-transform:uppercase;letter-spacing:0.08em">Order Number</div>
           <div style="font-size:2rem;font-family:'Playfair Display',serif;font-weight:700;color:var(--caramel)">{{ order.order_number }}</div>
+          <div style="margin-top:6px">
+            <span class="badge badge-pending" style="font-size:0.78rem;padding:5px 12px">
+              🕐 {{ order.get_status_display }} — Queue #{{ order.queue_number }}
+            </span>
+          </div>
         </div>
+
+        {# ── Info grid: customer / order type / table / total ── #}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
           <div style="background:var(--cream);border-radius:8px;padding:12px">
             <div style="font-size:0.75rem;color:#aaa;font-weight:700;text-transform:uppercase">Customer</div>
@@ -29,12 +39,23 @@
           </div>
           {% endif %}
           <div style="background:var(--cream);border-radius:8px;padding:12px">
-            <div style="font-size:0.75rem;color:#aaa;font-weight:700;text-transform:uppercase">Total</div>
+            <div style="font-size:0.75rem;color:#aaa;font-weight:700;text-transform:uppercase">Order Total</div>
             <div style="font-weight:700;color:var(--caramel)">₱{{ order.total|floatformat:2 }}</div>
           </div>
         </div>
+
+        {# ── Payment method: always "Pay at counter" for customer orders ── #}
+        <div style="background:rgba(193,122,59,0.08);border:1px solid rgba(193,122,59,0.25);border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px">
+          <span style="font-size:1.3rem">💳</span>
+          <div>
+            <div style="font-size:0.75rem;color:#aaa;font-weight:700;text-transform:uppercase">Payment</div>
+            <div style="font-weight:600;color:var(--brown-dark)">Pay at the counter when your order is ready</div>
+          </div>
+        </div>
+
+        {# ── Item list ── #}
         <div style="border-top:2px solid var(--cream);padding-top:16px">
-          {% for item in order.items.all %}
+          {% for item in items %}
           <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:0.9rem">
             <span>{{ item.quantity }}× {{ item.product_name }}{% if item.size != 'none' %} ({{ item.get_size_display }}){% endif %}</span>
             <span style="font-weight:600">₱{{ item.subtotal|floatformat:2 }}</span>
@@ -47,19 +68,28 @@
           </div>
           {% endif %}
         </div>
+
       </div>
     </div>
+
     <p style="color:#888;font-size:0.9rem;margin-bottom:24px">
-      🎉 Your order has been received! Please wait while we prepare it. Payment will be collected at the counter.
+      We have received your order. You will be notified when it is ready for pickup.
     </p>
+
     <div style="margin:0 0 20px">
       <a href="{% url 'orders:order_tracker' order.order_number %}" class="btn btn-caramel btn-block btn-lg">📱 Track Your Order Live</a>
-      <p style="font-size:0.75rem;color:#aaa;text-align:center;margin-top:8px">Auto-refreshes — no need to reload</p>
+      <p style="font-size:0.75rem;color:#aaa;text-align:center;margin-top:8px">Updates automatically — no need to refresh</p>
     </div>
     <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
       <a href="{% url 'menu:index' %}" class="btn btn-primary">Order More</a>
     </div>
   </div>
 </div>
-<script src="{% static 'js/main.js' %}"></script>
+{% block extra_js %}
+<script>
+// Order placed successfully — clear the localStorage cart count hint so
+// a stale-session warning does not appear on subsequent cart visits.
+try { localStorage.removeItem('kdm_cart_count'); } catch(e) {}
+</script>
+{% endblock %}
 {% endblock %}

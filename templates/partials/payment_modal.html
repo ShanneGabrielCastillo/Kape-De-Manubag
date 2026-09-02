@@ -1,0 +1,44 @@
+{% comment %}
+Shared payment modal — included by order_list.html and order_detail.html.
+The modal is wired to main.js:
+  - openPaymentModal(orderId, orderTotal, paymentUrl)  populates it before display.
+  - The #payment-form submit listener handles the AJAX POST.
+{% endcomment %}
+<div id="payment-modal" class="modal-backdrop" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h4>💳 Process Payment</h4>
+      <button class="modal-close" onclick="document.getElementById('payment-modal').style.display='none'">×</button>
+    </div>
+    <div class="modal-body">
+      <form id="payment-form">
+        {% csrf_token %}
+        <input type="hidden" id="payment-order-id" name="order_id">
+        <div class="form-group">
+          <label class="form-label">Order Total</label>
+          <div style="font-size:1.5rem;font-weight:700;color:var(--caramel)" id="payment-total">₱0.00</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Payment Method</label>
+          <select name="payment_method" class="form-control form-select">
+            <option value="cash">💵 Cash</option>
+            <option value="gcash">📱 GCash</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Amount Paid (₱)</label>
+          <input type="number" id="amount-paid" name="amount_paid" class="form-control"
+                 step="0.01" placeholder="0.00" inputmode="decimal" required>
+        </div>
+        <div style="background:var(--cream);border-radius:8px;padding:14px;text-align:center">
+          <div style="font-size:0.75rem;color:#aaa;font-weight:700;text-transform:uppercase">Change</div>
+          <div style="font-size:1.5rem;font-weight:700;color:var(--green-success)" id="change-display">₱0.00</div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button onclick="document.getElementById('payment-modal').style.display='none'" class="btn btn-outline">Cancel</button>
+      <button onclick="document.getElementById('payment-form').dispatchEvent(new Event('submit'))" class="btn btn-primary">Confirm Payment</button>
+    </div>
+  </div>
+</div>

@@ -27,7 +27,9 @@
           <small style="color:var(--red-accent)">{{ form.password.errors.0 }}</small>
         {% endif %}
       </div>
-      {% if form.non_field_errors %}
+      {% if lockout_message %}
+      <div class="alert alert-error" style="margin-bottom:1rem">{{ lockout_message }}</div>
+      {% elif form.non_field_errors %}
       <div class="alert alert-error" style="margin-bottom:1rem">{{ form.non_field_errors.0 }}</div>
       {% endif %}
       <button type="submit" class="btn btn-primary btn-block btn-lg" style="margin-top:8px">

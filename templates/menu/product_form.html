@@ -5,6 +5,15 @@
   <div><h1 class="page-title">{{ title }}</h1></div>
   <a href="{% url 'menu:product_list' %}" class="btn btn-outline">← Back</a>
 </div>
+{% if product and active_order_count %}
+<div class="alert alert-warning">
+  ⚠️ <strong>{{ product.name }}</strong> is currently in
+  <strong>{{ active_order_count }} active order{{ active_order_count|pluralize }}</strong>
+  {% if total_order_count %}(and appears in {{ total_order_count }} order{{ total_order_count|pluralize }} overall){% endif %}.
+  Changes you save here apply to <strong>future orders only</strong> — existing
+  order line items keep their saved name and price, so no order in progress is altered.
+</div>
+{% endif %}
 <div class="card" style="max-width:680px">
   <div class="card-body">
     <form method="post" enctype="multipart/form-data">

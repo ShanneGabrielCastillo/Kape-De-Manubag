@@ -23,6 +23,11 @@ def order_saved(sender, instance, created, **kwargs):
             'total':        float(order.total),
             'status':       order.status,
             'created_at':   order.created_at.isoformat(),
+            # The idempotency key the ordering terminal submitted. The
+            # originating POS knows its token BEFORE the response arrives, so
+            # it can ignore the echo of its own order before the broadcast is
+            # even delivered (an order_id-only suppression can race).
+            'request_token': order.request_token,
         })
     else:
         publish('status_changed', {
@@ -37,8 +42,27 @@ def order_saved(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=Product)
 def product_saved(sender, instance, created, **kwargs):
-    if (not created and
-            instance.stock_quantity <= instance.low_stock_threshold):
+    if created:
+        return
+    # reduce_stock()/restore_stock() set stock_quantity to an F() expression
+    # in memory before saving, so post_save sees a CombinedExpression instead
+    # of an int. Re-read the committed value before comparing.
+    instance.refresh_from_db(fields=[
+        'stock_quantity', 'low_stock_threshold', 'is_available', 'is_active',
+    ])
+    # Live stock/availability snapshot for every open POS terminal: when the
+    # last unit of a product is sold (or it is restocked / marked
+    # unavailable), the client updates the product card and reconciles the
+    # current order without a page reload.
+    publish('inventory_changed', {
+        'product_id':          instance.pk,
+        'product_name':        instance.name,
+        'stock_quantity':      instance.stock_quantity,
+        'low_stock_threshold': instance.low_stock_threshold,
+        'is_available':        instance.is_available,
+        'is_active':           instance.is_active,
+    })
+    if instance.is_low_stock:
         publish('inventory_low', {
             'product_id':     instance.pk,
             'product_name':   instance.name,

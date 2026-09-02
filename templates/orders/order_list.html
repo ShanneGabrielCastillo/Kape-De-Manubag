@@ -1,4 +1,5 @@
 {% extends "base_admin.html" %}
+{% load order_tags %}
 {% block page_title %}Order Management{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -42,24 +43,20 @@
             <div>{{ order.get_order_type_display }}</div>
             {% if order.table_number %}<div style="font-size:0.75rem;color:#aaa">Table {{ order.table_number }}</div>{% endif %}
           </td>
-          <td>{{ order.items.count }} items</td>
+          <td>{{ order.item_count }} items</td>
           <td style="font-weight:700">₱{{ order.total|floatformat:2 }}</td>
           <td>
-            <form class="status-update-form" data-order-id="{{ order.pk }}" style="display:flex;gap:6px;align-items:center">
+            <form class="status-update-form" data-order-id="{{ order.pk }}" data-url="{% url 'orders:update_status' order.pk %}" style="display:flex;gap:6px;align-items:center">
               {% csrf_token %}
-              <select name="status" class="form-control form-select" style="font-size:0.8rem;padding:5px 8px">
-                {% for v, l in status_choices %}
-                <option value="{{ v }}" {% if order.status == v %}selected{% endif %}>{{ l }}</option>
-                {% endfor %}
-              </select>
-              <button type="submit" class="btn btn-sm btn-primary">✓</button>
+              {% status_select order select_style="font-size:0.8rem;padding:5px 8px" %}
+              {% if order.next_status %}<button type="submit" class="btn btn-sm btn-primary">✓</button>{% endif %}
             </form>
           </td>
           <td>
             {% if order.is_paid %}
               <span class="badge badge-paid">Paid</span>
-            {% else %}
-              <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }})" class="btn btn-sm btn-caramel">Pay</button>
+            {% elif order.status != 'cancelled' %}
+              <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}')" class="btn btn-sm btn-caramel">Pay</button>
             {% endif %}
           </td>
           <td style="font-size:0.8rem;color:#aaa;white-space:nowrap">{{ order.created_at|date:"M d, g:i A" }}</td>
@@ -68,7 +65,7 @@
               <a href="{% url 'orders:order_detail' order.pk %}" class="btn btn-sm btn-outline">View</a>
               <a href="{% url 'orders:print_receipt' order.pk %}" class="btn btn-sm btn-outline" target="_blank">🖨️</a>
               {% if order.next_status %}
-              <button onclick="quickAdvance({{ order.pk }})" class="btn btn-sm btn-caramel" title="Advance to {{ order.next_status }}">▶ {{ order.next_status|title }}</button>
+              <button onclick="quickAdvance('{% url 'orders:quick_status_advance' order.pk %}')" class="btn btn-sm btn-caramel" title="Advance to {{ order.next_status }}">▶ {{ order.next_status|title }}</button>
               {% endif %}
             </div>
           </td>
@@ -94,49 +91,29 @@
 {% endif %}
 
 <!-- Payment Modal -->
-<div id="payment-modal" class="modal-backdrop" style="display:none">
-  <div class="modal">
-    <div class="modal-header">
-      <h4>💳 Process Payment</h4>
-      <button class="modal-close" onclick="document.getElementById('payment-modal').style.display='none'">×</button>
-    </div>
-    <div class="modal-body">
-      <form id="payment-form">
-        {% csrf_token %}
-        <input type="hidden" id="payment-order-id" name="order_id">
-        <div class="form-group">
-          <label class="form-label">Order Total</label>
-          <div style="font-size:1.5rem;font-weight:700;color:var(--caramel)" id="payment-total">₱0.00</div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Payment Method</label>
-          <select name="payment_method" class="form-control form-select">
-            <option value="cash">💵 Cash</option>
-            <option value="gcash">📱 GCash</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Amount Paid</label>
-          <input type="number" id="amount-paid" name="amount_paid" class="form-control" step="0.01" placeholder="0.00" inputmode="decimal" required>
-        </div>
-        <div style="background:var(--cream);border-radius:8px;padding:14px;text-align:center">
-          <div style="font-size:0.75rem;color:#aaa;font-weight:700;text-transform:uppercase">Change</div>
-          <div style="font-size:1.5rem;font-weight:700;color:var(--green-success)" id="change-display">₱0.00</div>
-        </div>
-      </form>
-    </div>
-    <div class="modal-footer">
-      <button onclick="document.getElementById('payment-modal').style.display='none'" class="btn btn-outline">Cancel</button>
-      <button onclick="document.getElementById('payment-form').dispatchEvent(new Event('submit'))" class="btn btn-primary">Confirm Payment</button>
-    </div>
-  </div>
-</div>
+{% include "partials/payment_modal.html" %}
 {% endblock %}
 
 {% block extra_js %}
+{# VALID_TRANSITIONS and STATUS_LABELS are injected from the view context so
+   they stay in sync with services.py automatically.  The json_script filter
+   renders each value as a <script type="application/json"> element which the
+   JS below reads back — this is Django's built-in XSS-safe JSON embed. #}
+{{ valid_transitions_json|json_script:"vt-data" }}
+{{ status_labels_json|json_script:"sl-data" }}
 <script>
-async function quickAdvance(orderId) {
-  const r = await fetch(`/orders/manage/${orderId}/advance/`, {
+const VALID_TRANSITIONS = JSON.parse(document.getElementById('vt-data').textContent);
+const STATUS_LABELS     = JSON.parse(document.getElementById('sl-data').textContent);
+
+// Safe HTML escaping for user-controlled values injected into innerHTML.
+function escHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+async function quickAdvance(url) {
+  const r = await fetch(url, {
     method: 'POST',
     headers: { 'X-CSRFToken': '{{ csrf_token }}' }
   });
@@ -149,35 +126,188 @@ async function quickAdvance(orderId) {
   }
 }
 
-// ── Real-time: new order ──────────────────────────────────────────────────
+// ── Real-time: new order ───────────────────────────────────────────────────
+// When a filter or search is active, a new order may or may not match, so
+// a full reload is the safest fallback. When there is no filter, insert the
+// row in-place so the list stays live without a page flash.
 RealtimeConnection.on('new_order', function(order) {
-  if (typeof showToast === 'function') {
-    showToast(`🔔 New order received: #${order.queue_number}`, 'success');
-  }
-  // Only auto-reload when no filter is active (so we don't disrupt searches)
   const hasFilter = new URLSearchParams(window.location.search).toString();
-  if (!hasFilter) {
+
+  if (hasFilter) {
+    // Active filter: let the reload handle visibility — a new order may not
+    // match the current filter, so don't prepend it unconditionally.
+    setTimeout(() => location.reload(), 2000);
+    return;
+  }
+
+  // No filter: insert the new row at the top of the table body in-place so
+  // the list updates without a full page reload.
+  try {
+    if (!order || order.order_id === undefined) throw new Error('malformed payload');
+
+    // Remove the "No orders found" placeholder row if it is present.
+    const tbody = document.querySelector('.table-orders tbody');
+    if (!tbody) throw new Error('tbody not found');
+    const emptyRow = tbody.querySelector('td[colspan]')?.closest('tr');
+    if (emptyRow) emptyRow.remove();
+
+    // Guard: don't duplicate a row that already exists (double-broadcast).
+    if (tbody.querySelector(`tr[data-order-id="${order.order_id}"]`)) return;
+
+    const row = document.createElement('tr');
+    row.dataset.orderId = order.order_id;
+    row.className = 'new-order-highlight';
+
+    // The status select for a brand-new (pending) order offers preparing and
+    // cancelled. Build it the same way {% status_select %} does.
+    const allowedNext = VALID_TRANSITIONS['pending'] || [];
+    let selectHtml = `<select name="status" class="form-control form-select" style="font-size:0.8rem;padding:5px 8px">
+      <option value="pending" selected>Pending</option>
+      ${allowedNext.map(v => `<option value="${v}">${STATUS_LABELS[v]}</option>`).join('')}
+    </select>`;
+    const statusFormUrl = `{% url 'orders:update_status' 0 %}`.replace('/0/', `/${order.order_id}/`);
+    const detailUrl     = `{% url 'orders:order_detail' 0 %}`.replace('/0/', `/${order.order_id}/`);
+    const receiptUrl    = `{% url 'orders:print_receipt' 0 %}`.replace('/0/', `/${order.order_id}/`);
+    const advanceUrl    = `{% url 'orders:quick_status_advance' 0 %}`.replace('/0/', `/${order.order_id}/`);
+    const payUrl        = `{% url 'orders:process_payment' 0 %}`.replace('/0/', `/${order.order_id}/`);
+
+    const csrfInput = `<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">`;
+
+    row.innerHTML = `
+      <td><a href="${detailUrl}" style="font-weight:700;color:var(--caramel)">${escHtml(order.order_number)}</a></td>
+      <td>${escHtml(order.customer_name)}</td>
+      <td><div>${escHtml(order.order_type)}</div></td>
+      <td>—</td>
+      <td style="font-weight:700">₱${Number(order.total).toFixed(2)}</td>
+      <td>
+        <form class="status-update-form" data-order-id="${order.order_id}" data-url="${statusFormUrl}" style="display:flex;gap:6px;align-items:center">
+          ${csrfInput}
+          ${selectHtml}
+          <button type="submit" class="btn btn-sm btn-primary">✓</button>
+        </form>
+      </td>
+      <td><button onclick="openPaymentModal(${order.order_id}, ${Number(order.total).toFixed(2)}, '${payUrl}')" class="btn btn-sm btn-caramel">Pay</button></td>
+      <td style="font-size:0.8rem;color:#aaa;white-space:nowrap">Just now</td>
+      <td>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          <a href="${detailUrl}" class="btn btn-sm btn-outline">View</a>
+          <a href="${receiptUrl}" class="btn btn-sm btn-outline" target="_blank">🖨️</a>
+          <button onclick="quickAdvance('${advanceUrl}')" class="btn btn-sm btn-caramel" title="Advance to Preparing">▶ Preparing</button>
+        </div>
+      </td>`;
+
+    tbody.prepend(row);
+    setTimeout(() => row.classList.remove('new-order-highlight'), 3000);
+
+    // Re-initialise responsive tables so the mobile card view includes the new row.
+    if (typeof window.initResponsiveTables === 'function') {
+      window.initResponsiveTables();
+    }
+  } catch (err) {
+    // Malformed payload or missing DOM — fall back to a reload so the list
+    // is never left in an inconsistent state.
+    console.warn('[OrderList] new_order in-place insert failed, reloading:', err);
     setTimeout(() => location.reload(), 2000);
   }
 });
 
-// ── Real-time: status changed — update badge in-place ─────────────────────
+// ── Real-time: status changed ──────────────────────────────────────────────
+// 1. Update the status badge in the Status column.
+// 2. Rebuild the status select to show only transitions valid from the NEW
+//    status, or replace it with a read-only badge for terminal states.
+// 3. Show/hide the submit button and quick-advance button accordingly.
 RealtimeConnection.on('status_changed', function(data) {
   const row = document.querySelector(`tr[data-order-id="${data.order_id}"]`);
-  if (row) {
-    const badge = row.querySelector('.badge[class*="badge-"]');
-    if (badge) {
-      badge.className = `badge badge-${data.new_status}`;
-      // Preserve the status dot if present
-      const dot = badge.querySelector('.order-status-dot');
-      if (dot) {
-        dot.className = `order-status-dot dot-${data.new_status}`;
-        badge.textContent = '';
-        badge.appendChild(dot);
-        badge.appendChild(document.createTextNode(data.new_status_display));
-      } else {
-        badge.textContent = data.new_status_display;
+  if (!row) return;
+
+  // ── 1. Status badge (inside the select form td) ───────────────────────
+  const badge = row.querySelector('.badge[class*="badge-"]');
+  if (badge) {
+    badge.className = `badge badge-${data.new_status}`;
+    const dot = badge.querySelector('.order-status-dot');
+    if (dot) {
+      dot.className = `order-status-dot dot-${data.new_status}`;
+      badge.textContent = '';
+      badge.appendChild(dot);
+      badge.appendChild(document.createTextNode(' ' + data.new_status_display));
+    } else {
+      badge.textContent = data.new_status_display;
+    }
+  }
+
+  // ── 2. Status select: rebuild from VALID_TRANSITIONS ─────────────────
+  const form    = row.querySelector('.status-update-form');
+  const oldSelect = form && form.querySelector('select[name="status"]');
+  const submitBtn = form && form.querySelector('button[type="submit"]');
+  const oldBadgeSpan = form && form.querySelector('.badge');
+
+  const allowedNext = VALID_TRANSITIONS[data.new_status] || [];
+  const isTerminal  = allowedNext.length === 0;
+
+  if (form) {
+    if (isTerminal) {
+      // Terminal state: replace select + button with a read-only badge.
+      if (oldSelect) oldSelect.remove();
+      if (submitBtn) submitBtn.remove();
+      if (!form.querySelector('.badge')) {
+        const badgeEl = document.createElement('span');
+        badgeEl.className = `badge badge-${data.new_status}`;
+        badgeEl.textContent = data.new_status_display;
+        form.appendChild(badgeEl);
       }
+    } else if (oldSelect) {
+      // Non-terminal: rebuild the <select> with current status selected and
+      // valid transitions as the only other options.
+      const newSelect = document.createElement('select');
+      newSelect.name = 'status';
+      newSelect.className = oldSelect.className;
+      newSelect.setAttribute('style', oldSelect.getAttribute('style') || '');
+
+      const currentOpt = document.createElement('option');
+      currentOpt.value = data.new_status;
+      currentOpt.textContent = data.new_status_display;
+      currentOpt.selected = true;
+      newSelect.appendChild(currentOpt);
+
+      allowedNext.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = STATUS_LABELS[v] || v;
+        newSelect.appendChild(opt);
+      });
+
+      oldSelect.replaceWith(newSelect);
+
+      // Ensure the submit button is visible for non-terminal states.
+      if (submitBtn) submitBtn.style.display = '';
+    }
+  }
+
+  // ── 3. Quick-advance button in Actions column ─────────────────────────
+  // next_status in the forward flow: pending→preparing→ready→completed.
+  const forwardFlow = { pending: 'preparing', preparing: 'ready', ready: 'completed' };
+  const nextStatus  = forwardFlow[data.new_status];
+  const advanceBtn  = row.querySelector('.btn-caramel[onclick*="quickAdvance"]');
+  if (advanceBtn) {
+    if (nextStatus) {
+      advanceBtn.style.display = '';
+      advanceBtn.title = `Advance to ${STATUS_LABELS[nextStatus] || nextStatus}`;
+      advanceBtn.textContent = `▶ ${STATUS_LABELS[nextStatus] || nextStatus}`;
+    } else {
+      advanceBtn.style.display = 'none';
+    }
+  }
+
+  // ── 4. Payment button: hide for cancelled, show for non-paid non-terminal
+  const payBtn = row.querySelector('.btn-caramel[onclick*="openPaymentModal"]');
+  if (payBtn) {
+    payBtn.style.display = (data.new_status === 'cancelled' || data.is_paid) ? 'none' : '';
+  }
+  // Show the Paid badge if the order just became paid
+  if (data.is_paid) {
+    const payCell = row.cells[row.cells.length - 3]; // Payment column
+    if (payCell && !payCell.querySelector('.badge-paid')) {
+      payCell.innerHTML = '<span class="badge badge-paid">Paid</span>';
     }
   }
 });

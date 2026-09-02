@@ -1,0 +1,55 @@
+[08:39:34] PASS cashier login POST — status=0
+[08:39:34] PASS POS page loaded with product cards
+[08:39:55] WARN SSE stream not connected (realtime checks may be moot)
+[08:39:56]   [fetch] stage=Request mode=network-fail attempt=0
+[08:39:56]   [dbg 1-after-fail] {"items":1,"token":"adae275c-4c53-4938-bfc3-cf951628def5","submitting":false,"toasts":["✓\n    ErrDrink 01 added\n    ×","✕\n    Network error — your order was kept. Check the connection and try again.\n    ×"]}
+[08:39:56] PASS 1: network failure shows a clear message — ["✕\n    Network error — your order was kept. Check the connection and try again.\n    ×"]
+[08:39:56] PASS 1: cart survives the failure
+[08:39:56] PASS 1: idempotency token kept for a safe retry
+[08:39:56]   [fetch] stage=Request mode=continue attempt=0
+[08:39:57]   [fetch] stage=Response mode=continue attempt=1
+[08:39:57] PASS 1: retry after network failure succeeds — ["✓\n    Order KDM-20260818-0006 created!\n    ×"]
+[08:39:57] PASS 1: cart cleared after the successful retry
+[08:39:58]   [fetch] stage=Request mode=lost-response attempt=0
+[08:39:58]   [fetch] stage=Response mode=lost-response attempt=1
+[08:39:58]   [dbg 2-after-fail] {"items":1,"token":"97dee9da-5128-4856-9363-c3222a788ec7","submitting":false,"toasts":["✓\n    ErrDrink 02 added\n    ×","✕\n    Network error — your order was kept. Check the connection and try again.\n    ×"]}
+[08:39:58] PASS 2: lost response surfaces as a network error — ["✕\n    Network error — your order was kept. Check the connection and try again.\n    ×"]
+[08:39:58] PASS 2: cart survives
+[08:39:58] PASS 2: token kept so the retry replays the same order
+[08:39:58]   [fetch] stage=Request mode=continue attempt=0
+[08:39:59]   [fetch] stage=Response mode=continue attempt=1
+[08:39:59] PASS 2: retry replays the token and resolves to the original order — ["✓\n    Order KDM-20260818-0007 created!\n    ×"]
+[08:39:59] PASS 2: cart cleared
+[08:40:00]   [fetch] stage=Request mode=html500 attempt=0
+[08:40:00]   [dbg 3-after-fail] {"items":1,"token":"f83c0020-da92-45f0-b53c-deb2d878a929","submitting":false,"toasts":["✓\n    ErrDrink 01 added\n    ×","✕\n    Server error (500) — your order was not placed. Try again.\n    ×"]}
+[08:40:00] PASS 3: HTML 500 shows a status-aware message — ["✕\n    Server error (500) — your order was not placed. Try again.\n    ×"]
+[08:40:00] PASS 3: cart survives
+[08:40:00] PASS 3: token kept
+[08:40:00]   [fetch] stage=Request mode=continue attempt=0
+[08:40:00]   [fetch] stage=Response mode=continue attempt=1
+[08:40:00] PASS 3: retry succeeds — ["✓\n    Order KDM-20260818-0008 created!\n    ×"]
+[08:40:00] PASS 3: cart cleared
+[08:40:02]   [fetch] stage=Request mode=continue attempt=0
+[08:40:03]   [fetch] stage=Response mode=continue attempt=1
+[08:40:03]   [fetch] stage=Request mode=continue attempt=1
+[08:40:03]   [fetch] stage=Response mode=continue attempt=2
+[08:40:03]   [dbg 4-after-fail] {"items":1,"token":"ce01e145-28c0-43e6-8627-2e9685b7c048","submitting":false,"toasts":["⚠\n    Your session expired. Log in again — your order was kept.\n    ×"]}
+[08:40:03] PASS 4: session expiry detected with a clear message — ["⚠\n    Your session expired. Log in again — your order was kept.\n    ×"]
+[08:40:03] PASS 4: cart survives
+[08:40:03] PASS 4: token kept
+[08:40:08] PASS 4: draft restored the cart after re-login
+[08:40:08]   [fetch] stage=Request mode=continue attempt=0
+[08:40:09]   [fetch] stage=Response mode=continue attempt=1
+[08:40:09] PASS 4: retry after re-login succeeds — ["✓\n    Order KDM-20260818-0009 created!\n    ×"]
+[08:40:09] PASS 4: cart cleared
+[08:40:10]   [fetch] stage=Request mode=validation attempt=0
+[08:40:10]   [dbg 5-after-fail] {"items":1,"token":null,"submitting":false,"toasts":["✓\n    ErrDrink 01 added\n    ×","✕\n    Only 3 ErrDrink 01 left in stock. Please adjust the quantity.\n    ×"]}
+[08:40:10] PASS 5: validation error message shown — ["✕\n    Only 3 ErrDrink 01 left in stock. Please adjust the quantity.\n    ×"]
+[08:40:10] PASS 5: cart survives a rejected order
+[08:40:10] PASS 5: token reset (server proved the rollback)
+[08:40:10]   [fetch] stage=Request mode=continue attempt=0
+[08:40:11]   [fetch] stage=Response mode=continue attempt=1
+[08:40:11] PASS 5: retry after validation failure succeeds — ["✓\n    Order KDM-20260818-0010 created!\n    ×"]
+[08:40:11] PASS 5: cart cleared
+[08:40:12] PASS POS page: no console errors
+[08:40:12] ALL CHECKS PASSED

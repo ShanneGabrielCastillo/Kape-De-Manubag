@@ -1,4 +1,6 @@
 {% extends "base_admin.html" %}
+{% load product_images %}
+{% load order_tags %}
 {% block page_title %}Order {{ order.order_number }}{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -22,7 +24,12 @@
           <tbody>
             {% for item in items %}
             <tr>
-              <td style="font-weight:600">{{ item.product_name }}</td>
+              <td>
+                <div class="order-item-cell">
+                  <div class="order-item-thumb">{% product_image item.product %}</div>
+                  <span style="font-weight:600">{{ item.product_name }}</span>
+                </div>
+              </td>
               <td>{{ item.get_size_display }}</td>
               <td>{{ item.quantity }}</td>
               <td>₱{{ item.unit_price|floatformat:2 }}</td>
@@ -49,8 +56,11 @@
         <div class="order-item-card">
           <div class="order-item-card-top">
             <div class="order-item-card-name">
-              {{ item.product_name }}
-              {% if item.size != 'none' %}<span class="order-item-card-size">({{ item.get_size_display }})</span>{% endif %}
+              <div class="order-item-thumb">{% product_image item.product %}</div>
+              <span class="order-item-card-name-text">
+                {{ item.product_name }}
+                {% if item.size != 'none' %}<span class="order-item-card-size">({{ item.get_size_display }})</span>{% endif %}
+              </span>
             </div>
             <div class="order-item-card-subtotal">₱{{ item.subtotal|floatformat:2 }}</div>
           </div>
@@ -106,23 +116,19 @@
         <form class="status-update-form" data-order-id="{{ order.pk }}">
           {% csrf_token %}
           <div class="form-group">
-            <select name="status" class="form-control form-select">
-              {% for v, l in order.STATUS_CHOICES %}
-              <option value="{{ v }}" {% if order.status == v %}selected{% endif %}>{{ l }}</option>
-              {% endfor %}
-            </select>
+            {% status_select order %}
           </div>
-          <button type="submit" class="btn btn-primary btn-block">Update Status</button>
+          {% if order.next_status %}<button type="submit" class="btn btn-primary btn-block">Update Status</button>{% endif %}
         </form>
       </div>
     </div>
 
-    {% if not order.is_paid %}
+    {% if not order.is_paid and order.status != 'cancelled' %}
     <div class="card">
       <div class="card-header"><h3>Payment</h3></div>
       <div class="card-body">
         <p style="color:#aaa;font-size:0.85rem;margin-bottom:12px">Total: <strong style="color:var(--caramel)">₱{{ order.total|floatformat:2 }}</strong></p>
-        <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }})" class="btn btn-caramel btn-block">💳 Process Payment</button>
+        <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}')" class="btn btn-caramel btn-block">💳 Process Payment</button>
       </div>
     </div>
     {% else %}
@@ -137,39 +143,5 @@
 </div>
 
 <!-- Payment Modal -->
-<div id="payment-modal" class="modal-backdrop" style="display:none">
-  <div class="modal">
-    <div class="modal-header">
-      <h4>💳 Process Payment</h4>
-      <button class="modal-close" onclick="document.getElementById('payment-modal').style.display='none'">×</button>
-    </div>
-    <div class="modal-body">
-      <form id="payment-form">{% csrf_token %}
-        <input type="hidden" id="payment-order-id" name="order_id">
-        <div class="form-group">
-          <label class="form-label">Order Total</label>
-          <div style="font-size:1.5rem;font-weight:700;color:var(--caramel)" id="payment-total">₱0.00</div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Payment Method</label>
-          <select name="payment_method" class="form-control form-select">
-            <option value="cash">💵 Cash</option><option value="gcash">📱 GCash</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Amount Paid (₱)</label>
-          <input type="number" id="amount-paid" name="amount_paid" class="form-control" step="0.01" inputmode="decimal" required>
-        </div>
-        <div style="background:var(--cream);border-radius:8px;padding:14px;text-align:center">
-          <div style="font-size:0.75rem;color:#aaa;font-weight:700;text-transform:uppercase">Change</div>
-          <div style="font-size:1.5rem;font-weight:700;color:var(--green-success)" id="change-display">₱0.00</div>
-        </div>
-      </form>
-    </div>
-    <div class="modal-footer">
-      <button onclick="document.getElementById('payment-modal').style.display='none'" class="btn btn-outline">Cancel</button>
-      <button onclick="document.getElementById('payment-form').dispatchEvent(new Event('submit'))" class="btn btn-primary">Confirm Payment</button>
-    </div>
-  </div>
-</div>
+{% include "partials/payment_modal.html" %}
 {% endblock %}

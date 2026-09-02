@@ -7,26 +7,37 @@
 </div>
 <div class="card">
   <div class="table-wrapper">
-    <table data-mobile-cards="true">
+    <table class="table-categories" data-mobile-cards="true">
       <thead><tr><th data-role="hide">Icon</th><th data-role="primary">Name</th><th data-role="secondary">Products</th><th data-role="status">Status</th><th data-role="secondary">Packaging</th><th data-role="secondary">Order</th><th data-role="actions">Actions</th></tr></thead>
       <tbody>
         {% for cat in categories %}
         <tr>
           <td style="font-size:1.5rem">{{ cat.icon }}</td>
-          <td style="font-weight:700">{{ cat.name }}</td>
+          <td class="category-name" style="font-weight:700">{{ cat.name }}</td>
           <td>{{ cat.product_count }} items</td>
           <td><span class="badge {% if cat.is_active %}badge-ready{% else %}badge-cancelled{% endif %}">{% if cat.is_active %}Active{% else %}Inactive{% endif %}</span></td>
           <td>
             {% if cat.is_packaging_required %}
               <span class="badge badge-preparing">📦 Required</span>
             {% else %}
-              <span class="badge" style="background:#e8ddd0;color:#888">🥤 None</span>
+              <span class="badge badge-muted">🥤 None</span>
             {% endif %}
           </td>
           <td>{{ cat.order }}</td>
           <td>
-            <a href="{% url 'menu:category_edit' cat.pk %}" class="btn btn-sm btn-outline">Edit</a>
-            <button class="btn btn-sm btn-danger" onclick="confirmCatDelete('{% url 'menu:category_delete' cat.pk %}','{{ cat.name }}')">Delete</button>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <a href="{% url 'menu:category_edit' cat.pk %}" class="btn btn-sm btn-outline">Edit</a>
+              <button class="btn btn-sm {% if cat.is_active %}btn-outline{% else %}btn-caramel{% endif %} toggle-category-btn"
+                      data-url="{% url 'menu:category_toggle_active' cat.pk %}"
+                      data-name="{{ cat.name|escapejs }}"
+                      data-is-active="{{ cat.is_active|yesno:'true,false' }}">
+                {% if cat.is_active %}Deactivate{% else %}Reactivate{% endif %}
+              </button>
+              {% if not cat.product_count %}
+              <button class="btn btn-sm btn-danger"
+                      onclick="confirmCatDelete('{% url 'menu:category_delete' cat.pk %}','{{ cat.name|escapejs }}')">Delete</button>
+              {% endif %}
+            </div>
           </td>
         </tr>
         {% empty %}
@@ -39,11 +50,39 @@
 {% endblock %}
 {% block extra_js %}
 <script>
-async function confirmCatDelete(url, name){
-  if(!confirm(`Delete category "${name}"? Products may be affected.`))return;
+async function toggleCategoryActive(url, name, isActive) {
+  const willDeactivate = isActive === 'true';
+  const msg = willDeactivate
+    ? `Deactivate "${name}"? It will be hidden from the customer menu, the POS and the product dropdowns. Its products and history are kept, and it can be reactivated anytime.`
+    : `Reactivate "${name}"? It will become visible again.`;
+  if (!confirm(msg)) return;
+  try {
+    const r = await fetch(url, {method:'POST',headers:{'X-CSRFToken':'{{ csrf_token }}'}});
+    const d = await r.json();
+    if (d.success) {
+      showToast(willDeactivate ? 'Category deactivated' : 'Category reactivated', 'success');
+      setTimeout(() => location.reload(), 800);
+    } else {
+      showToast(d.error || 'Action failed', 'error');
+    }
+  } catch (err) {
+    showToast('Network error. Try again.', 'error');
+  }
+}
+// Delegated listener: the responsive-tables system clones table rows into
+// mobile cards AFTER this script runs, so a direct binding would leave the
+// Deactivate/Reactivate button inside generated cards without a handler.
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.toggle-category-btn');
+  if (btn) toggleCategoryActive(btn.dataset.url, btn.dataset.name, btn.dataset.isActive);
+});
+
+async function confirmCatDelete(url, name) {
+  if(!confirm(`Delete category "${name}"? Only empty categories can be deleted.`)) return;
   const r=await fetch(url,{method:'POST',headers:{'X-CSRFToken':'{{ csrf_token }}'}});
   const d=await r.json();
   if(d.success){showToast('Category deleted','success');setTimeout(()=>location.reload(),800);}
+  else { showToast(d.message || d.error || 'Action failed', 'error', 7000); }
 }
 </script>
 {% endblock %}

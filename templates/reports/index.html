@@ -135,9 +135,10 @@
             <td style="font-weight:700;color:var(--caramel)">₱{{ day.total|floatformat:2 }}</td>
           </tr>
           {% endif %}
-          {% empty %}
-          <tr><td colspan="3" style="text-align:center;color:#aaa;padding:20px">No data</td></tr>
           {% endfor %}
+          {% if not has_any_sales %}
+          <tr><td colspan="3" style="text-align:center;color:#aaa;padding:20px">No sales in this period</td></tr>
+          {% endif %}
         </tbody>
       </table>
     </div>
@@ -153,9 +154,10 @@
         <div class="report-card-item-value">₱{{ day.total|floatformat:2 }}</div>
       </div>
       {% endif %}
-      {% empty %}
-      <div style="text-align:center;padding:24px;color:#aaa">No orders in this period</div>
       {% endfor %}
+      {% if not has_any_sales %}
+      <div style="text-align:center;padding:24px;color:#aaa">No sales in this period</div>
+      {% endif %}
     </div>
   </div>
 </div>
@@ -164,8 +166,10 @@
 {% block extra_js %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script>
-const dailyLabels = {{ daily_sales|safe }}.map(d => d.date);
-const dailyData = {{ daily_sales|safe }}.map(d => d.total);
+// Extract once — avoids rendering the same Python list repr twice via |safe.
+const dailySalesData = {{ daily_sales|safe }};
+const dailyLabels = dailySalesData.map(d => d.date);
+const dailyData   = dailySalesData.map(d => d.total);
 
 new Chart(document.getElementById('daily-chart'), {
   type: 'bar',

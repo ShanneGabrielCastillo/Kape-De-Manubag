@@ -9,9 +9,37 @@
   <a href="{% url 'inventory:log' %}" class="btn btn-outline">View Log</a>
 </div>
 
+<!-- Summary cards (responsive via the shared .stats-grid design system) -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-label">Total Products</div>
+    <div class="stat-value">{{ total_count }}</div>
+    <div class="stat-sub">All products in catalog</div>
+    <div class="stat-icon">📦</div>
+  </div>
+  <div class="stat-card green">
+    <div class="stat-label">Active Products</div>
+    <div class="stat-value">{{ active_count }}</div>
+    <div class="stat-sub">Currently sellable</div>
+    <div class="stat-icon">✅</div>
+  </div>
+  <div class="stat-card blue">
+    <div class="stat-label">Low Stock Items</div>
+    <div class="stat-value">{{ low_stock_count }}</div>
+    <div class="stat-sub">{% if critical_stock_count %}{{ critical_stock_count }} critical{% else %}At or below restock threshold{% endif %}</div>
+    <div class="stat-icon">⚠️</div>
+  </div>
+  <div class="stat-card red">
+    <div class="stat-label">Out of Stock</div>
+    <div class="stat-value">{{ out_of_stock_count }}</div>
+    <div class="stat-sub">Stock at zero</div>
+    <div class="stat-icon">🚫</div>
+  </div>
+</div>
+
 {% if low_stock_count %}
 <div class="alert alert-warning" style="margin-bottom:20px">
-  ⚠️ <strong>{{ low_stock_count }} product{{ low_stock_count|pluralize }}</strong> with low stock (≤10 units). Restock soon!
+  ⚠️ <strong>{{ low_stock_count }} product{{ low_stock_count|pluralize }}</strong> with low stock (at or below their restock threshold).{% if critical_stock_count %} <strong>{{ critical_stock_count }} critical</strong>.{% endif %} Restock soon!
 </div>
 {% endif %}
 
@@ -31,20 +59,20 @@
           <td>
             <div class="stock-bar">
               <div class="stock-bar-fill" style="width:{% if product.stock_quantity >= 100 %}100{% elif product.stock_quantity > 10 %}{{ product.stock_quantity }}{% else %}{{ product.stock_quantity|floatformat:0 }}{% endif %}%;
-                background:{% if product.stock_quantity <= 5 %}var(--red-accent){% elif product.stock_quantity <= 10 %}#e67e22{% else %}var(--green-success){% endif %}"></div>
+                background:{% if product.stock_status == 'critical' %}var(--red-accent){% elif product.stock_status == 'low' %}#e67e22{% else %}var(--green-success){% endif %}"></div>
             </div>
           </td>
           <td>
-            {% if product.stock_quantity <= 5 %}
+            {% if product.stock_status == 'critical' %}
               <span class="badge badge-cancelled">Critical</span>
-            {% elif product.stock_quantity <= 10 %}
+            {% elif product.stock_status == 'low' %}
               <span class="badge badge-pending">Low</span>
             {% else %}
               <span class="badge badge-ready">OK</span>
             {% endif %}
           </td>
           <td>
-            <button onclick="openRestockModal({{ product.pk }}, '{{ product.name|escapejs }}', {{ product.stock_quantity }})" class="btn btn-sm btn-primary">+ Restock</button>
+            <button onclick="openRestockModal('{% url 'inventory:restock' product.pk %}', '{{ product.name|escapejs }}', {{ product.stock_quantity }})" class="btn btn-sm btn-primary">+ Restock</button>
           </td>
         </tr>
         {% endwith %}
@@ -88,10 +116,10 @@
 
 {% block extra_js %}
 <script>
-let currentRestockId = null;
+let currentRestockUrl = null;
 
-function openRestockModal(id, name, currentQty) {
-  currentRestockId = id;
+function openRestockModal(url, name, currentQty) {
+  currentRestockUrl = url;
   document.getElementById('restock-product-name').textContent = name;
   document.getElementById('restock-current').textContent = currentQty;
   document.getElementById('restock-quantity').value = '';
@@ -108,7 +136,7 @@ async function submitRestock() {
   formData.append('notes', notes);
   formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
 
-  const r = await fetch(`/inventory/${currentRestockId}/restock/`, { method: 'POST', body: formData });
+  const r = await fetch(currentRestockUrl, { method: 'POST', body: formData });
   const d = await r.json();
   if (d.success) {
     showToast(`Restocked! New qty: ${d.new_qty}`, 'success');
