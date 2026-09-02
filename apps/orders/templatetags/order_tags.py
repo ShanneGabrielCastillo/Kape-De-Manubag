@@ -2,25 +2,22 @@
 Custom template tags for the orders app.
 """
 from django import template
+from django.template.loader import render_to_string
+from django.utils.safestring import mark_safe
 from apps.orders.services import VALID_TRANSITIONS
 from apps.orders.models import Order
 
 register = template.Library()
 
 
-@register.inclusion_tag('orders/partials/status_select.html')
+@register.simple_tag
 def status_select(order, form_classes='', select_style=''):
     """Render a status <select> that only shows valid next transitions.
 
-    The current status is always included as the pre-selected option so the
-    cashier can see where the order is right now.  Only the transitions that
-    are valid from the current status are offered as alternatives, so the
-    dropdown itself communicates what is allowed.
-
-    For terminal states (completed, cancelled) the select is rendered as
-    disabled with only the current status visible — the "Update Status" button
-    is also hidden so there is no ambiguity about whether a submission will do
-    anything.
+    Implemented as a simple_tag (returning a rendered string) rather than
+    inclusion_tag because Django 5.1+ changed how inclusion_tag validates
+    positional arguments at template compile time, breaking the old signature.
+    simple_tag works identically across Django 4.2, 5.x, and 6.x.
 
     Usage in templates:
         {% load order_tags %}
@@ -30,19 +27,18 @@ def status_select(order, form_classes='', select_style=''):
     status_label = dict(Order.STATUS_CHOICES)
     allowed_next = VALID_TRANSITIONS.get(order.status, set())
 
-    # Build the option list: current status first (selected), then each valid
-    # next state in the canonical STATUS_CHOICES order so the order is stable.
     options = [{'value': order.status, 'label': status_label[order.status], 'selected': True}]
     for value, label in Order.STATUS_CHOICES:
         if value in allowed_next:
             options.append({'value': value, 'label': label, 'selected': False})
 
-    is_terminal = not allowed_next  # completed or cancelled
+    is_terminal = not allowed_next
 
-    return {
+    context = {
         'order':        order,
         'options':      options,
         'is_terminal':  is_terminal,
         'form_classes': form_classes,
         'select_style': select_style,
     }
+    return mark_safe(render_to_string('orders/partials/status_select.html', context))

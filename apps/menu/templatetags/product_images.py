@@ -8,7 +8,9 @@ unavailable remote store). ``product_image`` also emits an ``onerror``
 fallback so a stale/missing file can never leave a broken-image icon.
 """
 from django import template
+from django.template.loader import render_to_string
 from django.templatetags.static import static
+from django.utils.safestring import mark_safe
 
 register = template.Library()
 
@@ -22,22 +24,20 @@ def resolve_product_image_url(product):
             if product.image.storage.exists(product.image.name):
                 return product.image.url
         except Exception:
-            # Never let a storage failure break the page — fall back to the
-            # placeholder instead of a broken image.
             pass
     return static(PLACEHOLDER_PATH)
 
 
-@register.inclusion_tag('partials/product_image.html')
+@register.simple_tag
 def product_image(product, alt=''):
     """Render a product <img> with a consistent placeholder fallback.
 
-    The surrounding container controls the display size; ``object-fit:
-    cover`` (see .product-image in main.css) keeps the aspect ratio of the
-    source image without distortion.
+    Implemented as simple_tag for Django 5.1+ compatibility — inclusion_tag
+    with positional arguments raises TemplateSyntaxError in Django 5.1+.
     """
-    return {
-        'image_url': resolve_product_image_url(product),
+    context = {
+        'image_url':       resolve_product_image_url(product),
         'placeholder_url': static(PLACEHOLDER_PATH),
-        'alt': alt,
+        'alt':             alt,
     }
+    return mark_safe(render_to_string('partials/product_image.html', context))
