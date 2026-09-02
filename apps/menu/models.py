@@ -1,6 +1,7 @@
 """
 Menu Models - Categories and Products for Kape De Manubag
 """
+import django
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import F, Prefetch, Q
@@ -9,6 +10,15 @@ from django.db.models.signals import post_save, pre_delete
 from django.dispatch import receiver
 from django.utils import timezone
 from django.utils.text import slugify
+
+# CheckConstraint used 'check=' before Django 5.1 and 'condition=' from 5.1+.
+# Build the kwargs dict once so the model Meta works on any Django version.
+_DJANGO_VERSION = django.VERSION[:2]
+_check_constraint_kwargs = (
+    {'condition': Q(stock_quantity__gte=0)}
+    if _DJANGO_VERSION >= (5, 1)
+    else {'check': Q(stock_quantity__gte=0)}
+)
 
 
 # Shared by every low-stock surface (dashboard, inventory, product
@@ -398,8 +408,10 @@ class Product(models.Model):
         constraints = [
             # Hard database-level guarantee: stock can never be negative,
             # even if a future code path forgets to check before writing.
+            # _check_constraint_kwargs handles the Django < 5.1 / >= 5.1
+            # API difference (check= vs condition=).
             models.CheckConstraint(
-                condition=Q(stock_quantity__gte=0),
+                **_check_constraint_kwargs,
                 name='product_stock_non_negative',
             ),
         ]
