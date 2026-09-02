@@ -162,7 +162,7 @@ RealtimeConnection.on('new_order', function(order) {
     row.className = 'new-order-highlight';
 
     // The status select for a brand-new (pending) order offers preparing and
-    // cancelled. Build it the same way {% status_select %} does.
+    // cancelled. Build it the same way the inline status select in the table does.
     const allowedNext = VALID_TRANSITIONS['pending'] || [];
     let selectHtml = `<select name="status" class="form-control form-select" style="font-size:0.8rem;padding:5px 8px">
       <option value="pending" selected>Pending</option>
