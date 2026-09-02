@@ -399,7 +399,7 @@ class Product(models.Model):
             # Hard database-level guarantee: stock can never be negative,
             # even if a future code path forgets to check before writing.
             models.CheckConstraint(
-                condition=Q(stock_quantity__gte=0),
+                check=Q(stock_quantity__gte=0),
                 name='product_stock_non_negative',
             ),
         ]
