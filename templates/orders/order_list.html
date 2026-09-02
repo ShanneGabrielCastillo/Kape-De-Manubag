@@ -95,10 +95,7 @@
 {% endblock %}
 
 {% block extra_js %}
-{# VALID_TRANSITIONS and STATUS_LABELS are injected from the view context so
-   they stay in sync with services.py automatically.  The json_script filter
-   renders each value as a <script type="application/json"> element which the
-   JS below reads back — this is Django's built-in XSS-safe JSON embed. #}
+{# VALID_TRANSITIONS and STATUS_LABELS are injected from the view context so they stay in sync with services.py automatically. The json_script filter renders each value as a <script type="application/json"> element which the JS below reads back — this is Django's built-in XSS-safe JSON embed. #}
 {{ valid_transitions_json|json_script:"vt-data" }}
 {{ status_labels_json|json_script:"sl-data" }}
 <script>

@@ -55,8 +55,7 @@
     <a href="{% url 'orders:checkout' %}" class="btn btn-primary btn-block btn-lg" style="margin-top:16px">
       Proceed to Checkout →
     </a>
-    {# Clear-cart: POST form so the action is CSRF-protected and cannot be
-       triggered by a stray GET request (e.g. a link prefetcher). #}
+    {# Clear-cart form uses POST so the action is CSRF-protected and cannot be triggered by a stray GET request. #}
     <form method="post" action="{% url 'orders:clear_cart' %}" id="clear-cart-form" style="margin-top:10px">
       {% csrf_token %}
       <button type="button" id="clear-cart-btn"
@@ -68,8 +67,7 @@
   </div>
 
   {% else %}
-  {# Stale-session notice: shown by JS when localStorage says items existed
-     but the server returned an empty cart (session cookie expired). #}
+  {# Stale-session notice: shown by JS when localStorage says items existed but the server returned an empty cart (session cookie expired). #}
   <div id="stale-session-notice"
        style="display:none;background:#fff8e1;border:1px solid #ffe082;border-radius:10px;padding:16px 20px;margin-bottom:16px;font-size:0.88rem;color:#7a5c00">
     ⏱️ It looks like your previous session expired and your cart was reset.

@@ -317,9 +317,7 @@
     </div>
     <div class="card-body">
       <div class="chart-wrapper">
-        {# The canvas is ALWAYS rendered so a later period-switch or realtime
-           refresh can rebuild the chart after a transient failure without a
-           page reload; the JS shows the error/empty overlay instead. #}
+        {# The canvas is ALWAYS rendered so a later period-switch or realtime refresh can rebuild the chart after a transient failure without a page reload; the JS shows the error/empty overlay instead. #}
         <canvas id="sales-chart"></canvas>
         {% if 'chart' in widget_errors %}
         <div class="chart-empty" id="chart-empty" style="display:flex">

@@ -113,9 +113,7 @@
 </div>
 {% endblock %}
 
-{# Audio + realtime.js load once, after main.js but before child extra_js blocks #}
-{# base.html declares the realtime_js block before extra_js, so inline scripts
-   in extra_js blocks can safely call RealtimeConnection.on(...). #}
+{# Audio + realtime.js load once, after main.js but before child extra_js blocks. base.html declares the realtime_js block before extra_js, so inline scripts in extra_js blocks can safely call RealtimeConnection.on(...). #}
 {% block realtime_js %}
 <audio id="new-order-sound" preload="auto">
   <source src="{% static 'sounds/new_order.mp3' %}" type="audio/mpeg">
