@@ -112,7 +112,7 @@
     <div class="card" style="margin-bottom:16px">
       <div class="card-header"><h3>Update Status</h3></div>
       <div class="card-body">
-        <form class="status-update-form" data-order-id="{{ order.pk }}">
+        <form class="status-update-form" data-order-id="{{ order.pk }}" data-url="{% url 'orders:update_status' order.pk %}">
           {% csrf_token %}
           <div class="form-group">
             {% if order.status == 'completed' or order.status == 'cancelled' %}
@@ -122,6 +122,15 @@
               <option value="{{ order.status }}" selected>{{ order.get_status_display }}</option>
               {% for value, label in status_choices %}{% if value != order.status %}<option value="{{ value }}">{{ label }}</option>{% endif %}{% endfor %}
             </select>
+            {# Inline hint shown by JS when Completed is selected but order is unpaid #}
+            <div class="complete-unpaid-hint" style="display:none;font-size:0.85rem;color:var(--red-accent);background:#fff5f5;border:1px solid #fcc;border-radius:6px;padding:8px 12px;margin-top:8px;line-height:1.5">
+              ⚠️ Cannot mark as Completed — this order is not paid yet. Please collect payment first.
+            </div>
+            {% if order.is_paid %}
+            <div style="font-size:0.82rem;color:var(--green-success);background:#f0fff4;border:1px solid #b7eac7;border-radius:6px;padding:6px 10px;margin-top:8px">
+              ✅ This order is already paid. You can mark it as Completed.
+            </div>
+            {% endif %}
             {% endif %}
           </div>
           {% if order.next_status %}<button type="submit" class="btn btn-primary btn-block">Update Status</button>{% endif %}

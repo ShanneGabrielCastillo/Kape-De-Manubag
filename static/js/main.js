@@ -216,7 +216,19 @@ document.querySelectorAll('.qty-btn').forEach(btn => {
 // ── Remove from Cart ──
 document.querySelectorAll('.cart-remove').forEach(btn => {
   btn.addEventListener('click', async function() {
-    if (!confirm('Remove this item?')) return;
+    // Walk up to the row to read live values — qty and price are updated
+    // in-place by the +/− controls and would be stale in data attributes.
+    const row      = this.closest('.cart-item-row');
+    const liveQty  = row ? row.querySelector('.qty-display')?.textContent.trim()  : null;
+    const livePrice= row ? row.querySelector('.cart-item-price')?.textContent.trim() : null;
+
+    const ok = await kdmRemoveItem({
+      name:   this.dataset.name  || 'this item',
+      qty:    liveQty  || this.dataset.qty   || '1',
+      price:  livePrice|| this.dataset.price || '',
+      imgSrc: this.dataset.img   || '',
+    });
+    if (!ok) return;
     const itemId = this.dataset.itemId;
     try {
       const url = this.dataset.url || `/orders/cart/remove/${itemId}/`;
@@ -227,6 +239,12 @@ document.querySelectorAll('.cart-remove').forEach(btn => {
       const data = await response.json();
       if (data.success) {
         this.closest('.cart-item-row').remove();
+        // Keep the "N item(s)" header count in sync
+        const countEl = document.getElementById('cart-item-count');
+        if (countEl) {
+          const remaining = document.querySelectorAll('.cart-item-row').length;
+          countEl.textContent = remaining === 1 ? '1 item' : `${remaining} items`;
+        }
         const totalEl = document.querySelector('.cart-grand-total');
         if (totalEl) totalEl.textContent = `₱${data.cart_total.toFixed(2)}`;
         const cartFabBadge = document.querySelector('.cart-fab .badge-count');
@@ -244,13 +262,46 @@ document.querySelectorAll('.cart-remove').forEach(btn => {
 
 // ── Order Status Update ──
 document.querySelectorAll('.status-update-form').forEach(form => {
+  const statusSelect = form.querySelector('[name=status]');
+  const submitBtn    = form.querySelector('button[type=submit]');
+  const hint         = form.querySelector('.complete-unpaid-hint');
+
+  // Read payment status from the closest <tr data-is-paid="..."> so the
+  // check works on both the order list (tr-level) and order detail (no tr).
+  function isPaid() {
+    const row = form.closest('tr[data-is-paid]');
+    if (row) return row.dataset.isPaid === 'true';
+    // order_detail.html — no <tr> wrapper; use the data attr on the form
+    // itself if present, otherwise treat as unknown (allow the server to decide).
+    return form.dataset.isPaid !== 'false';
+  }
+
+  // Show/hide the inline hint as soon as the cashier changes the select —
+  // instant feedback without waiting for a network round-trip.
+  function syncHint() {
+    if (!hint || !statusSelect) return;
+    const willComplete = statusSelect.value === 'completed';
+    const blocked      = willComplete && !isPaid();
+    hint.style.display  = blocked ? 'block' : 'none';
+    if (submitBtn) submitBtn.disabled = blocked;
+  }
+
+  if (statusSelect) statusSelect.addEventListener('change', syncHint);
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const orderId = form.dataset.orderId;
-    const statusSelect = form.querySelector('[name=status]');
-    const submitBtn   = form.querySelector('button[type=submit]');
-    const status = statusSelect ? statusSelect.value : null;
+    const status  = statusSelect ? statusSelect.value : null;
     if (!status) return;
+
+    // Client-side payment gate: block the request immediately so the cashier
+    // sees the inline hint rather than waiting for a server round-trip.
+    // The backend enforces the same rule — this is defence-in-depth UX only.
+    if (status === 'completed' && !isPaid()) {
+      if (hint) hint.style.display = 'block';
+      showToast('Cannot complete order — payment not collected yet.', 'error');
+      return;
+    }
 
     // Disable the submit button for the duration of the request so rapid
     // double-clicks cannot fire two concurrent status-change requests.
@@ -269,9 +320,8 @@ document.querySelectorAll('.status-update-form').forEach(form => {
         setTimeout(() => location.reload(), 1000);
       } else {
         // Surface the server's rejection reason — this includes transition
-        // validation errors (e.g. "Cannot change order status from
-        // 'Completed' to 'Pending'") so the cashier understands why the
-        // change was refused instead of seeing a silent failure.
+        // validation errors and the payment gate so the cashier understands
+        // why the change was refused instead of seeing a silent failure.
         showToast(data.error || 'Status update failed', 'error');
         if (submitBtn) submitBtn.disabled = false;
       }
@@ -694,7 +744,6 @@ window.POS = {
     return {
       items: this.items,
       customerName: document.getElementById('pos-customer-name')?.value || '',
-      tableNumber: document.getElementById('pos-table')?.value || '',
       orderType: document.querySelector('[name=pos-order-type]:checked')?.value || 'dine_in',
       requestToken: this._requestToken || null,
       savedAt: new Date().toISOString(),
@@ -705,7 +754,7 @@ window.POS = {
     try {
       const payload = this._draftPayload();
       // Nothing worth preserving yet -- don't create a draft.
-      if (!payload.items.length && !payload.customerName && !payload.tableNumber) return;
+      if (!payload.items.length && !payload.customerName) return;
       sessionStorage.setItem(this._DRAFT_KEY, JSON.stringify(payload));
     } catch (e) {
       // Storage unavailable (private mode / quota): refresh protection is
@@ -718,7 +767,7 @@ window.POS = {
   },
 
   initDraftPersistence() {
-    ['pos-customer-name', 'pos-table'].forEach(id => {
+    ['pos-customer-name'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.addEventListener('input', () => this.saveDraft());
     });
@@ -776,9 +825,7 @@ window.POS = {
     this.items = restored;
     this._requestToken = draft.requestToken || null;
     const nameEl = document.getElementById('pos-customer-name');
-    const tableEl = document.getElementById('pos-table');
     if (nameEl) nameEl.value = draft.customerName || '';
-    if (tableEl) tableEl.value = draft.tableNumber || '';
     const orderTypeRadio = document.querySelector(`[name=pos-order-type][value="${draft.orderType || 'dine_in'}"]`);
     if (orderTypeRadio) orderTypeRadio.checked = true;
 
@@ -1074,7 +1121,6 @@ window.POS = {
     if (this.submitting) return;
     if (this.items.length === 0) { showToast('No items in order', 'error'); return; }
     const customerName = document.getElementById('pos-customer-name')?.value || 'Walk-in Customer';
-    const tableNumber = document.getElementById('pos-table')?.value || '';
     const orderType = document.querySelector('[name=pos-order-type]:checked')?.value || 'dine_in';
 
     // Capture the idempotency token and mirror the exact submission to the
@@ -1113,7 +1159,6 @@ window.POS = {
           headers: { 'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             customer_name: customerName,
-            table_number: tableNumber,
             order_type: orderType,
             request_token: requestToken,
             items: this.items.map(i => ({ product_id: i.id, size: i.size, quantity: i.qty })),
@@ -1172,7 +1217,6 @@ window.POS = {
             // The order is placed: the temporary cart served its purpose.
             this.clearDraft();
             document.getElementById('pos-customer-name').value = '';
-            document.getElementById('pos-table').value = '';
             return;
           }
           if (!failure) {

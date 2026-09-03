@@ -35,7 +35,7 @@
       </thead>
       <tbody>
         {% for order in orders %}
-        <tr data-order-id="{{ order.pk }}">
+        <tr data-order-id="{{ order.pk }}" data-is-paid="{{ order.is_paid|yesno:'true,false' }}">
           <td><a href="{% url 'orders:order_detail' order.pk %}" style="font-weight:700;color:var(--caramel)">{{ order.order_number }}</a></td>
           <td>{{ order.customer_name }}</td>
           <td>
@@ -45,17 +45,23 @@
           <td>{{ order.item_count }} items</td>
           <td style="font-weight:700">₱{{ order.total|floatformat:2 }}</td>
           <td>
-            <form class="status-update-form" data-order-id="{{ order.pk }}" data-url="{% url 'orders:update_status' order.pk %}" style="display:flex;gap:6px;align-items:center">
+            <form class="status-update-form" data-order-id="{{ order.pk }}" data-url="{% url 'orders:update_status' order.pk %}" style="display:flex;flex-direction:column;gap:4px">
               {% csrf_token %}
               {% if order.status == 'completed' or order.status == 'cancelled' %}
               <span class="badge {% if order.status == 'completed' %}badge-ready{% else %}badge-cancelled{% endif %}" style="font-size:0.8rem;padding:5px 10px">{{ order.get_status_display }}</span>
               {% else %}
-              <select name="status" class="form-control form-select" style="font-size:0.8rem;padding:5px 8px">
-                <option value="{{ order.status }}" selected>{{ order.get_status_display }}</option>
-                {% for value, label in status_choices %}{% if value != order.status %}<option value="{{ value }}">{{ label }}</option>{% endif %}{% endfor %}
-              </select>
+              <div style="display:flex;gap:6px;align-items:center">
+                <select name="status" class="form-control form-select" style="font-size:0.8rem;padding:5px 8px">
+                  <option value="{{ order.status }}" selected>{{ order.get_status_display }}</option>
+                  {% for value, label in status_choices %}{% if value != order.status %}<option value="{{ value }}">{{ label }}</option>{% endif %}{% endfor %}
+                </select>
+                {% if order.next_status %}<button type="submit" class="btn btn-sm btn-primary">✓</button>{% endif %}
+              </div>
+              {# Inline hint shown by JS when Completed is selected but order is unpaid #}
+              <div class="complete-unpaid-hint" style="display:none;font-size:0.75rem;color:var(--red-accent);background:#fff5f5;border:1px solid #fcc;border-radius:6px;padding:5px 8px;line-height:1.4">
+                ⚠️ Cannot mark as Completed — this order is not paid yet. Please collect payment first.
+              </div>
               {% endif %}
-              {% if order.next_status %}<button type="submit" class="btn btn-sm btn-primary">✓</button>{% endif %}
             </form>
           </td>
           <td>
@@ -71,7 +77,7 @@
               <a href="{% url 'orders:order_detail' order.pk %}" class="btn btn-sm btn-outline">View</a>
               <a href="{% url 'orders:print_receipt' order.pk %}" class="btn btn-sm btn-outline" target="_blank">🖨️</a>
               {% if order.next_status %}
-              <button onclick="quickAdvance('{% url 'orders:quick_status_advance' order.pk %}')" class="btn btn-sm btn-caramel" title="Advance to {{ order.next_status }}">▶ {{ order.next_status|title }}</button>
+              <button onclick="quickAdvance('{% url 'orders:quick_status_advance' order.pk %}', this)" class="btn btn-sm btn-caramel" title="Advance to {{ order.next_status }}" data-next-status="{{ order.next_status }}" data-is-paid="{{ order.is_paid|yesno:'true,false' }}">▶ {{ order.next_status|title }}</button>
               {% endif %}
             </div>
           </td>
@@ -115,7 +121,18 @@ function escHtml(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-async function quickAdvance(url) {
+async function quickAdvance(url, btn) {
+  // Client-side payment gate: if this advance would reach 'completed' and
+  // the order is not yet paid, block immediately with a clear message.
+  // The backend enforces the same rule — this saves a round-trip.
+  if (btn) {
+    const nextStatus = btn.dataset.nextStatus;
+    const isPaid     = btn.dataset.isPaid === 'true';
+    if (nextStatus === 'completed' && !isPaid) {
+      showToast('Cannot complete order — payment not collected yet.', 'error');
+      return;
+    }
+  }
   const r = await fetch(url, {
     method: 'POST',
     headers: { 'X-CSRFToken': '{{ csrf_token }}' }
@@ -296,6 +313,11 @@ RealtimeConnection.on('status_changed', function(data) {
       advanceBtn.style.display = '';
       advanceBtn.title = `Advance to ${STATUS_LABELS[nextStatus] || nextStatus}`;
       advanceBtn.textContent = `▶ ${STATUS_LABELS[nextStatus] || nextStatus}`;
+      // Keep data-next-status and data-is-paid current so the client-side
+      // payment gate in quickAdvance() reads the right values after a live
+      // status_changed event updates the row without a page reload.
+      advanceBtn.dataset.nextStatus = nextStatus;
+      advanceBtn.dataset.isPaid     = data.is_paid ? 'true' : 'false';
     } else {
       advanceBtn.style.display = 'none';
     }
@@ -306,6 +328,9 @@ RealtimeConnection.on('status_changed', function(data) {
   if (payBtn) {
     payBtn.style.display = (data.new_status === 'cancelled' || data.is_paid) ? 'none' : '';
   }
+  // Keep the row-level data-is-paid attribute current so the main.js
+  // syncHint() function reads the correct value after a live update.
+  row.dataset.isPaid = data.is_paid ? 'true' : 'false';
   // Show the Paid badge if the order just became paid
   if (data.is_paid) {
     const payCell = row.cells[row.cells.length - 3]; // Payment column

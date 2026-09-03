@@ -43,8 +43,15 @@
 {% block extra_js %}
 <script>
 async function toggleStaff(url, isActive) {
-  const action = isActive ? 'deactivate' : 'activate';
-  if (isActive && !confirm('Deactivate this staff account? They will be blocked from logging in, but their order and report history stays intact.')) return;
+  if (isActive) {
+    const ok = await kdmConfirm('They will be blocked from logging in, but their order and report history stays intact.', {
+      title:        'Deactivate staff account?',
+      icon:         '🔒',
+      variant:      'danger',
+      confirmLabel: 'Deactivate',
+    });
+    if (!ok) return;
+  }
   const r = await fetch(url, {method:'POST',headers:{'X-CSRFToken':'{{ csrf_token }}'}});
   const d = await r.json();
   if(d.success){showToast(`Staff ${d.status}`, 'success'); setTimeout(()=>location.reload(),1000);}

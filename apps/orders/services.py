@@ -67,14 +67,22 @@ VALID_TRANSITIONS: dict[str, set[str]] = {
 }
 
 
-def validate_status_transition(current_status: str, new_status: str) -> None:
+def validate_status_transition(current_status: str, new_status: str, order=None) -> None:
     """Raise ValueError if current_status → new_status is not a valid transition.
 
     Called by every view that changes order status.  The error message is
     user-readable so it can be surfaced directly in the API response.
 
+    Args:
+        current_status: The order's current status string.
+        new_status:     The requested new status string.
+        order:          Optional Order instance.  When supplied, business-rule
+                        guards that require the full order (e.g. payment check)
+                        are also enforced.
+
     Raises:
-        ValueError: with a descriptive message when the transition is invalid.
+        ValueError: with a descriptive message when the transition is invalid
+                    or a business rule blocks it.
     """
     # Same-status "change" is a no-op — treat it as valid so idempotent
     # saves (e.g. re-saving with no change) are not accidentally blocked.
@@ -89,6 +97,15 @@ def validate_status_transition(current_status: str, new_status: str) -> None:
         raise ValueError(
             f"Cannot change order status from \"{current_label}\" "
             f"to \"{new_label}\"."
+        )
+
+    # ── Business-rule: an order can only be completed once payment is
+    # confirmed.  This prevents unpaid orders from appearing in finance
+    # totals and keeps sales reports accurate.
+    if new_status == 'completed' and order is not None and not order.is_paid:
+        raise ValueError(
+            "Cannot mark as Completed: this order is not paid yet. "
+            "Please collect payment first."
         )
 
 

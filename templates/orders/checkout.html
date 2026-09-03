@@ -26,11 +26,6 @@
             {% if form.customer_name.errors %}<small style="color:var(--red-accent)">{{ form.customer_name.errors.0 }}</small>{% endif %}
           </div>
           <div class="form-group">
-            <label class="form-label">Phone Number</label>
-            {{ form.customer_phone }}
-            {% if form.customer_phone.errors %}<small style="color:var(--red-accent)">{{ form.customer_phone.errors.0 }}</small>{% endif %}
-          </div>
-          <div class="form-group">
             <label class="form-label">Order Type *</label>
             <div class="order-type-selector">
               {% for choice in form.order_type %}
@@ -40,11 +35,6 @@
               {% endfor %}
             </div>
             {% if form.order_type.errors %}<small style="color:var(--red-accent)">{{ form.order_type.errors.0 }}</small>{% endif %}
-          </div>
-          <div class="form-group" id="table-group">
-            <label class="form-label">Table Number</label>
-            {{ form.table_number }}
-            {% if form.table_number.errors %}<small style="color:var(--red-accent)">{{ form.table_number.errors.0 }}</small>{% endif %}
           </div>
           <div class="form-group">
             <label class="form-label">Special Instructions</label>

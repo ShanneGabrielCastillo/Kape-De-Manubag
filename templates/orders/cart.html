@@ -12,7 +12,7 @@
 <div class="cart-page">
   <div class="cart-header">
     <h1 style="font-size:1.8rem">🛒 Your Cart</h1>
-    <p class="text-muted">{{ items|length }} item{{ items|length|pluralize }}</p>
+    <p class="text-muted" id="cart-item-count">{{ items|length }} item{{ items|length|pluralize }}</p>
   </div>
 
   {% if items %}
@@ -34,7 +34,14 @@
           <button class="qty-btn" data-item-id="{{ item.pk }}" data-action="increase" data-url="{% url 'orders:update_cart' item.pk %}">+</button>
         </div>
         <div class="cart-item-price">₱{{ item.subtotal|floatformat:2 }}</div>
-        <span class="cart-remove" data-item-id="{{ item.pk }}" data-url="{% url 'orders:remove_from_cart' item.pk %}" title="Remove">🗑️</span>
+        <span class="cart-remove"
+              data-item-id="{{ item.pk }}"
+              data-url="{% url 'orders:remove_from_cart' item.pk %}"
+              data-name="{{ item.product.name|escapejs }}"
+              data-qty="{{ item.quantity }}"
+              data-price="₱{{ item.subtotal|floatformat:2 }}"
+              data-img="{% product_image_url item.product %}"
+              title="Remove">🗑️</span>
       </div>
       {% if item.product.stock_quantity == 0 or not item.product.is_available %}
       <div class="cart-item-notice">⚠️ {{ item.product.name }} is {% if item.product.stock_quantity == 0 %}out of stock{% else %}no longer available{% endif %} and will be removed at checkout.</div>
@@ -44,10 +51,6 @@
   </div>
 
   <div class="cart-summary">
-    <div class="cart-total-row">
-      <span>Subtotal</span>
-      <span>₱{{ cart.total|floatformat:2 }}</span>
-    </div>
     <div class="cart-total-row grand">
       <span>Total</span>
       <span class="cart-grand-total">₱{{ cart.total|floatformat:2 }}</span>
@@ -119,8 +122,14 @@
   var btn  = document.getElementById('clear-cart-btn');
   var form = document.getElementById('clear-cart-form');
   if (!btn || !form) return;
-  btn.addEventListener('click', function () {
-    if (!confirm('Remove all items from your cart?')) return;
+  btn.addEventListener('click', async function () {
+    const ok = await kdmConfirm('All items will be removed from your cart. This cannot be undone.', {
+      title:        'Clear Cart?',
+      icon:         '🗑️',
+      variant:      'danger',
+      confirmLabel: 'Yes, Clear Cart',
+    });
+    if (!ok) return;
     // Clear the localStorage hint immediately so the stale-session notice
     // does not appear on the next page load — this was intentional.
     localStorage.removeItem('kdm_cart_count');

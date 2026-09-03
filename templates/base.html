@@ -39,6 +39,191 @@
   </div>
   {% endif %}
 
+  <!-- ── kdmConfirm: custom confirmation modal (replaces browser confirm()) ── -->
+  <!-- Reuses the existing .modal / .modal-backdrop CSS already in main.css   -->
+  <div id="kdm-confirm-backdrop" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="kdm-confirm-title">
+    <div class="modal" style="max-width:420px;width:100%">
+      <div class="modal-header" id="kdm-confirm-header">
+        <!-- icon + title injected by JS -->
+        <div style="display:flex;align-items:center;gap:10px">
+          <span id="kdm-confirm-icon" style="font-size:1.25rem;line-height:1"></span>
+          <h4 id="kdm-confirm-title" style="color:var(--cream)"></h4>
+        </div>
+      </div>
+      <div class="modal-body">
+        <p id="kdm-confirm-message" style="color:var(--brown-dark);line-height:1.6;font-size:0.95rem;margin:0"></p>
+      </div>
+      <div class="modal-footer">
+        <button id="kdm-confirm-cancel" class="btn btn-outline">Cancel</button>
+        <button id="kdm-confirm-ok"     class="btn btn-primary">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── kdmConfirm ────────────────────────────────────────────────────────────
+    // Drop-in async replacement for window.confirm().
+    //
+    // Usage:
+    //   const ok = await kdmConfirm('Are you sure?');
+    //
+    // Options object (all optional):
+    //   title        — header text            (default: 'Are you sure?')
+    //   confirmLabel — OK button label        (default: 'Confirm')
+    //   cancelLabel  — Cancel button label    (default: 'Cancel')
+    //   variant      — 'danger' | 'warning' | 'default'  (controls header + btn colour)
+    //   icon         — emoji shown in header  (variant defaults apply when omitted)
+    //
+    // Examples:
+    //   await kdmConfirm('Clear cart?', { variant:'danger', confirmLabel:'Clear' });
+    //   await kdmConfirm('Deactivate item?', { variant:'warning', title:'Deactivate' });
+    (function () {
+      const VARIANTS = {
+        danger:  { bg: 'var(--red-accent)',   icon: '🗑️', btnClass: 'btn-danger'   },
+        warning: { bg: '#e6a817',             icon: '⚠️', btnClass: 'btn-warning'  },
+        default: { bg: 'var(--brown-dark)',   icon: 'ℹ️', btnClass: 'btn-primary'  },
+      };
+
+      let _resolve = null;
+
+      const backdrop = document.getElementById('kdm-confirm-backdrop');
+      const header   = document.getElementById('kdm-confirm-header');
+      const iconEl   = document.getElementById('kdm-confirm-icon');
+      const titleEl  = document.getElementById('kdm-confirm-title');
+      const msgEl    = document.getElementById('kdm-confirm-message');
+      const okBtn    = document.getElementById('kdm-confirm-ok');
+      const cancelBtn= document.getElementById('kdm-confirm-cancel');
+
+      function close(result) {
+        backdrop.style.display = 'none';
+        document.removeEventListener('keydown', onKey);
+        if (_resolve) { _resolve(result); _resolve = null; }
+      }
+
+      function onKey(e) {
+        if (e.key === 'Escape') close(false);
+        if (e.key === 'Enter')  close(true);
+      }
+
+      okBtn.addEventListener('click',     () => close(true));
+      cancelBtn.addEventListener('click', () => close(false));
+      backdrop.addEventListener('click',  (e) => { if (e.target === backdrop) close(false); });
+
+      window.kdmConfirm = function (message, opts) {
+        opts = opts || {};
+        const variant = VARIANTS[opts.variant] || VARIANTS.default;
+
+        // Populate content
+        iconEl.textContent          = opts.icon  || variant.icon;
+        titleEl.textContent         = opts.title || 'Are you sure?';
+        msgEl.textContent           = message;
+        okBtn.textContent           = opts.confirmLabel || 'Confirm';
+        cancelBtn.textContent       = opts.cancelLabel  || 'Cancel';
+
+        // Apply variant colour to header background
+        header.style.background = variant.bg;
+
+        // Swap OK-button colour class
+        okBtn.className = 'btn ' + variant.btnClass;
+
+        backdrop.style.display = 'flex';
+        // Focus the cancel button by default — safer for destructive actions
+        setTimeout(() => cancelBtn.focus(), 30);
+        document.addEventListener('keydown', onKey);
+
+        return new Promise(function (resolve) { _resolve = resolve; });
+      };
+    })();
+  </script>
+
+  <!-- ── kdmRemoveItem: item-preview confirmation modal for cart removes ── -->
+  <div id="kdm-remove-backdrop" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="kdm-remove-title">
+    <div class="modal" style="max-width:400px;width:100%">
+
+      <!-- Header -->
+      <div class="modal-header" style="background:var(--red-accent);justify-content:center;padding:20px 24px 16px;flex-direction:column;align-items:center;gap:6px">
+        <div style="width:44px;height:44px;background:rgba(255,255,255,0.15);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.4rem">🗑️</div>
+        <h4 id="kdm-remove-title" style="color:var(--cream);font-size:1rem;font-family:'DM Sans',sans-serif">Remove this item?</h4>
+      </div>
+
+      <!-- Body -->
+      <div class="modal-body" style="padding:20px 24px 16px">
+        <p style="color:#666;font-size:0.88rem;text-align:center;margin-bottom:16px">
+          Are you sure you want to remove this item from your cart?
+        </p>
+
+        <!-- Item preview card -->
+        <div style="display:flex;align-items:center;gap:12px;background:var(--cream-light);border:1.5px solid var(--cream);border-radius:var(--radius-sm);padding:12px 14px">
+          <img id="kdm-remove-img"
+               src=""
+               alt=""
+               style="width:40px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0;background:#eee">
+          <div style="flex:1;min-width:0">
+            <div id="kdm-remove-name" style="font-weight:700;font-size:0.9rem;color:var(--brown-dark);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
+            <div id="kdm-remove-qty"  style="font-size:0.78rem;color:#999;margin-top:1px"></div>
+          </div>
+          <div id="kdm-remove-price" style="font-weight:700;font-size:0.95rem;color:var(--caramel);flex-shrink:0"></div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="modal-footer" style="padding:12px 24px 20px">
+        <button id="kdm-remove-cancel" class="btn btn-outline" style="flex:1;justify-content:center">Cancel</button>
+        <button id="kdm-remove-ok"     class="btn btn-danger"  style="flex:1;justify-content:center">Remove Item</button>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // ── kdmRemoveItem ─────────────────────────────────────────────────────────
+    // Async item-removal confirmation with a live preview of the item.
+    //
+    // Usage (called by main.js cart-remove handler):
+    //   const ok = await kdmRemoveItem({ name, qty, price, imgSrc });
+    //
+    (function () {
+      let _resolve = null;
+
+      const backdrop  = document.getElementById('kdm-remove-backdrop');
+      const imgEl     = document.getElementById('kdm-remove-img');
+      const nameEl    = document.getElementById('kdm-remove-name');
+      const qtyEl     = document.getElementById('kdm-remove-qty');
+      const priceEl   = document.getElementById('kdm-remove-price');
+      const okBtn     = document.getElementById('kdm-remove-ok');
+      const cancelBtn = document.getElementById('kdm-remove-cancel');
+
+      function close(result) {
+        backdrop.style.display = 'none';
+        document.removeEventListener('keydown', onKey);
+        if (_resolve) { _resolve(result); _resolve = null; }
+      }
+
+      function onKey(e) {
+        if (e.key === 'Escape') close(false);
+        if (e.key === 'Enter')  close(true);
+      }
+
+      okBtn.addEventListener('click',     () => close(true));
+      cancelBtn.addEventListener('click', () => close(false));
+      backdrop.addEventListener('click',  (e) => { if (e.target === backdrop) close(false); });
+
+      window.kdmRemoveItem = function ({ name, qty, price, imgSrc }) {
+        nameEl.textContent  = name  || 'Item';
+        qtyEl.textContent   = `Quantity: ${qty || 1}`;
+        priceEl.textContent = price || '';
+        imgEl.src           = imgSrc || '';
+        imgEl.alt           = name  || '';
+
+        backdrop.style.display = 'flex';
+        setTimeout(() => cancelBtn.focus(), 30);
+        document.addEventListener('keydown', onKey);
+
+        return new Promise(function (resolve) { _resolve = resolve; });
+      };
+    })();
+  </script>
+
   <script>
     // Single source of truth for JS endpoint URLs (generated by Django's
     // URL resolver so routes can change without breaking the front end).

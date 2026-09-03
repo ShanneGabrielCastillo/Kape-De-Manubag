@@ -14,6 +14,31 @@
 .dot-completed { background:#198754; }
 .dot-cancelled { background:#dc3545; }
 
+/* Orders button pending badge — two variants, mobile vs desktop.
+   .dash-orders-pill  = the existing "N pending" pill (desktop default: shown).
+   .dash-orders-dot   = the small red circular counter (mobile only: hidden by default).
+   The mobile media query below swaps them. */
+.dash-orders-pill { display: inline-flex; }   /* default: visible on desktop */
+.dash-orders-dot  {                            /* default: hidden on desktop */
+  display: none;
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 50px;
+  background: #dc3545;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+  pointer-events: none;
+}
+
 /* ── Dashboard loading skeletons ────────────────────────────────────────────
    The dashboard is server-rendered, so the skeleton placeholders cover the
    window until the page is interactive: while the HTML streams in, while the
@@ -154,6 +179,23 @@
      hidden on phones. Desktop keeps it. */
   .stat-icon { display: none; }
 
+  /* Quick-action buttons: 2×2 grid on mobile.
+     Desktop keeps its flex-wrap row (the inline style on the div) untouched —
+     this rule only fires below 576 px where the inline style is overridden. */
+  .dashboard-quick-actions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .dashboard-quick-actions .btn {
+    justify-content: center;
+    min-height: 48px;   /* comfortable tap target */
+    font-size: 0.88rem;
+  }
+
+  /* Orders button — mobile: hide the pill badge, show the dot badge */
+  .dash-orders-pill { display: none !important; }
+  .dash-orders-dot  { display: flex; }
   /* Stat values: long peso amounts (₱1,234,567.89) must never overflow the
      ~110px content column of a 2-column card on a 320px phone. Scale the
      clamp down slightly vs. responsive.css and allow an emergency wrap so
@@ -268,9 +310,14 @@
 <!-- Quick Actions (always visible — they are navigation, not data) -->
 <div class="dashboard-quick-actions" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px">
   <a href="{% url 'orders:pos' %}" class="btn btn-caramel"><span>🖥️</span> Open POS</a>
-  <a href="{% url 'orders:order_list' %}" class="btn btn-primary">
+  <a href="{% url 'orders:order_list' %}" class="btn btn-primary" style="position:relative">
     📋 Orders
-    {% if pending_count %}<span class="badge badge-pending" id="pending-count-value" style="margin-left:4px">{{ pending_count }} pending</span>{% endif %}
+    {% if pending_count %}
+    {# Desktop: existing pill badge — unchanged #}
+    <span class="badge badge-pending dash-orders-pill" id="pending-count-value" style="margin-left:4px">{{ pending_count }} pending</span>
+    {# Mobile only: small circular counter badge top-right of the button #}
+    <span class="dash-orders-dot" aria-label="{{ pending_count }} pending orders">{{ pending_count }}</span>
+    {% endif %}
   </a>
   {% if user.is_admin_user %}
   <a href="{% url 'menu:product_create' %}" class="btn btn-outline">+ Add Product</a>
@@ -758,7 +805,7 @@
     if (count > 0) {
       if (!badge && btn) {
         badge = document.createElement('span');
-        badge.className = 'badge badge-pending';
+        badge.className = 'badge badge-pending dash-orders-pill';
         badge.id = 'pending-count-value';
         badge.style.marginLeft = '4px';
         btn.appendChild(badge);
@@ -766,6 +813,21 @@
       if (badge) badge.textContent = count + ' pending';
     } else if (badge) {
       badge.remove();
+    }
+    // Mobile dot badge: update or create/remove alongside the pill badge.
+    let dot = btn && btn.querySelector('.dash-orders-dot');
+    if (count > 0) {
+      if (!dot && btn) {
+        dot = document.createElement('span');
+        dot.className = 'dash-orders-dot';
+        btn.appendChild(dot);
+      }
+      if (dot) {
+        dot.textContent = count;
+        dot.setAttribute('aria-label', count + ' pending orders');
+      }
+    } else if (dot) {
+      dot.remove();
     }
     // Sidebar badge on every staff page (only when the page rendered one)
     const side = document.getElementById('sidebar-pending-count');

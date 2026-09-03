@@ -111,8 +111,7 @@
   .pos-item { padding: 10px 8px; }
   .pos-item .item-name { font-size: 0.75rem; }
   /* Customer info inputs */
-  #pos-customer-name,
-  #pos-table { min-height: 44px; font-size: 0.9rem; }
+  #pos-customer-name { min-height: 44px; font-size: 0.9rem; }
   /* ── Order line: two-row layout so every control is a 40px+ touch target ── */
   .pos-order-item { flex-wrap: wrap; }
   .pos-item-name   { order: 1; flex: 1 1 60%; }
@@ -202,9 +201,8 @@
 
     <!-- Customer Info -->
     <div style="padding:10px 12px;background:var(--cream);border-bottom:2px solid #e8ddd0">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <div style="margin-bottom:8px">
         <input type="text" id="pos-customer-name" placeholder="Customer name" class="form-control" style="font-size:0.82rem;padding:6px 10px">
-        <input type="text" id="pos-table" placeholder="Table #" class="form-control" inputmode="numeric" style="font-size:0.82rem;padding:6px 10px">
       </div>
       <div class="pos-order-type" style="display:flex;gap:12px">
         <label style="display:flex;align-items:center;gap:5px;font-size:0.82rem;cursor:pointer;font-weight:600">

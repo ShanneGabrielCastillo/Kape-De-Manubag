@@ -576,7 +576,7 @@ def update_order_status(request, pk):
                 # Re-validate inside the lock: the status may have changed
                 # between the pre-check above and acquiring the lock.
                 try:
-                    validate_status_transition(order.status, new_status)
+                    validate_status_transition(order.status, new_status, order=order)
                 except ValueError as e:
                     return JsonResponse({'success': False, 'error': str(e)})
 
@@ -1044,9 +1044,10 @@ def quick_status_advance(request, pk):
         # Confirm the computed next step is still a valid transition given the
         # locked status (belt-and-suspenders: next_status already encodes the
         # forward-only flow, but validate_status_transition() is the single
-        # authoritative check for the whole module).
+        # authoritative check for the whole module).  Pass the full order so
+        # the payment-gate rule is also enforced here.
         try:
-            validate_status_transition(order.status, next_status)
+            validate_status_transition(order.status, next_status, order=order)
         except ValueError as e:
             return JsonResponse({'success': False, 'error': str(e)})
 

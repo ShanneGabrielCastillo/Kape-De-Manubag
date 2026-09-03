@@ -22,7 +22,26 @@
       </div>
       <div class="form-group">
         <label class="form-label">Password</label>
-        {{ form.password }}
+        <div style="position:relative">
+          {{ form.password }}
+          <button type="button" id="toggle-password"
+                  aria-label="Show password"
+                  style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;color:#aaa;line-height:1;display:flex;align-items:center">
+            <svg id="eye-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <!-- Eye open (shown when password is hidden) -->
+              <g id="eye-open">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </g>
+              <!-- Eye closed (shown when password is visible) -->
+              <g id="eye-closed" style="display:none">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+                <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+                <line x1="1" y1="1" x2="23" y2="23"/>
+              </g>
+            </svg>
+          </button>
+        </div>
         {% if form.password.errors %}
           <small style="color:var(--red-accent)">{{ form.password.errors.0 }}</small>
         {% endif %}
@@ -42,6 +61,27 @@
     </div>
   </div>
 </div>
+
+<script>
+(function () {
+  var btn     = document.getElementById('toggle-password');
+  var input   = document.querySelector('[name="password"]');
+  var eyeOpen = document.getElementById('eye-open');
+  var eyeShut = document.getElementById('eye-closed');
+  if (!btn || !input) return;
+
+  input.style.paddingRight = '40px';
+
+  btn.addEventListener('click', function () {
+    var isHidden = input.type === 'password';
+    input.type   = isHidden ? 'text' : 'password';
+    eyeOpen.style.display = isHidden ? 'none' : '';
+    eyeShut.style.display = isHidden ? ''     : 'none';
+    btn.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+    input.focus();
+  });
+})();
+</script>
 
 {% if messages %}
 <div class="messages-container">

@@ -103,18 +103,32 @@
 {% block extra_js %}
 <script>
 async function toggleProductActive(btn) {
-  const name = btn.dataset.name;
+  const name         = btn.dataset.name;
   const willDeactivate = btn.dataset.isActive === 'true';
   const activeOrders = parseInt(btn.dataset.activeOrders || '0', 10);
+
   if (willDeactivate) {
-    const base = `Deactivate "${name}"? It will be hidden from the customer menu and the POS, but its history is kept and it can be reactivated anytime.`;
-    const warned = activeOrders > 0
-      ? `Deactivate "${name}"? It is currently in ${activeOrders} active order(s) that are still being fulfilled. It will be hidden from the menu and POS immediately, but those orders keep their saved line items and remain fulfillable. Its history is kept and it can be reactivated anytime.`
-      : base;
-    if (!confirm(warned)) return;
-  } else if (!confirm(`Reactivate "${name}"? It will become visible and sellable again.`)) {
-    return;
+    const hasLiveOrders = activeOrders > 0;
+    const msg = hasLiveOrders
+      ? `"${name}" is currently in ${activeOrders} active order${activeOrders > 1 ? 's' : ''} still being fulfilled. It will be hidden from the menu and POS immediately, but those orders keep their saved items and remain fulfillable. Its history is preserved and it can be reactivated anytime.`
+      : `"${name}" will be hidden from the customer menu and the POS. Its history is preserved and it can be reactivated anytime.`;
+    const ok = await kdmConfirm(msg, {
+      title:        `Deactivate "${name}"?`,
+      icon:         hasLiveOrders ? '⚠️' : '🚫',
+      variant:      hasLiveOrders ? 'warning' : 'danger',
+      confirmLabel: 'Deactivate',
+    });
+    if (!ok) return;
+  } else {
+    const ok = await kdmConfirm(`"${name}" will become visible on the customer menu and the POS again.`, {
+      title:        `Reactivate "${name}"?`,
+      icon:         '✅',
+      variant:      'default',
+      confirmLabel: 'Reactivate',
+    });
+    if (!ok) return;
   }
+
   try {
     // When live orders reference the product the server requires an explicit
     // confirm flag even after the dialog above (defence against stale pages).
@@ -131,21 +145,26 @@ async function toggleProductActive(btn) {
       showToast(willDeactivate ? 'Product deactivated' : 'Product reactivated', 'success');
       setTimeout(() => location.reload(), 800);
     } else if (d.requires_confirmation) {
-      // Page data was stale (an order referencing this product was created
-      // after load): surface the server-side count and ask once more.
-      if (confirm(`${d.message}\n\nClick OK to confirm deactivation.`)) {
-        const r2 = await fetch(btn.dataset.url, {
-          method: 'POST',
-          headers: {'X-CSRFToken':'{{ csrf_token }}'},
-          body: new URLSearchParams({confirm: '1'}),
-        });
-        const d2 = await r2.json();
-        if (d2.success) {
-          showToast('Product deactivated', 'success');
-          setTimeout(() => location.reload(), 800);
-        } else {
-          showToast(d2.error || 'Action failed', 'error');
-        }
+      // Page data was stale — a new live order appeared after page load.
+      // Surface the updated count and ask once more.
+      const ok2 = await kdmConfirm(d.message, {
+        title:        'Still active orders',
+        icon:         '⚠️',
+        variant:      'warning',
+        confirmLabel: 'Deactivate Anyway',
+      });
+      if (!ok2) return;
+      const r2 = await fetch(btn.dataset.url, {
+        method: 'POST',
+        headers: {'X-CSRFToken':'{{ csrf_token }}'},
+        body: new URLSearchParams({confirm: '1'}),
+      });
+      const d2 = await r2.json();
+      if (d2.success) {
+        showToast('Product deactivated', 'success');
+        setTimeout(() => location.reload(), 800);
+      } else {
+        showToast(d2.error || 'Action failed', 'error');
       }
     } else {
       showToast(d.error || 'Action failed', 'error');

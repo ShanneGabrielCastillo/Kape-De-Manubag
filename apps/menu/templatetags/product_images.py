@@ -29,6 +29,16 @@ def resolve_product_image_url(product):
 
 
 @register.simple_tag
+def product_image_url(product):
+    """Return just the URL string for a product image (or the placeholder).
+
+    Use this when you need the raw URL in a data attribute or JSON context
+    rather than a full <img> element.
+    """
+    return resolve_product_image_url(product)
+
+
+@register.simple_tag
 def product_image(product, alt=''):
     """Render a product <img> with a consistent placeholder fallback.
 

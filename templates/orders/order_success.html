@@ -32,12 +32,6 @@
             <div style="font-size:0.75rem;color:#aaa;font-weight:700;text-transform:uppercase">Order Type</div>
             <div style="font-weight:600">{{ order.get_order_type_display }}</div>
           </div>
-          {% if order.table_number %}
-          <div style="background:var(--cream);border-radius:8px;padding:12px">
-            <div style="font-size:0.75rem;color:#aaa;font-weight:700;text-transform:uppercase">Table</div>
-            <div style="font-weight:600">Table {{ order.table_number }}</div>
-          </div>
-          {% endif %}
           <div style="background:var(--cream);border-radius:8px;padding:12px">
             <div style="font-size:0.75rem;color:#aaa;font-weight:700;text-transform:uppercase">Order Total</div>
             <div style="font-weight:700;color:var(--caramel)">₱{{ order.total|floatformat:2 }}</div>

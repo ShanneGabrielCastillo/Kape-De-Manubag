@@ -53,9 +53,15 @@
 async function toggleCategoryActive(url, name, isActive) {
   const willDeactivate = isActive === 'true';
   const msg = willDeactivate
-    ? `Deactivate "${name}"? It will be hidden from the customer menu, the POS and the product dropdowns. Its products and history are kept, and it can be reactivated anytime.`
-    : `Reactivate "${name}"? It will become visible again.`;
-  if (!confirm(msg)) return;
+    ? `"${name}" will be hidden from the customer menu, the POS, and all product dropdowns. Its products and history are kept and it can be reactivated anytime.`
+    : `"${name}" will become visible on the customer menu and the POS again.`;
+  const ok = await kdmConfirm(msg, {
+    title:        willDeactivate ? `Deactivate "${name}"?` : `Reactivate "${name}"?`,
+    icon:         willDeactivate ? '🚫' : '✅',
+    variant:      willDeactivate ? 'danger' : 'default',
+    confirmLabel: willDeactivate ? 'Deactivate' : 'Reactivate',
+  });
+  if (!ok) return;
   try {
     const r = await fetch(url, {method:'POST',headers:{'X-CSRFToken':'{{ csrf_token }}'}});
     const d = await r.json();
@@ -78,10 +84,16 @@ document.addEventListener('click', function(e) {
 });
 
 async function confirmCatDelete(url, name) {
-  if(!confirm(`Delete category "${name}"? Only empty categories can be deleted.`)) return;
-  const r=await fetch(url,{method:'POST',headers:{'X-CSRFToken':'{{ csrf_token }}'}});
-  const d=await r.json();
-  if(d.success){showToast('Category deleted','success');setTimeout(()=>location.reload(),800);}
+  const ok = await kdmConfirm(`"${name}" will be permanently removed. This cannot be undone.`, {
+    title:        `Delete "${name}"?`,
+    icon:         '🗑️',
+    variant:      'danger',
+    confirmLabel: 'Delete',
+  });
+  if (!ok) return;
+  const r = await fetch(url, {method:'POST',headers:{'X-CSRFToken':'{{ csrf_token }}'}});
+  const d = await r.json();
+  if (d.success) { showToast('Category deleted', 'success'); setTimeout(() => location.reload(), 800); }
   else { showToast(d.message || d.error || 'Action failed', 'error', 7000); }
 }
 </script>

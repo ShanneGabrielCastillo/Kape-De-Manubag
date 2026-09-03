@@ -12,25 +12,6 @@ class CheckoutForm(forms.Form):
             'autocapitalize': 'words',
         })
     )
-    customer_phone = forms.CharField(
-        max_length=15,
-        required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'Phone number (optional)',
-            'inputmode': 'tel',
-            'autocomplete': 'tel',
-        })
-    )
-    table_number = forms.CharField(
-        max_length=10,
-        required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'Table number (optional)',
-            'inputmode': 'numeric',
-        })
-    )
     order_type = forms.ChoiceField(
         # Reference the model's canonical choices so a future order-type
         # addition only needs updating in one place.
