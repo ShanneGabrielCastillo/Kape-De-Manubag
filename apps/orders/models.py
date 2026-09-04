@@ -160,6 +160,13 @@ class Order(models.Model):
                 fields=['is_paid', 'status', '-created_at'],
                 name='idx_order_paid_status_created',
             ),
+            # Covers: Finance cash-sales query pattern
+            # (filter is_paid, status, payment_method, created_at date).
+            # Added by migration 0015_order_finance_sales_index.
+            models.Index(
+                fields=['is_paid', 'status', 'payment_method', 'created_at'],
+                name='idx_order_finance_sales',
+            ),
         ]
 
 
