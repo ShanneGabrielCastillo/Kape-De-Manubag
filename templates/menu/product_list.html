@@ -1,5 +1,6 @@
 {% extends "base_admin.html" %}
 {% load product_images %}
+{% load static %}
 {% block page_title %}Products{% endblock %}
 
 {% block extra_css %}
@@ -461,7 +462,8 @@ document.addEventListener('click', function(e) {
 // Runs after DOMContentLoaded (responsive-tables.js fires first, then this
 // suppresses its output and inserts the styled cards instead).
 (function () {
-  function stockClass(status) {
+  // Placeholder URL resolved via Django's static file storage (avoids hard-coded path)
+  const PM_PLACEHOLDER = '{% static "images/placeholder.svg" %}';
     if (status === 'critical') return 'stock-critical';
     if (status === 'low')      return 'stock-low';
     return 'stock-ok';
@@ -524,7 +526,7 @@ document.addEventListener('click', function(e) {
       card.className = 'pm-card' + (isActive ? '' : ' pm-card--inactive');
       card.innerHTML = `
         <div class="pm-top">
-          <img class="pm-img" src="${escHtml(d.img || '')}" alt="${escHtml(d.name || '')}" onerror="this.src='/static/images/placeholder.svg'">
+          <img class="pm-img" src="${escHtml(d.img || '')}" alt="${escHtml(d.name || '')}" onerror="this.src=PM_PLACEHOLDER;this.onerror=null">
           <div class="pm-info">
             <div class="pm-name">${escHtml(d.name || '')}</div>
             <div class="pm-category">Category: ${escHtml(d.category || '')}</div>
