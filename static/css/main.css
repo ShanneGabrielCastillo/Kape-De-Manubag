@@ -1,4 +1,4 @@
-/* =====================================================
+ /* =====================================================
    KAPE DE MANUBAG - Main Stylesheet
    Warm cafe aesthetic with modern POS interface
    ===================================================== */
@@ -1214,7 +1214,7 @@ tbody tr:last-child { border-bottom: none; }
 }
 
 @media (max-width: 480px) {
-  .stats-grid { grid-template-columns: 1fr; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .products-grid { grid-template-columns: 1fr; }
   .filter-bar .form-control, .filter-bar .form-select { max-width: 100%; }
 }

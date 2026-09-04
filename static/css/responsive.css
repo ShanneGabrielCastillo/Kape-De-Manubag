@@ -2653,9 +2653,11 @@
    -------------------------------------------------------------------------- */
 @media (max-width: 360px) {
 
-  /* Single column at very narrow screens */
+  /* Keep 2-column grid even on very narrow screens — the dashboard always
+     has 4 stat cards so a 2×2 layout is always balanced. The original
+     single-column rule was written for a 3-card variant that no longer exists. */
   .stats-grid {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: repeat(2, 1fr) !important;
   }
 
 }
