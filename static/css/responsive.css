@@ -555,7 +555,7 @@
 
   /* Hide desktop table, show mobile cards */
   .order-items-table          { display: none !important; }
-  .order-items-mobile-cards   { display: block; }
+  .order-items-mobile-cards   { display: block; padding: 0 16px; }
 
   /* Individual item card */
   .order-item-card {
@@ -565,20 +565,20 @@
   .order-item-card:last-of-type { border-bottom: none; }
   .order-item-card-top {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: flex-start;
-    gap: 12px;
+    gap: 10px;
     margin-bottom: 4px;
   }
   .order-item-card-name {
     font-weight: 700;
-    font-size: 0.9rem;
+    font-size: 0.88rem;
     color: var(--brown-dark);
     flex: 1;
     line-height: 1.3;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     min-width: 0;
   }
   .order-item-card-name-text {
@@ -595,23 +595,28 @@
   }
   .order-item-card-size {
     font-weight: 400;
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     color: #aaa;
   }
   .order-item-card-subtotal {
     font-weight: 700;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     color: var(--caramel);
     white-space: nowrap;
     flex-shrink: 0;
+    margin-left: auto;
+    padding-left: 12px;
+    max-width: 30%;          /* never wider than 30% of the card */
+    text-align: right;
   }
   .order-item-card-bottom {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 8px;
+    /* indent past the thumb (34px) + gap (8px) to align with name text */
+    padding-left: 42px;
   }
-  .order-item-card-qty  { font-size: 0.8rem; color: #888; }
+  .order-item-card-qty  { font-size: 0.78rem; color: #888; }
   .order-item-card-note { font-size: 0.75rem; color: var(--caramel); font-style: italic; }
 
   /* Summary lines (packaging, discount, total) */
@@ -623,6 +628,7 @@
     color: #888;
     border-top: 1px solid var(--cream);
     margin-top: 4px;
+    max-width: 100%;
   }
   .order-summary-total {
     display: flex;

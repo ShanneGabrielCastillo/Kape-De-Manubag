@@ -29,7 +29,7 @@
               <a href="{% url 'menu:category_edit' cat.pk %}" class="btn btn-sm btn-outline">Edit</a>
               <button class="btn btn-sm {% if cat.is_active %}btn-outline{% else %}btn-caramel{% endif %} toggle-category-btn"
                       data-url="{% url 'menu:category_toggle_active' cat.pk %}"
-                      data-name="{{ cat.name|escapejs }}"
+                      data-name="{{ cat.name|escape }}"
                       data-is-active="{{ cat.is_active|yesno:'true,false' }}">
                 {% if cat.is_active %}Deactivate{% else %}Reactivate{% endif %}
               </button>

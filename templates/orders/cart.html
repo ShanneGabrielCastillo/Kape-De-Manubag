@@ -37,7 +37,7 @@
         <span class="cart-remove"
               data-item-id="{{ item.pk }}"
               data-url="{% url 'orders:remove_from_cart' item.pk %}"
-              data-name="{{ item.product.name|escapejs }}"
+              data-name="{{ item.product.name|escape }}"
               data-qty="{{ item.quantity }}"
               data-price="₱{{ item.subtotal|floatformat:2 }}"
               data-img="{% product_image_url item.product %}"

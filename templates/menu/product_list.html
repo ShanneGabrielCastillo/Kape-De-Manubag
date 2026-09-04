@@ -1,6 +1,256 @@
 {% extends "base_admin.html" %}
 {% load product_images %}
 {% block page_title %}Products{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Product list: custom filter bar (mobile only) ─────────────────── */
+@media (max-width: 767.98px) {
+  /* Hide the generic filter-bar stacking; we control layout ourselves */
+  .product-filter-bar { margin-bottom: 16px; }
+  .product-filter-bar form {
+    display: flex !important;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  /* Search box with inset icon */
+  .pfb-search {
+    position: relative;
+  }
+  .pfb-search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1rem;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .pfb-search-input {
+    padding-left: 40px !important;
+    border-radius: 24px !important;
+    min-height: 46px;
+    font-size: 0.95rem;
+    width: 100%;
+  }
+
+  /* Category select with icon prefix */
+  .pfb-select-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  .pfb-select-icon {
+    position: absolute;
+    left: 14px;
+    font-size: 1rem;
+    pointer-events: none;
+    z-index: 1;
+    color: var(--brown-mid);
+  }
+  .pfb-select {
+    padding-left: 38px !important;
+    min-height: 46px;
+    font-size: 0.95rem;
+    width: 100%;
+    appearance: none;
+    -webkit-appearance: none;
+    border-radius: 12px !important;
+  }
+  .pfb-select-arrow {
+    position: absolute;
+    right: 14px;
+    font-size: 1rem;
+    pointer-events: none;
+    color: var(--brown-mid);
+  }
+
+  /* Filter + Clear as a 2-column row */
+  .pfb-btn-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .pfb-btn-filter,
+  .pfb-btn-clear {
+    min-height: 46px;
+    justify-content: center;
+    border-radius: 12px !important;
+    font-size: 0.9rem;
+  }
+}
+
+/* ── Desktop: hide mobile-only icon spans, reset input padding ──────── */
+@media (min-width: 768px) {
+  .pfb-search-icon,
+  .pfb-select-icon,
+  .pfb-select-arrow { display: none; }
+  .pfb-search-input { padding-left: 14px !important; border-radius: var(--radius-sm) !important; }
+  .pfb-select       { padding-left: 14px !important; border-radius: var(--radius-sm) !important;
+                      appearance: revert; -webkit-appearance: revert; }
+  /* Desktop form: all controls in one horizontal row, vertically centered */
+  #product-filter-form {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 10px;
+  }
+  .pfb-search    { flex: 1; min-width: 160px; }
+  .pfb-select-wrap { flex: 0 0 200px; }
+  .pfb-btn-row   { display: flex; gap: 8px; flex-shrink: 0; }
+  .pfb-btn-filter,
+  .pfb-btn-clear { min-height: unset; border-radius: var(--radius-sm) !important; font-size: 0.9rem; }
+}
+
+/* ── Product mobile cards (scoped — desktop table unchanged) ────────── */
+@media (max-width: 767.98px) {
+
+  /* Card wrapper */
+  .pm-card {
+    background: var(--cream-white);
+    border-radius: 14px;
+    box-shadow: 0 2px 12px rgba(44,24,16,0.09);
+    margin-bottom: 14px;
+    overflow: hidden;
+    transition: box-shadow 0.2s;
+  }
+  .pm-card:active { box-shadow: 0 4px 18px rgba(44,24,16,0.16); }
+  .pm-card:last-child { margin-bottom: 0; }
+  .pm-card--inactive { opacity: 0.65; }
+
+  /* Top row: image + info + price */
+  .pm-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 14px 10px;
+  }
+  .pm-img {
+    width: 72px;
+    height: 72px;
+    border-radius: 10px;
+    object-fit: cover;
+    background: var(--cream);
+    flex-shrink: 0;
+    display: block;
+  }
+  .pm-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .pm-name {
+    font-weight: 700;
+    font-size: 0.92rem;
+    color: var(--brown-dark);
+    line-height: 1.35;
+    margin-bottom: 3px;
+    word-break: break-word;
+  }
+  .pm-category {
+    font-size: 0.75rem;
+    color: #999;
+    margin-bottom: 7px;
+  }
+  .pm-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .pm-price {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--caramel);
+    font-family: 'Playfair Display', serif;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Divider */
+  .pm-divider {
+    height: 1px;
+    background: var(--cream);
+    margin: 0 14px;
+  }
+
+  /* Stock + order count row */
+  .pm-meta {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 8px 14px;
+    font-size: 0.78rem;
+    color: #888;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .pm-stock-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .pm-stock-label { color: #aaa; }
+  .pm-stock-sep {
+    width: 1px;
+    height: 14px;
+    background: #ddd;
+    margin: 0 2px;
+  }
+  .pm-stock-val {
+    font-weight: 700;
+    font-size: 0.82rem;
+  }
+  .pm-stock-val.stock-ok       { color: var(--green-success); }
+  .pm-stock-val.stock-low      { color: #e67e22; }
+  .pm-stock-val.stock-critical { color: var(--red-accent); }
+
+  .pm-order-badge {
+    font-size: 0.72rem;
+    padding: 3px 8px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+  .pm-order-badge--active {
+    background: #fff3cd;
+    color: #856404;
+  }
+  .pm-order-badge--historical {
+    background: #eee;
+    color: #666;
+  }
+
+  /* Action buttons row */
+  .pm-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    padding: 10px 14px 14px;
+  }
+  .pm-actions .btn {
+    justify-content: center;
+    min-height: 40px;
+    font-size: 0.78rem;
+    padding: 6px 6px;
+    border-radius: 10px !important;
+  }
+
+  /* Badge sizing inside product cards */
+  .pm-badges .badge {
+    font-size: 0.68rem;
+    padding: 3px 8px;
+    white-space: nowrap;
+  }
+
+  /* Hide the generic table-mobile-cards output for this page;
+     our custom .pm-cards container replaces it */
+  .pm-cards ~ .table-mobile-cards,
+  .table-mobile-cards:not(.pm-cards) {
+    display: none !important;
+  }
+}
+</style>
+{% endblock %}
 {% block content %}
 <div class="page-header">
   <div><h1 class="page-title">Products</h1><p class="page-subtitle">Manage your menu items</p></div>
@@ -16,29 +266,53 @@
 </div>
 {% endif %}
 
-<div class="filter-bar">
-  <form method="get" style="display:flex;gap:10px;flex-wrap:wrap">
-    <input type="text" name="q" value="{{ search }}" placeholder="Search products..." class="form-control">
-    <select name="category" class="form-control form-select">
-      <option value="">All Categories</option>
-      {% for cat in categories %}
-      <option value="{{ cat.slug }}" {% if category_filter == cat.slug %}selected{% endif %}>{{ cat.name }}</option>
-      {% endfor %}
-    </select>
-    <button type="submit" class="btn btn-primary">Filter</button>
-    <a href="{% url 'menu:product_list' %}" class="btn btn-outline">Clear</a>
+<div class="filter-bar product-filter-bar">
+  <form method="get" id="product-filter-form">
+    <div class="pfb-search">
+      <span class="pfb-search-icon">🔍</span>
+      <input type="text" name="q" value="{{ search }}" placeholder="Search products..." class="form-control pfb-search-input">
+    </div>
+    <div class="pfb-select-wrap">
+      <span class="pfb-select-icon">⊞</span>
+      <select name="category" class="form-control form-select pfb-select">
+        <option value="">All Categories</option>
+        {% for cat in categories %}
+        <option value="{{ cat.slug }}" {% if category_filter == cat.slug %}selected{% endif %}>{{ cat.name }}</option>
+        {% endfor %}
+      </select>
+      <span class="pfb-select-arrow">▾</span>
+    </div>
+    <div class="pfb-btn-row">
+      <button type="submit" class="btn btn-primary pfb-btn-filter">🔧 Filter</button>
+      <a href="{% url 'menu:product_list' %}" class="btn btn-outline pfb-btn-clear">↺ Clear</a>
+    </div>
   </form>
 </div>
 
 <div class="card">
   <div class="table-wrapper">
-    <table class="table-products" data-mobile-cards="true">
+    <table class="table-products" data-mobile-cards="true" data-card-builder="products">
       <thead>
         <tr><th data-role="primary">Product</th><th data-role="secondary">Category</th><th data-role="amount">Price</th><th data-role="secondary">Stock</th><th data-role="status">Status</th><th data-role="actions">Actions</th></tr>
       </thead>
       <tbody>
         {% for product in products %}
-        <tr {% if not product.is_active %}style="opacity:.65"{% endif %}>
+        <tr {% if not product.is_active %}style="opacity:.65"{% endif %}
+            data-product-id="{{ product.pk }}"
+            data-name="{{ product.name|escape }}"
+            data-price="₱{{ product.price }}"
+            data-category="{{ product.category.name|escape }}"
+            data-stock="{{ product.stock_quantity }}"
+            data-stock-status="{{ product.stock_status }}"
+            data-is-active="{{ product.is_active|yesno:'true,false' }}"
+            data-img="{% product_image_url product %}"
+            data-active-orders="{{ product.active_order_count|default:0 }}"
+            data-total-orders="{{ product.total_order_count|default:0 }}"
+            data-edit-url="{% url 'menu:product_edit' product.pk %}"
+            data-stock-url="{% url 'inventory:restock' product.pk %}"
+            data-toggle-url="{% url 'menu:product_toggle_active' product.pk %}"
+            data-is-available="{{ product.is_available|yesno:'true,false' }}"
+        >
           <td>
             <div style="display:flex;align-items:center;gap:12px">
               <div style="width:40px;height:40px;border-radius:8px;background:var(--cream);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center">
@@ -83,7 +357,7 @@
               <a href="{% url 'menu:product_edit' product.pk %}" class="btn btn-sm btn-outline">Edit</a>
               <a href="{% url 'inventory:restock' product.pk %}" class="btn btn-sm btn-outline">Stock</a>
               <button class="btn btn-sm {% if product.is_active %}{% if product.active_order_count %}btn-warning{% else %}btn-danger{% endif %}{% else %}btn-caramel{% endif %} toggle-active-btn"
-                      data-id="{{ product.pk }}" data-name="{{ product.name|escapejs }}"
+                      data-id="{{ product.pk }}" data-name="{{ product.name|escape }}"
                       data-url="{% url 'menu:product_toggle_active' product.pk %}"
                       data-is-active="{{ product.is_active|yesno:'true,false' }}"
                       data-active-orders="{{ product.active_order_count|default:0 }}">
@@ -180,5 +454,148 @@ document.addEventListener('click', function(e) {
   const btn = e.target.closest('.toggle-active-btn');
   if (btn) toggleProductActive(btn);
 });
+
+// ── Custom mobile card builder for the products page ─────────────────────
+// Replaces the generic responsive-tables output with a layout that matches
+// the product-list mockup: image + name + category + badges + stock + actions.
+// Runs after DOMContentLoaded (responsive-tables.js fires first, then this
+// suppresses its output and inserts the styled cards instead).
+(function () {
+  function stockClass(status) {
+    if (status === 'critical') return 'stock-critical';
+    if (status === 'low')      return 'stock-low';
+    return 'stock-ok';
+  }
+
+  function buildProductCards() {
+    const table = document.querySelector('table[data-card-builder="products"]');
+    if (!table) return;
+    if (window.innerWidth > 767) return;
+
+    // Remove any previous custom cards (idempotency on re-runs)
+    const prev = document.querySelector('.pm-cards');
+    if (prev) prev.remove();
+
+    const container = document.createElement('div');
+    container.className = 'pm-cards';
+
+    const rows = table.querySelectorAll('tbody tr');
+    if (!rows.length) {
+      // Empty state
+      const em = document.createElement('div');
+      em.className = 'empty-state';
+      em.style.cssText = 'padding:32px;text-align:center;color:#aaa';
+      em.textContent = 'No products found.';
+      container.appendChild(em);
+    }
+
+    rows.forEach(function (row) {
+      const d = row.dataset;
+      if (!d.productId) {
+        // colspan empty row
+        const em = document.createElement('div');
+        em.className = 'empty-state';
+        em.style.cssText = 'padding:32px;text-align:center;color:#aaa';
+        em.textContent = 'No products found.';
+        container.appendChild(em);
+        return;
+      }
+
+      const isActive    = d.isActive === 'true';
+      const isAvailable = d.isAvailable === 'true';
+      const activeOrders  = parseInt(d.activeOrders || '0', 10);
+      const totalOrders   = parseInt(d.totalOrders  || '0', 10);
+      const stockQty      = parseInt(d.stock || '0', 10);
+      const stockStatus   = d.stockStatus || 'ok';
+
+      // Deactivate/Reactivate button class mirrors the table
+      let toggleClass = 'btn-caramel';
+      if (isActive) toggleClass = activeOrders > 0 ? 'btn-warning' : 'btn-danger';
+
+      // Order badge HTML
+      let orderBadgeHtml = '';
+      if (activeOrders > 0) {
+        orderBadgeHtml = `<span class="pm-order-badge pm-order-badge--active">⚠ ${activeOrders} active order${activeOrders > 1 ? 's' : ''}</span>`;
+      } else if (totalOrders > 0) {
+        orderBadgeHtml = `<span class="pm-order-badge pm-order-badge--historical">${totalOrders} historical order${totalOrders > 1 ? 's' : ''}</span>`;
+      }
+
+      const card = document.createElement('div');
+      card.className = 'pm-card' + (isActive ? '' : ' pm-card--inactive');
+      card.innerHTML = `
+        <div class="pm-top">
+          <img class="pm-img" src="${escHtml(d.img || '')}" alt="${escHtml(d.name || '')}" onerror="this.src='/static/images/placeholder.svg'">
+          <div class="pm-info">
+            <div class="pm-name">${escHtml(d.name || '')}</div>
+            <div class="pm-category">Category: ${escHtml(d.category || '')}</div>
+            <div class="pm-badges">
+              <span class="badge ${isActive ? 'badge-ready' : 'badge-cancelled'}">
+                ${isActive ? '● ACTIVE' : '● INACTIVE'}
+              </span>
+              <span class="badge ${isAvailable ? 'badge-ready' : 'badge-cancelled'} toggle-product-btn"
+                    data-product-id="${escHtml(d.productId)}"
+                    data-url="${escHtml(d.toggleUrl || '')}"
+                    data-active-orders="${activeOrders}"
+                    style="cursor:pointer">
+                ${isAvailable ? '● AVAILABLE' : '● UNAVAILABLE'}
+              </span>
+            </div>
+          </div>
+          <div class="pm-price">${escHtml(d.price || '')}</div>
+        </div>
+        <div class="pm-divider"></div>
+        <div class="pm-meta">
+          <div class="pm-stock-row">
+            <span class="pm-stock-label">📦 Stock</span>
+            <span class="pm-stock-sep"></span>
+            <span class="pm-stock-val ${stockClass(stockStatus)}">${stockQty}</span>
+          </div>
+          ${orderBadgeHtml}
+        </div>
+        <div class="pm-divider"></div>
+        <div class="pm-actions">
+          <a href="${escHtml(d.editUrl || '')}" class="btn btn-sm btn-outline">✏ Edit</a>
+          <a href="${escHtml(d.stockUrl || '')}" class="btn btn-sm btn-outline">📦 Stock</a>
+          <button class="btn btn-sm ${toggleClass} toggle-active-btn"
+                  data-id="${escHtml(d.productId)}"
+                  data-name="${escHtml(d.name || '')}"
+                  data-url="${escHtml(d.toggleUrl || '')}"
+                  data-is-active="${isActive ? 'true' : 'false'}"
+                  data-active-orders="${activeOrders}">
+            ${isActive ? '🚫 Deactivate' : '✅ Reactivate'}
+          </button>
+        </div>`;
+      container.appendChild(card);
+    });
+
+    // Insert after the .card wrapper (same pattern as responsive-tables.js)
+    const cardWrapper = table.closest('.card') || table.closest('.table-wrapper');
+    if (cardWrapper) {
+      cardWrapper.insertAdjacentElement('afterend', container);
+    }
+
+    // Suppress the generic table-mobile-cards output for this table
+    const generic = document.querySelector('.table-mobile-cards');
+    if (generic) generic.style.display = 'none';
+  }
+
+  function escHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+
+  // Run after responsive-tables.js has already run (DOMContentLoaded)
+  document.addEventListener('DOMContentLoaded', function () {
+    buildProductCards();
+  });
+
+  // Re-run on resize so the correct layout shows when the window is resized
+  let resizeTimer;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(buildProductCards, 150);
+  });
+})();
 </script>
 {% endblock %}

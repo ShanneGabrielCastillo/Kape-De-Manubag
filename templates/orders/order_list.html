@@ -1,5 +1,299 @@
 {% extends "base_admin.html" %}
 {% block page_title %}Order Management{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ══════════════════════════════════════════════════════════════
+   ORDER LIST — MOBILE CARD UI  (≤ 767px only, desktop untouched)
+   ══════════════════════════════════════════════════════════════ */
+@media (max-width: 767.98px) {
+
+  /* ── Status tab pill row ── */
+  .status-filter-bar {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+    flex-wrap: nowrap;
+    margin-bottom: 14px;
+  }
+  .status-filter-bar::-webkit-scrollbar { display: none; }
+  .status-filter-bar .btn {
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-height: 36px;
+    border-radius: 20px !important;
+    font-size: 0.8rem;
+    padding: 6px 14px;
+  }
+
+  /* ── Search + filter bar ── */
+  .order-search-bar {
+    margin-bottom: 12px;
+  }
+  .order-search-wrap {
+    position: relative;
+    margin-bottom: 10px;
+  }
+  .order-search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1rem;
+    pointer-events: none;
+    color: #aaa;
+  }
+  .order-search-input {
+    width: 100%;
+    padding: 11px 14px 11px 40px !important;
+    border-radius: 12px !important;
+    min-height: 46px;
+    font-size: 0.9rem;
+  }
+  .order-filter-btns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .order-filter-btns .btn {
+    min-height: 44px;
+    justify-content: center;
+    border-radius: 12px !important;
+    font-size: 0.88rem;
+  }
+
+  /* ── Mobile footer hint ── */
+  .om-footer-hint {
+    text-align: center;
+    font-size: 0.78rem;
+    color: #aaa;
+    padding: 14px 0 4px;
+  }
+}
+
+/* Desktop: keep filter-btns as flex row */
+@media (min-width: 768px) {
+  .order-filter-btns { display: flex; gap: 8px; }
+  .om-footer-hint { display: none; }
+  #order-search-form { display: flex !important; gap: 10px; flex-wrap: wrap; }
+  .order-search-wrap { flex: 1; min-width: 200px; margin-bottom: 0; position: static; }
+  /* Hide the mobile search icon on desktop — it's a mobile-only design element */
+  .order-search-icon { display: none; }
+  .order-search-input { padding: 10px 14px !important; border-radius: var(--radius-sm) !important; }
+}
+  .om-cards ~ .table-mobile-cards,
+  .table-mobile-cards:not(.om-cards) { display: none !important; }
+
+  /* ── Order card ── */
+  .om-card {
+    background: var(--cream-white);
+    border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(44,24,16,0.08);
+    margin-bottom: 14px;
+    overflow: hidden;
+    transition: box-shadow 0.2s;
+  }
+  .om-card:last-child { margin-bottom: 0; }
+  .om-card.new-order-highlight { animation: newOrderPulse 0.6s ease 3; }
+  @keyframes newOrderPulse {
+    0%, 100% { box-shadow: 0 2px 10px rgba(44,24,16,0.08); }
+    50%       { box-shadow: 0 0 0 3px var(--caramel); }
+  }
+
+  /* Top section: icon + number + total */
+  .om-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 14px 14px 8px;
+  }
+  .om-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: var(--cream);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+  }
+  .om-info { flex: 1; min-width: 0; overflow: hidden; }
+  .om-number {
+    font-weight: 700;
+    font-size: 0.88rem;
+    color: var(--caramel);
+    display: block;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .om-customer {
+    font-size: 0.78rem;
+    color: #999;
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .om-total {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--caramel);
+    font-family: 'Playfair Display', serif;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Order type + item count row */
+  .om-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 14px 10px;
+    font-size: 0.78rem;
+    color: #777;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .om-meta > span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 1;
+  }
+  .om-meta-sep {
+    color: #ccc;
+    flex-shrink: 0;
+  }
+  .om-meta > span:last-child {
+    flex-shrink: 0;
+  }
+
+  /* Divider */
+  .om-divider {
+    height: 1px;
+    background: var(--cream);
+    margin: 0 14px;
+  }
+
+  /* Payment + Status two-column section */
+  .om-paysec {
+    display: grid;
+    grid-template-columns: 90px 1fr;   /* payment col fixed; status gets the rest */
+    gap: 0;
+    padding: 10px 14px;
+    align-items: start;
+  }
+  .om-paysec-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #aaa;
+    margin-bottom: 5px;
+  }
+  /* Payment side */
+  .om-pay-col {
+    padding-right: 10px;
+    border-right: 1px solid var(--cream);
+    min-width: 0;
+  }
+  /* Status side */
+  .om-status-col {
+    padding-left: 10px;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .om-status-inner {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 5px;
+  }
+  .om-status-inner select {
+    /* Fixed-width so the browser's native min-width never pushes the button out.
+       Status col is ~220px; 40px button + 5px gap = 45px reserved for button. */
+    width: calc(100% - 45px) !important;
+    min-width: 0 !important;
+    flex-shrink: 1;
+    font-size: 0.75rem !important;
+    min-height: 32px !important;
+    padding: 4px 4px 4px 6px !important;
+    border-radius: 8px !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .om-status-inner .btn {
+    width: 40px !important;
+    min-width: 40px !important;
+    max-width: 40px !important;
+    height: 32px;
+    min-height: 32px !important;
+    flex-shrink: 0;
+    padding: 0 !important;
+    border-radius: 8px !important;
+    font-size: 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+  }
+  /* Terminal state badge in status col */
+  .om-status-col .badge {
+    font-size: 0.72rem;
+    padding: 4px 8px;
+  }
+  /* Payment gate hint */
+  .om-status-col .complete-unpaid-hint {
+    font-size: 0.7rem;
+    margin-top: 4px;
+    padding: 4px 6px;
+    line-height: 1.3;
+  }
+
+  /* Date row */
+  .om-date {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 14px 10px;
+    font-size: 0.75rem;
+    color: #aaa;
+  }
+
+  /* Action buttons */
+  .om-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    padding: 10px 14px 14px;
+  }
+  .om-actions .btn {
+    justify-content: center;
+    min-height: 40px;
+    font-size: 0.78rem;
+    padding: 6px 4px;
+    border-radius: 10px !important;
+  }
+  /* When there's no quick-advance button, last button spans remaining cols */
+  .om-actions.om-actions--2 {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* Pay button inside payment column */
+  .om-pay-col .btn {
+    min-height: 28px !important;
+    font-size: 0.72rem !important;
+    padding: 3px 10px !important;
+    border-radius: 6px !important;
+  }
+}
+</style>
+{% endblock %}
 {% block content %}
 <div class="page-header">
   <div>
@@ -18,24 +312,45 @@
 </div>
 
 <!-- Search -->
-<div class="filter-bar">
-  <form method="get" style="display:flex;gap:10px;flex-wrap:wrap;width:100%">
+<div class="filter-bar order-search-bar">
+  <form method="get" id="order-search-form">
     {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
-    <input type="text" name="q" value="{{ search }}" placeholder="Search order # or customer..." class="form-control">
-    <button type="submit" class="btn btn-primary">Search</button>
-    {% if search %}<a href="?{% if status_filter %}status={{ status_filter }}{% endif %}" class="btn btn-outline">Clear</a>{% endif %}
+    <div class="order-search-wrap">
+      <span class="order-search-icon">🔍</span>
+      <input type="text" name="q" value="{{ search }}" placeholder="Search order # or customer..." class="form-control order-search-input">
+    </div>
+    <div class="order-filter-btns">
+      <button type="submit" class="btn btn-primary">🔧 Filter</button>
+      <a href="?{% if status_filter %}status={{ status_filter }}{% endif %}" class="btn btn-outline">↺ Clear</a>
+    </div>
   </form>
 </div>
 
 <div class="card">
   <div class="table-wrapper">
-    <table class="table-orders" data-mobile-cards="true">
+    <table class="table-orders" data-mobile-cards="true" data-card-builder="orders">
       <thead>
         <tr><th data-role="primary">Order #</th><th data-role="secondary">Customer</th><th data-role="secondary">Type/Table</th><th data-role="secondary">Items</th><th data-role="amount">Total</th><th data-role="status">Status</th><th data-role="secondary">Payment</th><th data-role="date">Time</th><th data-role="actions">Actions</th></tr>
       </thead>
       <tbody>
         {% for order in orders %}
-        <tr data-order-id="{{ order.pk }}" data-is-paid="{{ order.is_paid|yesno:'true,false' }}">
+        <tr data-order-id="{{ order.pk }}" data-is-paid="{{ order.is_paid|yesno:'true,false' }}"
+            data-order-number="{{ order.order_number|escape }}"
+            data-customer="{{ order.customer_name|escape }}"
+            data-order-type="{{ order.get_order_type_display|escape }}"
+            data-item-count="{{ order.item_count }}"
+            data-total="₱{{ order.total|floatformat:2 }}"
+            data-status="{{ order.status }}"
+            data-status-display="{{ order.get_status_display|escape }}"
+            data-next-status="{{ order.next_status|default:'' }}"
+            data-date="{{ order.created_at|date:'M d, g:i A'|escape }}"
+            data-detail-url="{% url 'orders:order_detail' order.pk %}"
+            data-receipt-url="{% url 'orders:print_receipt' order.pk %}"
+            data-advance-url="{% url 'orders:quick_status_advance' order.pk %}"
+            data-pay-url="{% url 'orders:process_payment' order.pk %}"
+            data-status-url="{% url 'orders:update_status' order.pk %}"
+            data-total-raw="{{ order.total }}"
+        >
           <td><a href="{% url 'orders:order_detail' order.pk %}" style="font-weight:700;color:var(--caramel)">{{ order.order_number }}</a></td>
           <td>{{ order.customer_name }}</td>
           <td>
@@ -104,6 +419,11 @@
 
 <!-- Payment Modal -->
 {% include "partials/payment_modal.html" %}
+
+<!-- Mobile footer hint -->
+<div class="om-footer-hint">
+  ⓘ Showing {% if status_filter %}{{ status_filter }}{% else %}all{% endif %} orders
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -339,5 +659,202 @@ RealtimeConnection.on('status_changed', function(data) {
     }
   }
 });
+// ── Custom mobile card builder for the order list page ───────────────────
+// Replaces the generic responsive-tables output with a layout that matches
+// the order-management mockup. Runs after DOMContentLoaded.
+(function () {
+
+  // Order-type icons
+  const TYPE_ICONS = { 'Dine-In': '🍽️', 'Take-Out': '🥡' };
+
+  // Status dot colours (matches CSS badge colours)
+  const STATUS_DOT = {
+    pending:   '#ffc107',
+    preparing: '#0d6efd',
+    ready:     '#198754',
+    completed: '#198754',
+    cancelled: '#dc3545',
+  };
+
+  function dot(status) {
+    const c = STATUS_DOT[status] || '#aaa';
+    return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c};margin-right:4px;flex-shrink:0"></span>`;
+  }
+
+  function buildOrderCard(row) {
+    const d         = row.dataset;
+    const isPaid    = d.isPaid === 'true';
+    const status    = d.status || 'pending';
+    const isTerminal = status === 'completed' || status === 'cancelled';
+    const nextStatus = d.nextStatus || '';
+    const csrf      = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+    const orderType = d.orderType || '';
+
+    // ── Card wrapper ──
+    const card = document.createElement('div');
+    card.className = 'om-card';
+    card.dataset.orderId = d.orderId || '';
+
+    // ── Top row ──
+    const typeIcon = TYPE_ICONS[orderType] || '📋';
+    const topHtml = `
+      <div class="om-top">
+        <div class="om-icon">${typeIcon}</div>
+        <div class="om-info">
+          <a href="${escHtml(d.detailUrl || '')}" class="om-number">${escHtml(d.orderNumber || '')}</a>
+          <span class="om-customer">${escHtml(d.customer || '')}</span>
+        </div>
+        <div class="om-total">${escHtml(d.total || '')}</div>
+      </div>`;
+
+    // ── Meta row ──
+    const metaHtml = `
+      <div class="om-meta">
+        <span>${typeIcon} ${escHtml(orderType)}</span>
+        <span class="om-meta-sep">•</span>
+        <span>${escHtml(d.itemCount || '0')} item${d.itemCount === '1' ? '' : 's'}</span>
+      </div>`;
+
+    // ── Payment section ──
+    let payHtml;
+    if (isPaid) {
+      payHtml = `<span class="badge badge-paid" style="font-size:0.72rem">● Paid</span>`;
+    } else if (status !== 'cancelled') {
+      payHtml = `<button onclick="openPaymentModal(${escHtml(d.orderId)}, ${escHtml(d.totalRaw || '0')}, '${escHtml(d.payUrl || '')}')"
+                         class="btn btn-sm btn-caramel">Pay</button>`;
+    } else {
+      payHtml = `<span style="font-size:0.75rem;color:#aaa">—</span>`;
+    }
+
+    // ── Status section ──
+    let statusHtml;
+    if (isTerminal) {
+      const badgeClass = status === 'completed' ? 'badge-ready' : 'badge-cancelled';
+      statusHtml = `<span class="badge ${badgeClass}">${dot(status)}${escHtml(d.statusDisplay || '')}</span>`;
+    } else {
+      // Build select options from VALID_TRANSITIONS (available globally)
+      const allowed  = (window.VALID_TRANSITIONS && window.VALID_TRANSITIONS[status]) || [];
+      const labels   = window.STATUS_LABELS || {};
+      const options  = [`<option value="${escHtml(status)}" selected>${dot(status)} ${escHtml(d.statusDisplay || '')}</option>`];
+      allowed.forEach(v => {
+        options.push(`<option value="${escHtml(v)}">${dot(v)} ${labels[v] || v}</option>`);
+      });
+      const submitBtn = nextStatus
+        ? `<button type="submit" class="btn btn-sm btn-primary">✓</button>`
+        : '';
+      statusHtml = `
+        <div class="om-status-inner">
+          <select name="status" class="form-control form-select">${options.join('')}</select>
+          ${submitBtn}
+        </div>
+        <div class="complete-unpaid-hint" style="display:none;font-size:0.7rem;color:var(--red-accent);background:#fff5f5;border:1px solid #fcc;border-radius:6px;padding:4px 6px;margin-top:4px;line-height:1.3">
+          ⚠️ Cannot complete — not paid yet.
+        </div>`;
+    }
+
+    // ── Payment + Status two-col row ──
+    const paySecHtml = `
+      <div class="om-divider"></div>
+      <div class="om-paysec">
+        <div class="om-pay-col">
+          <div class="om-paysec-label">Payment</div>
+          ${payHtml}
+        </div>
+        <div class="om-status-col">
+          <div class="om-paysec-label">Status</div>
+          <form class="status-update-form"
+                data-order-id="${escHtml(d.orderId || '')}"
+                data-url="${escHtml(d.statusUrl || '')}"
+                data-is-paid="${isPaid ? 'true' : 'false'}">
+            <input type="hidden" name="csrfmiddlewaretoken" value="${escHtml(csrf)}">
+            ${statusHtml}
+          </form>
+        </div>
+      </div>`;
+
+    // ── Date row ──
+    const dateHtml = `
+      <div class="om-date">
+        <span>📅</span>
+        <span>${escHtml(d.date || '')}</span>
+      </div>`;
+
+    // ── Action buttons ──
+    const viewBtn    = `<a href="${escHtml(d.detailUrl || '')}" class="btn btn-sm btn-outline">👁 View</a>`;
+    const printBtn   = `<a href="${escHtml(d.receiptUrl || '')}" class="btn btn-sm btn-outline" target="_blank">🖨️</a>`;
+    let advanceBtn   = '';
+    if (nextStatus && !isTerminal) {
+      const nextLabel = (window.STATUS_LABELS && window.STATUS_LABELS[nextStatus]) || nextStatus;
+      advanceBtn = `<button onclick="quickAdvance('${escHtml(d.advanceUrl || '')}', this)"
+                            class="btn btn-sm btn-caramel"
+                            data-next-status="${escHtml(nextStatus)}"
+                            data-is-paid="${isPaid ? 'true' : 'false'}">
+                      ▶ ${escHtml(nextLabel)}
+                    </button>`;
+    }
+    const actionCount = advanceBtn ? 3 : 2;
+    const actionsHtml = `
+      <div class="om-actions${actionCount === 2 ? ' om-actions--2' : ''}">
+        ${viewBtn}
+        ${printBtn}
+        ${advanceBtn}
+      </div>`;
+
+    card.innerHTML = topHtml + metaHtml + paySecHtml + dateHtml + `<div class="om-divider"></div>` + actionsHtml;
+    return card;
+  }
+
+  function buildOrderCards() {
+    const table = document.querySelector('table[data-card-builder="orders"]');
+    if (!table) return;
+    if (window.innerWidth > 767) return;
+
+    // Remove previous custom cards (idempotency)
+    document.querySelectorAll('.om-cards').forEach(el => el.remove());
+
+    const container = document.createElement('div');
+    container.className = 'om-cards';
+
+    const rows = table.querySelectorAll('tbody tr');
+    let hasRealRows = false;
+    rows.forEach(function (row) {
+      if (!row.dataset.orderId) {
+        // colspan empty / no-orders row
+        const em = document.createElement('div');
+        em.style.cssText = 'padding:32px;text-align:center;color:#aaa;font-size:0.9rem';
+        em.textContent = 'No orders found';
+        container.appendChild(em);
+        return;
+      }
+      hasRealRows = true;
+      const card = buildOrderCard(row);
+      if (card) container.appendChild(card);
+    });
+
+    // Insert after the .card wrapper
+    const cardWrapper = table.closest('.card') || table.closest('.table-wrapper');
+    if (cardWrapper) cardWrapper.insertAdjacentElement('afterend', container);
+
+    // Suppress generic output
+    document.querySelectorAll('.table-mobile-cards').forEach(el => el.style.display = 'none');
+  }
+
+  document.addEventListener('DOMContentLoaded', buildOrderCards);
+
+  let resizeTimer;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(buildOrderCards, 150);
+  });
+
+  // Re-build after realtime inserts a new table row
+  const _orig = window.initResponsiveTables;
+  window.initResponsiveTables = function () {
+    const r = _orig && _orig();
+    buildOrderCards();
+    return r;
+  };
+
+})();
 </script>
 {% endblock %}

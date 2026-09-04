@@ -52,6 +52,10 @@
     min-height: calc(100vh - 56px);
     overflow: visible;
   }
+  /* Cancel the negative margin that offsets the admin content padding —
+     on mobile the layout must be flush with the viewport edges. */
+  .pos-layout { margin: 0 !important; }
+
   .pos-left {
     overflow-y: visible;
     padding: 12px;
@@ -157,7 +161,7 @@
              {% else %}
              onclick="handlePosAdd({{ product.pk }}, '{{ product.name|escapejs }}', {{ product.price }}, this)"
              {% endif %}
-             data-product-id="{{ product.pk }}" data-name="{{ product.name|escapejs }}" data-base-price="{{ product.price }}"
+             data-product-id="{{ product.pk }}" data-name="{{ product.name|escape }}" data-base-price="{{ product.price }}"
              data-has-sizes="{% if product.has_sizes %}1{% else %}0{% endif %}"
              data-stock="{{ product.stock_quantity }}"
              {% if product.stock_quantity == 0 %}data-out="1"{% endif %}
