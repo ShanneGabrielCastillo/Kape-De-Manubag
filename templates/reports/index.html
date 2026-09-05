@@ -164,7 +164,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="{% static 'js/chart.umd.min.js' %}"></script>
 <script>
 // Extract once — avoids rendering the same Python list repr twice via |safe.
 const dailySalesData = {{ daily_sales|safe }};

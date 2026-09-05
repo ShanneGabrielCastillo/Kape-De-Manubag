@@ -156,7 +156,10 @@ class DailyFinance(models.Model):
         return self.running_total - self.total_deductions
 
     def __str__(self):
-        return f"Finance {self.date} — Ending COH: ₱{self.ending_coh:.2f}"
+        # Uses only stored fields — no DB queries.
+        # (The previous version called ending_coh which fired 2 queries
+        # every time str() was called, including inside log_action.)
+        return f"Finance {self.date} — Previous COH: ₱{self.previous_coh}"
 
     def delete(self, *args, **kwargs):
         # Finance records are permanent financial audit documents.

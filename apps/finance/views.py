@@ -250,6 +250,7 @@ def finance_index(request):
                         request.user,
                         'finance.update' if existing_record else 'finance.create',
                         record,
+                        object_repr=f"Finance {record.date}",
                     )
                     messages.success(
                         request,

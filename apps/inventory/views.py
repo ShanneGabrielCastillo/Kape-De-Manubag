@@ -4,6 +4,7 @@ from django.contrib import messages
 from django.db import transaction
 from django.db.models import Count, F, Q
 from django.http import JsonResponse
+from django.core.paginator import Paginator
 from .models import InventoryLog
 from apps.menu.models import CRITICAL_STOCK_THRESHOLD, Product
 from apps.accounts.decorators import cashier_or_admin_required
@@ -87,4 +88,7 @@ def inventory_log(request):
             Q(reason__icontains=q) |
             Q(notes__icontains=q)
         )
-    return render(request, 'inventory/log.html', {'logs': logs, 'q': q})
+    paginator = Paginator(logs, 50)
+    page = request.GET.get('page', 1)
+    logs_page = paginator.get_page(page)
+    return render(request, 'inventory/log.html', {'logs': logs_page, 'q': q})

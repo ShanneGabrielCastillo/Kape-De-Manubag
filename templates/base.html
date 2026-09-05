@@ -22,7 +22,7 @@
   <link rel="stylesheet" href="{% static 'css/responsive.css' %}">
   {% block extra_css %}{% endblock %}
 </head>
-<body>
+<body {% block body_attrs %}{% endblock %}>
   {% block body %}{% endblock %}
 
   

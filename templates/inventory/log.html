@@ -38,4 +38,22 @@
     </table>
   </div>
 </div>
+
+{% if logs.has_other_pages %}
+<div class="pagination">
+  {% if logs.has_previous %}
+  <a href="?page={{ logs.previous_page_number }}{% if q %}&q={{ q }}{% endif %}" class="page-link">‹ Prev</a>
+  {% endif %}
+  {% for num in logs.paginator.page_range %}
+    {% if logs.number == num %}
+    <span class="page-link active">{{ num }}</span>
+    {% elif num > logs.number|add:'-3' and num < logs.number|add:'3' %}
+    <a href="?page={{ num }}{% if q %}&q={{ q }}{% endif %}" class="page-link">{{ num }}</a>
+    {% endif %}
+  {% endfor %}
+  {% if logs.has_next %}
+  <a href="?page={{ logs.next_page_number }}{% if q %}&q={{ q }}{% endif %}" class="page-link">Next ›</a>
+  {% endif %}
+</div>
+{% endif %}
 {% endblock %}

@@ -91,7 +91,14 @@ window.RealtimeConnection = (function () {
 })();
 
 document.addEventListener('DOMContentLoaded', () => {
-  RealtimeConnection.connect();
+  // Only open the SSE stream on pages that actually handle realtime events
+  // (Dashboard, Order Management, POS). All other admin pages get the
+  // RealtimeConnection API (so RealtimeConnection.on() calls don't error)
+  // but no persistent stream is opened, freeing the WSGI worker thread.
+  // Pages opt in by adding data-realtime="true" to <body>.
+  if (document.body.dataset.realtime === 'true') {
+    RealtimeConnection.connect();
+  }
 });
 
 window.addEventListener('beforeunload', () => {
