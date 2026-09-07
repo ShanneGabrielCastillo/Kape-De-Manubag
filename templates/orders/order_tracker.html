@@ -77,8 +77,6 @@
       box-shadow: var(--shadow);
       padding: 20px 16px;
       margin-bottom: 16px;
-      overflow: hidden;
-      isolation: isolate;
     }
     .tracker-step {
       display: flex;
@@ -87,33 +85,31 @@
       gap: 6px;
       opacity: 0.3;
       transition: opacity 0.4s;
-      flex-shrink: 0;
-      min-width: 0;
+      flex: 0 0 auto;
     }
     .tracker-step.step-done   { opacity: 0.6; }
     .tracker-step.step-active { opacity: 1; }
     .step-dot {
-      width: 40px;
-      height: 40px;
+      width: 44px;
+      height: 44px;
       border-radius: 50%;
       background: var(--cream);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.1rem;
+      font-size: 1.2rem;
       transition: background 0.4s;
-      flex-shrink: 0;
     }
     .tracker-step.step-active .step-dot {
       background: var(--caramel);
-      animation: stepPulse 1.5s ease infinite;
+      animation: stepPulse 1.8s ease-in-out infinite;
     }
     @keyframes stepPulse {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(193,122,59,0.5); }
-      50%       { box-shadow: 0 0 0 8px rgba(193,122,59,0); }
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.65; }
     }
-    .step-label { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brown-mid); text-align: center; }
-    .tracker-step-line { flex: 1; min-width: 8px; height: 2px; background: var(--cream); margin: 0 4px; margin-bottom: 20px; }
+    .step-label { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brown-mid); text-align: center; margin-top: 2px; }
+    .tracker-step-line { flex: 1; min-width: 12px; height: 2px; background: var(--cream); margin: 0 6px; margin-bottom: 22px; }
 
     .wait-display { font-size: 1.6rem; font-weight: 700; color: var(--brown-dark); font-family: 'Playfair Display', serif; }
 
