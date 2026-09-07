@@ -467,6 +467,8 @@ document.addEventListener('click', function(e) {
 (function () {
   // Placeholder URL resolved via Django's static file storage (avoids hard-coded path)
   const PM_PLACEHOLDER = '{% static "images/placeholder.svg" %}';
+
+  function stockClass(status) {
     if (status === 'critical') return 'stock-critical';
     if (status === 'low')      return 'stock-low';
     return 'stock-ok';
