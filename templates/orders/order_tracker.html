@@ -91,11 +91,11 @@
       flex-direction: column;
       align-items: center;
       gap: 6px;
-      opacity: 0.3;
+      opacity: 0.35;
       transition: opacity 0.4s;
       flex: 0 0 auto;
     }
-    .tracker-step.step-done   { opacity: 0.6; }
+    .tracker-step.step-done   { opacity: 0.7; }
     .tracker-step.step-active { opacity: 1; }
     .step-dot {
       width: 44px;
@@ -105,12 +105,20 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.2rem;
-      transition: background 0.4s;
+      font-size: 1.1rem;
+      font-weight: 700;
+      font-family: 'DM Sans', sans-serif;
+      color: var(--brown-mid);
+      transition: background 0.4s, color 0.4s;
     }
     .tracker-step.step-active .step-dot {
       background: var(--caramel);
+      color: #fff;
       animation: stepPulse 1.8s ease-in-out infinite;
+    }
+    .tracker-step.step-done .step-dot {
+      background: var(--brown-mid);
+      color: #fff;
     }
     @keyframes stepPulse {
       0%, 100% { opacity: 1; }
@@ -189,17 +197,17 @@
   <div class="tracker-steps">
     {% with current=order.status %}
     <div class="tracker-step {% if current in 'preparing,ready,completed' %}step-done{% endif %} {% if current == 'pending' %}step-active{% endif %}">
-      <div class="step-dot">🕐</div>
+      <div class="step-dot">1</div>
       <div class="step-label">Received</div>
     </div>
     <div class="tracker-step-line"></div>
     <div class="tracker-step {% if current in 'ready,completed' %}step-done{% endif %} {% if current == 'preparing' %}step-active{% endif %}">
-      <div class="step-dot">🍳</div>
+      <div class="step-dot">2</div>
       <div class="step-label">Preparing</div>
     </div>
     <div class="tracker-step-line"></div>
     <div class="tracker-step {% if current in 'ready,completed' %}step-done{% endif %} {% if current == 'ready' %}step-active{% endif %}">
-      <div class="step-dot">✅</div>
+      <div class="step-dot">3</div>
       <div class="step-label">Ready!</div>
     </div>
     {% endwith %}
