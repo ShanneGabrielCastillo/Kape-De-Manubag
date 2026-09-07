@@ -155,12 +155,6 @@ DATABASES = {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
         'OPTIONS': {
-            # WAL (Write-Ahead Logging) mode: instead of syncing the main DB
-            # file on every commit, SQLite writes to a separate WAL file first.
-            # This is significantly faster on networked/slow storage (e.g.
-            # PythonAnywhere NFS) because it reduces the number of expensive
-            # fsync() calls per transaction.
-            'init_command': 'PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;',
             # Timeout before raising OperationalError on a locked DB.
             # 20s covers burst write contention from multiple cashier terminals.
             'timeout': 20,
