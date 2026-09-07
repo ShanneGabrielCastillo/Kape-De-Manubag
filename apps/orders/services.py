@@ -209,7 +209,8 @@ def _order_inventory_source(order):
     return 'pos_order' if order.cashier_id else 'customer_order'
 
 
-def _apply_inventory_for_order(order, items, performed_by, *, deduct):
+def _apply_inventory_for_order(order, items, performed_by, *, deduct,
+                               extra_order_update_fields=None):
     """Apply one stock movement (deduct or restore) for every order item.
 
     Shared by :func:`deduct_inventory_for_order` (``deduct=True``) and
@@ -218,6 +219,12 @@ def _apply_inventory_for_order(order, items, performed_by, *, deduct):
     commit or roll back together. ``items`` is passed in so callers fetch the
     queryset exactly once (and, for deductions, run the pre-flight check on
     the same rows that get changed).
+
+    ``extra_order_update_fields`` — optional list of additional field names to
+    include in the final ``order.save(update_fields=...)`` call.  Used by
+    ``create_pos_order`` to merge the ``stock_deducted`` update with the
+    ``subtotal``/``packaging_fee``/``total`` update into a single DB write,
+    saving one round-trip per order.
     """
     source = _order_inventory_source(order)
     action = 'sale' if deduct else 'adjustment'
@@ -253,14 +260,22 @@ def _apply_inventory_for_order(order, items, performed_by, *, deduct):
             )
 
         order.stock_deducted = deduct
-        order.save(update_fields=['stock_deducted'])
+        # Merge any additional fields from the caller into this single UPDATE
+        # so callers can avoid a separate order.save() round-trip.
+        update_fields = ['stock_deducted'] + (extra_order_update_fields or [])
+        order.save(update_fields=update_fields)
 
 
-def deduct_inventory_for_order(order, performed_by=None):
+def deduct_inventory_for_order(order, performed_by=None,
+                               extra_order_update_fields=None):
     """
     Deduct stock for all items in an order.
     Idempotent: does nothing if order.stock_deducted is already True.
     Raises ValueError if any product has insufficient stock (pre-flight check).
+
+    ``extra_order_update_fields`` — forwarded to ``_apply_inventory_for_order``
+    so the caller can merge additional order fields into the final UPDATE, saving
+    a DB round-trip.  See ``create_pos_order`` for usage.
     """
     if order.stock_deducted:
         return
@@ -279,7 +294,8 @@ def deduct_inventory_for_order(order, performed_by=None):
             )
 
     # All checks passed — apply the movement atomically.
-    _apply_inventory_for_order(order, items, performed_by, deduct=True)
+    _apply_inventory_for_order(order, items, performed_by, deduct=True,
+                               extra_order_update_fields=extra_order_update_fields)
 
 
 def restore_inventory_for_order(order, performed_by=None):

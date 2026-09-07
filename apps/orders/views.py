@@ -23,6 +23,7 @@ from apps.orders.services import (
     deduct_inventory_for_order,
     restore_inventory_for_order,
     validate_status_transition,
+    calculate_packaging_fee,
     calculate_packaging_fee_for_items,
     get_packaging_fee_per_item,
     create_order_item,
@@ -793,9 +794,23 @@ def create_pos_order(request):
                     quantity=entry['quantity'],
                 )
 
-            order.calculate_total()
+            # OPT-3: compute totals into the order object in memory here,
+            # then pass the three fields to deduct_inventory_for_order so
+            # it can include them in its own final order.save() call.
+            # This merges what was previously two separate UPDATEs
+            # (calculate_total → save #2, stock_deducted → save #3)
+            # into a single UPDATE, saving one DB round-trip per order.
+            order.subtotal = sum(
+                item.subtotal for item in order.items.all()
+            )
+            order.packaging_fee = calculate_packaging_fee(order)
+            order.total = order.subtotal + order.packaging_fee - order.discount
 
-            deduct_inventory_for_order(order, performed_by=request.user)
+            deduct_inventory_for_order(
+                order,
+                performed_by=request.user,
+                extra_order_update_fields=['subtotal', 'packaging_fee', 'total'],
+            )
     except ValueError as e:
         # The atomic block rolled back: no order, no items and no stock
         # change were persisted. Same friendly error as before.
