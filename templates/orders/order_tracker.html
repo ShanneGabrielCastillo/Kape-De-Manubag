@@ -84,7 +84,6 @@
       margin-bottom: 16px;
       width: 100%;
       box-sizing: border-box;
-      overflow: hidden;
     }
     .tracker-step {
       display: flex;
@@ -93,7 +92,7 @@
       gap: 6px;
       opacity: 0.35;
       transition: opacity 0.4s;
-      flex: 0 0 auto;
+      flex: 1;
     }
     .tracker-step.step-done   { opacity: 0.7; }
     .tracker-step.step-active { opacity: 1; }
@@ -125,7 +124,7 @@
       50%       { opacity: 0.65; }
     }
     .step-label { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brown-mid); text-align: center; margin-top: 2px; }
-    .tracker-step-line { flex: 1; min-width: 12px; height: 2px; background: var(--cream); margin: 0 6px; margin-bottom: 22px; }
+    .tracker-step-line { flex: 0 0 28px; height: 2px; background: var(--cream); margin-bottom: 22px; }
 
     .wait-display { font-size: 1.6rem; font-weight: 700; color: var(--brown-dark); font-family: 'Playfair Display', serif; }
 
@@ -197,17 +196,17 @@
   <div class="tracker-steps">
     {% with current=order.status %}
     <div class="tracker-step {% if current in 'preparing,ready,completed' %}step-done{% endif %} {% if current == 'pending' %}step-active{% endif %}">
-      <div class="step-dot">1</div>
+      <div class="step-dot">🕐</div>
       <div class="step-label">Received</div>
     </div>
     <div class="tracker-step-line"></div>
     <div class="tracker-step {% if current in 'ready,completed' %}step-done{% endif %} {% if current == 'preparing' %}step-active{% endif %}">
-      <div class="step-dot">2</div>
+      <div class="step-dot">🍳</div>
       <div class="step-label">Preparing</div>
     </div>
     <div class="tracker-step-line"></div>
     <div class="tracker-step {% if current in 'ready,completed' %}step-done{% endif %} {% if current == 'ready' %}step-active{% endif %}">
-      <div class="step-dot">3</div>
+      <div class="step-dot">✅</div>
       <div class="step-label">Ready!</div>
     </div>
     {% endwith %}

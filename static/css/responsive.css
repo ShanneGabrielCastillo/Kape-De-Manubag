@@ -941,20 +941,18 @@
     padding: 14px 10px;
   }
   .tracker-step {
-    min-width: 0;
-    flex-shrink: 1;
+    flex: 1;
   }
   .step-dot {
     width: 34px;
     height: 34px;
-    font-size: 1.1rem;
+    font-size: 1rem;
   }
   .step-label {
     font-size: 0.6rem;
   }
   .tracker-step-line {
-    min-width: 8px;
-    max-width: 20px;
+    flex: 0 0 16px;
     margin-bottom: 18px;
   }
 
