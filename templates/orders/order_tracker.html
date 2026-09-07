@@ -77,7 +77,8 @@
       box-shadow: var(--shadow);
       padding: 20px 16px;
       margin-bottom: 16px;
-      overflow: hidden;   /* prevent pulse animation from bleeding outside */
+      overflow: hidden;
+      isolation: isolate;
     }
     .tracker-step {
       display: flex;
@@ -108,8 +109,8 @@
       animation: stepPulse 1.5s ease infinite;
     }
     @keyframes stepPulse {
-      0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(193,122,59,0.4); }
-      50% { transform: scale(1.08); box-shadow: 0 0 0 6px rgba(193,122,59,0); }
+      0%, 100% { box-shadow: 0 0 0 0 rgba(193,122,59,0.5); }
+      50%       { box-shadow: 0 0 0 8px rgba(193,122,59,0); }
     }
     .step-label { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brown-mid); text-align: center; }
     .tracker-step-line { flex: 1; min-width: 8px; height: 2px; background: var(--cream); margin: 0 4px; margin-bottom: 20px; }
