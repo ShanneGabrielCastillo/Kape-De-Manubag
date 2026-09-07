@@ -245,6 +245,9 @@
 
   /* Hide the generic table-mobile-cards output for this page;
      our custom .pm-cards container replaces it */
+  .pm-cards {
+    display: block;   /* explicit — never inherit display:none from global rules */
+  }
   .pm-cards ~ .table-mobile-cards,
   .table-mobile-cards:not(.pm-cards) {
     display: none !important;
@@ -472,7 +475,10 @@ document.addEventListener('click', function(e) {
   function buildProductCards() {
     const table = document.querySelector('table[data-card-builder="products"]');
     if (!table) return;
-    if (window.innerWidth > 767) return;
+    // Do NOT guard on innerWidth here — on mobile browsers DOMContentLoaded
+    // can fire before the viewport is fully established, causing innerWidth
+    // to report a desktop value and returning early. CSS already hides the
+    // table and shows cards only at ≤767px; the JS just builds the DOM.
 
     // Remove any previous custom cards (idempotency on re-runs)
     const prev = document.querySelector('.pm-cards');
@@ -596,7 +602,18 @@ document.addEventListener('click', function(e) {
   let resizeTimer;
   window.addEventListener('resize', function () {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(buildProductCards, 150);
+    resizeTimer = setTimeout(function () {
+      const cards = document.querySelector('.pm-cards');
+      if (window.innerWidth > 767) {
+        // Back to desktop — remove the mobile cards so table shows
+        if (cards) cards.remove();
+        const generic = document.querySelector('.table-mobile-cards');
+        if (generic) generic.style.display = '';
+      } else {
+        // Mobile width — build if not already present
+        if (!cards) buildProductCards();
+      }
+    }, 150);
   });
 })();
 </script>
