@@ -25,6 +25,7 @@ db.sqlite3-wal
 staticfiles/
 media/*
 !media/.gitkeep
+data_export.json
 
 # Environment variables — NEVER commit this
 .env
