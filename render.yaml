@@ -1,0 +1,28 @@
+databases:
+  - name: kape-de-manubag-db
+    databaseName: kape_de_manubag
+    user: kape_de_manubag
+    plan: free
+
+services:
+  - type: web
+    name: kape-de-manubag
+    runtime: python
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn kape_de_manubag.wsgi:application --workers 2 --threads 2 --timeout 60"
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kape-de-manubag-db
+          property: connectionString
+      - key: DEBUG
+        value: "False"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALLOWED_HOSTS
+        value: ".onrender.com"
+      - key: CSRF_TRUSTED_ORIGINS
+        value: "https://*.onrender.com"
+      - key: PYTHON_VERSION
+        value: "3.11.0"

@@ -150,17 +150,31 @@ TEMPLATES = [
 WSGI_APPLICATION = 'kape_de_manubag.wsgi.application'
 
 # ── Database ──────────────────────────────────────────────────────────────────
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-        'OPTIONS': {
-            # Timeout before raising OperationalError on a locked DB.
-            # 20s covers burst write contention from multiple cashier terminals.
-            'timeout': 20,
-        },
+# Uses PostgreSQL in production (DATABASE_URL set) and SQLite for local dev.
+_database_url = os.environ.get('DATABASE_URL')
+
+if _database_url:
+    # Production: PostgreSQL on Render (or any DATABASE_URL provider).
+    # dj-database-url parses the URL into the Django DATABASES dict.
+    import dj_database_url
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=_database_url,
+            conn_max_age=600,       # persistent connections — reuse instead of reconnect per request
+            conn_health_checks=True,
+        )
     }
-}
+else:
+    # Local development: SQLite with WAL mode (set in dashboard AppConfig.ready())
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+            'OPTIONS': {
+                'timeout': 20,
+            },
+        }
+    }
 
 # ── Password validation ───────────────────────────────────────────────────────
 AUTH_PASSWORD_VALIDATORS = [
