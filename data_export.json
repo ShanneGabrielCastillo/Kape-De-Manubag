@@ -1,0 +1,8441 @@
+[
+{
+  "model": "accounts.customuser",
+  "fields": {
+    "password": "pbkdf2_sha256$600000$SitxOkFNH6GL7G5OqU3jQM$XmhPU5f4KjM6rtVov2aZpQ9WUKl82GWDSj4IKCJcCpo=",
+    "last_login": "2026-09-07T07:06:54.493Z",
+    "is_superuser": true,
+    "username": "admin",
+    "first_name": "Admin",
+    "last_name": "KDM",
+    "email": "admin@kapedemanubag.com",
+    "is_staff": true,
+    "is_active": true,
+    "date_joined": "2026-05-29T09:30:16.830Z",
+    "role": "admin",
+    "phone": "09073762808",
+    "profile_image": "profiles/27403.png",
+    "deactivated_at": null,
+    "created_at": "2026-05-29T09:30:18.030Z",
+    "updated_at": "2026-06-03T07:45:20.503Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "accounts.customuser",
+  "fields": {
+    "password": "pbkdf2_sha256$600000$F8ePQSwDK4g6qChkMgcr4b$KtA6ls4vH35TsMsIbbaKa13GiSriZem49nhiCJVj9fU=",
+    "last_login": "2026-09-07T04:52:04.272Z",
+    "is_superuser": false,
+    "username": "cashier1",
+    "first_name": "Gracely",
+    "last_name": "Ibañez",
+    "email": "cashier@kapedemanubag.com",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-05-29T09:30:18.254Z",
+    "role": "cashier",
+    "phone": null,
+    "profile_image": "profiles/22888.jpg",
+    "deactivated_at": null,
+    "created_at": "2026-05-29T09:30:19.437Z",
+    "updated_at": "2026-06-03T16:00:07.802Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "accounts.customuser",
+  "fields": {
+    "password": "pbkdf2_sha256$720000$NUZNmQfvKyJUB6zYm04QyN$DG1vktpR/Msis2jZEPn/bw/helSMi7mlgrYdUYrxX8Q=",
+    "last_login": "2026-06-01T09:35:51.243Z",
+    "is_superuser": false,
+    "username": "cashier2",
+    "first_name": "Shanne Gabriel",
+    "last_name": "Castillo",
+    "email": "castilloshanne13@gmail.com",
+    "is_staff": false,
+    "is_active": false,
+    "date_joined": "2026-06-01T09:35:19.751Z",
+    "role": "cashier",
+    "phone": "09073762808",
+    "profile_image": "",
+    "deactivated_at": null,
+    "created_at": "2026-06-01T09:35:21.162Z",
+    "updated_at": "2026-06-03T16:10:37.849Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "menu.category",
+  "pk": 1,
+  "fields": {
+    "name": "Coffee",
+    "slug": "coffee",
+    "icon": "☕",
+    "description": "",
+    "image": "",
+    "is_active": true,
+    "is_packaging_required": false,
+    "order": 1,
+    "created_at": "2026-05-29T09:30:19.616Z"
+  }
+},
+{
+  "model": "menu.category",
+  "pk": 2,
+  "fields": {
+    "name": "Milk Tea",
+    "slug": "milk-tea",
+    "icon": "🧋",
+    "description": "",
+    "image": "",
+    "is_active": true,
+    "is_packaging_required": false,
+    "order": 2,
+    "created_at": "2026-05-29T09:30:19.784Z"
+  }
+},
+{
+  "model": "menu.category",
+  "pk": 3,
+  "fields": {
+    "name": "Non-Coffee Drinks",
+    "slug": "non-coffee-drinks",
+    "icon": "🥤",
+    "description": "",
+    "image": "",
+    "is_active": true,
+    "is_packaging_required": false,
+    "order": 3,
+    "created_at": "2026-05-29T09:30:19.954Z"
+  }
+},
+{
+  "model": "menu.category",
+  "pk": 4,
+  "fields": {
+    "name": "Combo Meals",
+    "slug": "combo-meals",
+    "icon": "🍽️",
+    "description": "",
+    "image": "",
+    "is_active": true,
+    "is_packaging_required": true,
+    "order": 4,
+    "created_at": "2026-05-29T09:30:20.150Z"
+  }
+},
+{
+  "model": "menu.category",
+  "pk": 5,
+  "fields": {
+    "name": "Pastil Meals",
+    "slug": "pastil-meals",
+    "icon": "🍱",
+    "description": "",
+    "image": "",
+    "is_active": true,
+    "is_packaging_required": true,
+    "order": 5,
+    "created_at": "2026-05-29T09:30:20.386Z"
+  }
+},
+{
+  "model": "menu.category",
+  "pk": 6,
+  "fields": {
+    "name": "Burgers",
+    "slug": "burgers",
+    "icon": "🍔",
+    "description": "",
+    "image": "",
+    "is_active": true,
+    "is_packaging_required": true,
+    "order": 6,
+    "created_at": "2026-05-29T09:30:20.617Z"
+  }
+},
+{
+  "model": "menu.category",
+  "pk": 8,
+  "fields": {
+    "name": "Appetizers",
+    "slug": "appetizers",
+    "icon": "🥗",
+    "description": "",
+    "image": "",
+    "is_active": true,
+    "is_packaging_required": false,
+    "order": 8,
+    "created_at": "2026-05-29T09:30:21.070Z"
+  }
+},
+{
+  "model": "menu.category",
+  "pk": 9,
+  "fields": {
+    "name": "Ala Carte",
+    "slug": "ala-carte",
+    "icon": "🍝",
+    "description": "",
+    "image": "",
+    "is_active": true,
+    "is_packaging_required": true,
+    "order": 9,
+    "created_at": "2026-05-29T09:30:21.349Z"
+  }
+},
+{
+  "model": "menu.category",
+  "pk": 11,
+  "fields": {
+    "name": "Rice Meals",
+    "slug": "rice-meals",
+    "icon": "🍽️",
+    "description": "",
+    "image": "",
+    "is_active": true,
+    "is_packaging_required": true,
+    "order": 7,
+    "created_at": "2026-05-31T13:15:08.178Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 1,
+  "fields": {
+    "category": 1,
+    "name": "Salted Caramel",
+    "slug": "salted-caramel",
+    "description": "",
+    "image": "",
+    "price": "69.00",
+    "price_medium": "69.00",
+    "price_large": "89.00",
+    "price_hot": "69.00",
+    "has_sizes": true,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 98,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:21.647Z",
+    "updated_at": "2026-05-31T13:56:16.491Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 2,
+  "fields": {
+    "category": 1,
+    "name": "Mocha",
+    "slug": "mocha",
+    "description": "",
+    "image": "",
+    "price": "69.00",
+    "price_medium": "69.00",
+    "price_large": "89.00",
+    "price_hot": "69.00",
+    "has_sizes": true,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 80,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:21.919Z",
+    "updated_at": "2026-05-29T09:37:18.766Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 3,
+  "fields": {
+    "category": 1,
+    "name": "White Mocha",
+    "slug": "white-mocha",
+    "description": "",
+    "image": "",
+    "price": "69.00",
+    "price_medium": "69.00",
+    "price_large": "89.00",
+    "price_hot": "69.00",
+    "has_sizes": true,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 100,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:22.165Z",
+    "updated_at": "2026-05-29T09:43:57.858Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 4,
+  "fields": {
+    "category": 1,
+    "name": "Strawberry Coffee",
+    "slug": "strawberry-coffee",
+    "description": "",
+    "image": "",
+    "price": "69.00",
+    "price_medium": "69.00",
+    "price_large": "89.00",
+    "price_hot": "69.00",
+    "has_sizes": true,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 98,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:22.343Z",
+    "updated_at": "2026-05-29T09:30:22.343Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 5,
+  "fields": {
+    "category": 1,
+    "name": "Spanish Latte",
+    "slug": "spanish-latte",
+    "description": "",
+    "image": "",
+    "price": "69.00",
+    "price_medium": "69.00",
+    "price_large": "89.00",
+    "price_hot": "69.00",
+    "has_sizes": true,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 98,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:22.569Z",
+    "updated_at": "2026-05-29T09:30:22.569Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 6,
+  "fields": {
+    "category": 2,
+    "name": "Dark Chocolate",
+    "slug": "dark-chocolate",
+    "description": "",
+    "image": "",
+    "price": "59.00",
+    "price_medium": "69.00",
+    "price_large": "89.00",
+    "price_hot": null,
+    "has_sizes": true,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 78,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:22.770Z",
+    "updated_at": "2026-05-29T09:30:22.770Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 7,
+  "fields": {
+    "category": 2,
+    "name": "Chocolate Milk Tea",
+    "slug": "chocolate-milk-tea",
+    "description": "",
+    "image": "",
+    "price": "59.00",
+    "price_medium": "69.00",
+    "price_large": "89.00",
+    "price_hot": null,
+    "has_sizes": true,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 76,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:22.946Z",
+    "updated_at": "2026-05-29T09:30:22.946Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 8,
+  "fields": {
+    "category": 2,
+    "name": "Cookies & Cream",
+    "slug": "cookies-cream",
+    "description": "",
+    "image": "",
+    "price": "59.00",
+    "price_medium": "69.00",
+    "price_large": "89.00",
+    "price_hot": null,
+    "has_sizes": true,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 78,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:23.124Z",
+    "updated_at": "2026-05-29T09:30:23.125Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 9,
+  "fields": {
+    "category": 2,
+    "name": "Red Velvet",
+    "slug": "red-velvet",
+    "description": "",
+    "image": "",
+    "price": "59.00",
+    "price_medium": "69.00",
+    "price_large": "89.00",
+    "price_hot": null,
+    "has_sizes": true,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 79,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:23.322Z",
+    "updated_at": "2026-05-29T09:30:23.322Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 10,
+  "fields": {
+    "category": 2,
+    "name": "Wintermelon",
+    "slug": "wintermelon",
+    "description": "",
+    "image": "",
+    "price": "69.00",
+    "price_medium": "79.00",
+    "price_large": "99.00",
+    "price_hot": null,
+    "has_sizes": true,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": true,
+    "stock_quantity": 75,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:23.517Z",
+    "updated_at": "2026-05-31T13:17:48.062Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 11,
+  "fields": {
+    "category": 2,
+    "name": "Okinawa",
+    "slug": "okinawa",
+    "description": "",
+    "image": "",
+    "price": "69.00",
+    "price_medium": "79.00",
+    "price_large": "99.00",
+    "price_hot": null,
+    "has_sizes": true,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 79,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:23.694Z",
+    "updated_at": "2026-05-29T09:30:23.694Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 12,
+  "fields": {
+    "category": 3,
+    "name": "Strawberry Matcha",
+    "slug": "strawberry-matcha",
+    "description": "",
+    "image": "",
+    "price": "79.00",
+    "price_medium": null,
+    "price_large": "99.00",
+    "price_hot": null,
+    "has_sizes": true,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 58,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:23.937Z",
+    "updated_at": "2026-05-29T09:30:23.937Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 13,
+  "fields": {
+    "category": 3,
+    "name": "Matcha Latte",
+    "slug": "matcha-latte",
+    "description": "",
+    "image": "",
+    "price": "69.00",
+    "price_medium": null,
+    "price_large": "89.00",
+    "price_hot": null,
+    "has_sizes": true,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 54,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:24.154Z",
+    "updated_at": "2026-05-29T09:30:24.154Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 14,
+  "fields": {
+    "category": 3,
+    "name": "Strawberry Milk",
+    "slug": "strawberry-milk",
+    "description": "",
+    "image": "",
+    "price": "79.00",
+    "price_medium": null,
+    "price_large": "99.00",
+    "price_hot": null,
+    "has_sizes": true,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 59,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:24.407Z",
+    "updated_at": "2026-05-29T09:30:24.407Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 15,
+  "fields": {
+    "category": 3,
+    "name": "Blueberry Soda",
+    "slug": "blueberry-soda",
+    "description": "",
+    "image": "",
+    "price": "29.00",
+    "price_medium": "39.00",
+    "price_large": "49.00",
+    "price_hot": null,
+    "has_sizes": true,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 59,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:24.619Z",
+    "updated_at": "2026-05-29T09:30:24.619Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 16,
+  "fields": {
+    "category": 3,
+    "name": "Green Apple Soda",
+    "slug": "green-apple-soda",
+    "description": "",
+    "image": "",
+    "price": "29.00",
+    "price_medium": "39.00",
+    "price_large": "49.00",
+    "price_hot": null,
+    "has_sizes": true,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 60,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:24.834Z",
+    "updated_at": "2026-05-29T09:30:24.834Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 17,
+  "fields": {
+    "category": 3,
+    "name": "Strawberry Soda",
+    "slug": "strawberry-soda",
+    "description": "",
+    "image": "",
+    "price": "29.00",
+    "price_medium": "39.00",
+    "price_large": "49.00",
+    "price_hot": null,
+    "has_sizes": true,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 59,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:25.000Z",
+    "updated_at": "2026-05-29T09:30:25.001Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 18,
+  "fields": {
+    "category": 4,
+    "name": "Combo 1 - Burger & Fries",
+    "slug": "combo-1-burger-fries",
+    "description": "Pork burger with french fries + free ice tea (dine-in)",
+    "image": "",
+    "price": "60.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 44,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:25.232Z",
+    "updated_at": "2026-05-29T09:30:25.232Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 19,
+  "fields": {
+    "category": 4,
+    "name": "Combo 2 - Spaghetti & Chicken",
+    "slug": "combo-2-spaghetti-chicken",
+    "description": "Spaghetti with chicken + free ice tea (dine-in)",
+    "image": "",
+    "price": "95.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 49,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:25.442Z",
+    "updated_at": "2026-05-29T09:30:25.443Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 20,
+  "fields": {
+    "category": 4,
+    "name": "Combo 3 - Spaghetti & Fries",
+    "slug": "combo-3-spaghetti-fries",
+    "description": "Spaghetti with french fries + free ice tea (dine-in)",
+    "image": "",
+    "price": "95.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 50,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:25.670Z",
+    "updated_at": "2026-05-29T09:30:25.670Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 21,
+  "fields": {
+    "category": 4,
+    "name": "Combo 4 - Spaghetti w/ Bread & Chicken",
+    "slug": "combo-4-spaghetti-w-bread-chicken",
+    "description": "Spaghetti with bread and chicken + free ice tea (dine-in)",
+    "image": "",
+    "price": "99.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 50,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:25.891Z",
+    "updated_at": "2026-05-29T09:30:25.891Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 22,
+  "fields": {
+    "category": 4,
+    "name": "Combo 5 - Spaghetti w/ Bread & Fries",
+    "slug": "combo-5-spaghetti-w-bread-fries",
+    "description": "Spaghetti with bread and french fries + free ice tea (dine-in)",
+    "image": "",
+    "price": "99.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 46,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:26.091Z",
+    "updated_at": "2026-05-29T09:30:26.091Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 23,
+  "fields": {
+    "category": 4,
+    "name": "Combo 6 - Spaghetti & Lumpia",
+    "slug": "combo-6-spaghetti-lumpia",
+    "description": "Spaghetti with lumpia + free ice tea (dine-in)",
+    "image": "",
+    "price": "95.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 50,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:26.293Z",
+    "updated_at": "2026-05-29T09:30:26.293Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 24,
+  "fields": {
+    "category": 4,
+    "name": "Combo 7 - Spaghetti w/ Bread & Lumpia",
+    "slug": "combo-7-spaghetti-w-bread-lumpia",
+    "description": "Spaghetti with bread and lumpia + free ice tea (dine-in)",
+    "image": "",
+    "price": "90.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 49,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:26.501Z",
+    "updated_at": "2026-05-29T09:30:26.501Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 25,
+  "fields": {
+    "category": 5,
+    "name": "Chicken Pastil",
+    "slug": "chicken-pastil",
+    "description": "",
+    "image": "",
+    "price": "35.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": true,
+    "stock_quantity": 67,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:26.728Z",
+    "updated_at": "2026-05-31T14:04:17.880Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 26,
+  "fields": {
+    "category": 5,
+    "name": "Pork Pastil",
+    "slug": "pork-pastil",
+    "description": "",
+    "image": "",
+    "price": "35.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 37,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:26.948Z",
+    "updated_at": "2026-05-29T09:30:26.948Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 27,
+  "fields": {
+    "category": 5,
+    "name": "Tuna Pastil",
+    "slug": "tuna-pastil",
+    "description": "",
+    "image": "",
+    "price": "35.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": false,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 40,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:27.181Z",
+    "updated_at": "2026-05-31T13:16:21.374Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 28,
+  "fields": {
+    "category": 5,
+    "name": "Pastil with Chicken",
+    "slug": "pastil-with-chicken",
+    "description": "",
+    "image": "",
+    "price": "85.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 39,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:27.408Z",
+    "updated_at": "2026-05-29T09:30:27.408Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 29,
+  "fields": {
+    "category": 5,
+    "name": "Pastil with Porkchop",
+    "slug": "pastil-with-porkchop",
+    "description": "",
+    "image": "",
+    "price": "105.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 37,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:27.635Z",
+    "updated_at": "2026-05-29T09:30:27.635Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 30,
+  "fields": {
+    "category": 5,
+    "name": "Lumpia Meal",
+    "slug": "lumpia-meal",
+    "description": "",
+    "image": "",
+    "price": "60.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 38,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:28.243Z",
+    "updated_at": "2026-05-29T09:30:28.243Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 31,
+  "fields": {
+    "category": 11,
+    "name": "Chicken Meal",
+    "slug": "chicken-meal",
+    "description": "",
+    "image": "",
+    "price": "60.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 37,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:28.432Z",
+    "updated_at": "2026-06-03T16:07:00.679Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 32,
+  "fields": {
+    "category": 6,
+    "name": "Pork Burger",
+    "slug": "pork-burger",
+    "description": "",
+    "image": "",
+    "price": "30.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 49,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:28.614Z",
+    "updated_at": "2026-05-29T09:30:28.614Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 33,
+  "fields": {
+    "category": 6,
+    "name": "Chicken Burger",
+    "slug": "chicken-burger",
+    "description": "",
+    "image": "",
+    "price": "40.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 47,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:28.837Z",
+    "updated_at": "2026-05-29T09:30:28.837Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 34,
+  "fields": {
+    "category": 6,
+    "name": "Special Pork Burger",
+    "slug": "special-pork-burger",
+    "description": "",
+    "image": "",
+    "price": "50.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 50,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:29.132Z",
+    "updated_at": "2026-05-29T09:30:29.132Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 35,
+  "fields": {
+    "category": 6,
+    "name": "Special Chicken Burger",
+    "slug": "special-chicken-burger",
+    "description": "",
+    "image": "",
+    "price": "60.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 47,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:29.434Z",
+    "updated_at": "2026-05-29T09:30:29.434Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 36,
+  "fields": {
+    "category": 8,
+    "name": "Steamed Siomai",
+    "slug": "steamed-siomai",
+    "description": "",
+    "image": "",
+    "price": "25.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 97,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:29.705Z",
+    "updated_at": "2026-05-29T09:30:29.705Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 37,
+  "fields": {
+    "category": 8,
+    "name": "Fried Siomai",
+    "slug": "fried-siomai",
+    "description": "",
+    "image": "",
+    "price": "30.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 99,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:29.931Z",
+    "updated_at": "2026-05-29T09:30:29.931Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 38,
+  "fields": {
+    "category": 8,
+    "name": "Squid Roll",
+    "slug": "squid-roll",
+    "description": "",
+    "image": "",
+    "price": "25.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 94,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:30.115Z",
+    "updated_at": "2026-05-29T09:30:30.115Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 39,
+  "fields": {
+    "category": 8,
+    "name": "Tempura",
+    "slug": "tempura",
+    "description": "",
+    "image": "",
+    "price": "25.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 88,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:30.371Z",
+    "updated_at": "2026-05-29T09:30:30.371Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 40,
+  "fields": {
+    "category": 8,
+    "name": "French Fries",
+    "slug": "french-fries",
+    "description": "",
+    "image": "",
+    "price": "30.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 92,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:30.574Z",
+    "updated_at": "2026-05-29T09:30:30.574Z"
+  }
+},
+{
+  "model": "menu.product",
+  "pk": 41,
+  "fields": {
+    "category": 9,
+    "name": "Spaghetti",
+    "slug": "spaghetti",
+    "description": "",
+    "image": "",
+    "price": "65.00",
+    "price_medium": null,
+    "price_large": null,
+    "price_hot": null,
+    "has_sizes": false,
+    "is_available": true,
+    "is_active": true,
+    "deactivated_at": null,
+    "is_featured": false,
+    "stock_quantity": 46,
+    "low_stock_threshold": 10,
+    "created_at": "2026-05-29T09:30:30.751Z",
+    "updated_at": "2026-06-03T16:12:09.931Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 1,
+  "fields": {
+    "order_number": "KDM-20260529-0001",
+    "customer_name": "Shane",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "69.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "69.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "69.00",
+    "change_amount": "0.00",
+    "stock_deducted": false,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-05-29T09:37:18.302Z",
+    "updated_at": "2026-05-29T09:46:53.977Z",
+    "completed_at": "2026-05-29T09:46:53.977Z",
+    "cancelled_at": null,
+    "queue_number": null,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 2,
+  "fields": {
+    "order_number": "KDM-20260529-0002",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "69.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "69.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "90.00",
+    "change_amount": "21.00",
+    "stock_deducted": false,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-05-29T09:40:35.121Z",
+    "updated_at": "2026-05-29T09:42:56.612Z",
+    "completed_at": "2026-05-29T09:42:56.611Z",
+    "cancelled_at": null,
+    "queue_number": null,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 3,
+  "fields": {
+    "order_number": "KDM-20260531-0001",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "244.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "244.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "244.00",
+    "change_amount": "0.00",
+    "stock_deducted": false,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-05-31T13:47:31.715Z",
+    "updated_at": "2026-05-31T13:51:42.811Z",
+    "completed_at": "2026-05-31T13:51:42.811Z",
+    "cancelled_at": null,
+    "queue_number": null,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 4,
+  "fields": {
+    "order_number": "KDM-20260531-0002",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "65.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "65.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "65.00",
+    "change_amount": "0.00",
+    "stock_deducted": false,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-05-31T13:53:19.848Z",
+    "updated_at": "2026-06-01T13:03:00.186Z",
+    "completed_at": "2026-06-01T13:03:00.183Z",
+    "cancelled_at": null,
+    "queue_number": 8,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 5,
+  "fields": {
+    "order_number": "KDM-20260531-0003",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "25.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "25.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "25.00",
+    "change_amount": "0.00",
+    "stock_deducted": false,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-05-31T13:53:28.531Z",
+    "updated_at": "2026-06-01T09:40:31.734Z",
+    "completed_at": "2026-06-01T09:40:31.733Z",
+    "cancelled_at": null,
+    "queue_number": null,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 6,
+  "fields": {
+    "order_number": "KDM-20260531-0004",
+    "customer_name": "Shanne",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "25.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "25.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "30.00",
+    "change_amount": "5.00",
+    "stock_deducted": false,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-05-31T13:53:45.121Z",
+    "updated_at": "2026-05-31T13:54:27.583Z",
+    "completed_at": "2026-05-31T13:54:27.582Z",
+    "cancelled_at": null,
+    "queue_number": null,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 7,
+  "fields": {
+    "order_number": "KDM-20260531-0005",
+    "customer_name": "Shanne",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "105.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "105.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "105.00",
+    "change_amount": "0.00",
+    "stock_deducted": false,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-05-31T14:04:17.515Z",
+    "updated_at": "2026-06-01T09:39:44.937Z",
+    "completed_at": "2026-06-01T09:39:44.936Z",
+    "cancelled_at": null,
+    "queue_number": null,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 8,
+  "fields": {
+    "order_number": "KDM-20260531-0006",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "cancelled",
+    "notes": "",
+    "subtotal": "1085.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "1085.00",
+    "is_paid": false,
+    "payment_method": "",
+    "amount_paid": "0.00",
+    "change_amount": "0.00",
+    "stock_deducted": false,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-05-31T15:25:07.558Z",
+    "updated_at": "2026-06-03T15:53:39.154Z",
+    "completed_at": "2026-06-01T09:38:21.956Z",
+    "cancelled_at": null,
+    "queue_number": 5,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 9,
+  "fields": {
+    "order_number": "KDM-20260601-0001",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "250.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "250.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "250.00",
+    "change_amount": "0.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T09:41:00.994Z",
+    "updated_at": "2026-06-01T09:41:46.281Z",
+    "completed_at": "2026-06-01T09:41:46.281Z",
+    "cancelled_at": null,
+    "queue_number": null,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 10,
+  "fields": {
+    "order_number": "KDM-20260601-0002",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "357.00",
+    "discount": "0.00",
+    "packaging_fee": "24.00",
+    "total": "381.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "389.00",
+    "change_amount": "8.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T11:03:34.495Z",
+    "updated_at": "2026-06-01T11:04:32.788Z",
+    "completed_at": "2026-06-01T11:04:32.788Z",
+    "cancelled_at": null,
+    "queue_number": null,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 11,
+  "fields": {
+    "order_number": "KDM-20260601-0003",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "80.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "80.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "90.00",
+    "change_amount": "10.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T11:19:19.569Z",
+    "updated_at": "2026-06-01T13:02:19.603Z",
+    "completed_at": "2026-06-01T13:02:19.602Z",
+    "cancelled_at": null,
+    "queue_number": 6,
+    "queued_at": "2026-06-01T12:53:44.652Z",
+    "ready_at": "2026-06-01T12:58:23.885Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 12,
+  "fields": {
+    "order_number": "KDM-20260601-0004",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "124.00",
+    "discount": "0.00",
+    "packaging_fee": "7.00",
+    "total": "131.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "150.00",
+    "change_amount": "19.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T11:39:17.697Z",
+    "updated_at": "2026-06-01T11:39:46.411Z",
+    "completed_at": "2026-06-01T11:39:46.410Z",
+    "cancelled_at": null,
+    "queue_number": null,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 13,
+  "fields": {
+    "order_number": "KDM-20260601-0005",
+    "customer_name": "Shanne",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "60.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "60.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "60.00",
+    "change_amount": "0.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T12:48:29.198Z",
+    "updated_at": "2026-06-01T12:55:26.000Z",
+    "completed_at": "2026-06-01T12:55:26.000Z",
+    "cancelled_at": null,
+    "queue_number": 5,
+    "queued_at": "2026-06-01T12:53:03.509Z",
+    "ready_at": "2026-06-01T12:55:01.526Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 14,
+  "fields": {
+    "order_number": "KDM-20260601-0006",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "128.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "128.00",
+    "is_paid": true,
+    "payment_method": "gcash",
+    "amount_paid": "130.00",
+    "change_amount": "2.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T12:59:28.422Z",
+    "updated_at": "2026-06-01T13:02:29.197Z",
+    "completed_at": "2026-06-01T13:02:29.197Z",
+    "cancelled_at": null,
+    "queue_number": 6,
+    "queued_at": "2026-06-01T12:59:55.406Z",
+    "ready_at": "2026-06-01T13:00:28.399Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 15,
+  "fields": {
+    "order_number": "KDM-20260601-0007",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "[Payment method updated: card → cash during system update]",
+    "subtotal": "40.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "40.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "45.00",
+    "change_amount": "5.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T13:00:47.973Z",
+    "updated_at": "2026-07-30T03:09:46.282Z",
+    "completed_at": "2026-06-01T13:02:37.892Z",
+    "cancelled_at": null,
+    "queue_number": 7,
+    "queued_at": "2026-06-01T13:00:56.086Z",
+    "ready_at": "2026-06-01T13:01:11.576Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 16,
+  "fields": {
+    "order_number": "KDM-20260601-0008",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "30.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "30.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "30.00",
+    "change_amount": "0.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "cashier1"
+    ],
+    "created_at": "2026-06-01T13:03:13.859Z",
+    "updated_at": "2026-06-02T14:40:56.073Z",
+    "completed_at": "2026-06-02T14:40:56.073Z",
+    "cancelled_at": null,
+    "queue_number": 8,
+    "queued_at": "2026-06-01T13:03:33.260Z",
+    "ready_at": "2026-06-02T14:40:45.894Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 17,
+  "fields": {
+    "order_number": "KDM-20260601-0009",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "69.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "69.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "69.00",
+    "change_amount": "0.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "cashier1"
+    ],
+    "created_at": "2026-06-01T13:03:19.326Z",
+    "updated_at": "2026-06-02T14:41:14.464Z",
+    "completed_at": "2026-06-02T14:41:14.463Z",
+    "cancelled_at": null,
+    "queue_number": 9,
+    "queued_at": "2026-06-01T13:03:31.886Z",
+    "ready_at": "2026-06-02T14:41:03.348Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 18,
+  "fields": {
+    "order_number": "KDM-20260601-0010",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "69.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "69.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "69.00",
+    "change_amount": "0.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "cashier1"
+    ],
+    "created_at": "2026-06-01T13:03:23.291Z",
+    "updated_at": "2026-06-02T14:41:27.887Z",
+    "completed_at": "2026-06-02T14:41:27.887Z",
+    "cancelled_at": null,
+    "queue_number": 10,
+    "queued_at": "2026-06-01T13:03:30.916Z",
+    "ready_at": "2026-06-02T14:41:18.696Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 19,
+  "fields": {
+    "order_number": "KDM-20260601-0011",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "40.00",
+    "discount": "0.00",
+    "packaging_fee": "7.00",
+    "total": "47.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "50.00",
+    "change_amount": "3.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "cashier1"
+    ],
+    "created_at": "2026-06-01T13:03:55.825Z",
+    "updated_at": "2026-06-02T14:42:00.739Z",
+    "completed_at": "2026-06-02T14:42:00.739Z",
+    "cancelled_at": null,
+    "queue_number": 11,
+    "queued_at": "2026-06-01T13:04:02.167Z",
+    "ready_at": "2026-06-01T13:04:08.203Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 20,
+  "fields": {
+    "order_number": "KDM-20260601-0012",
+    "customer_name": "Shanne",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "60.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "60.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "70.00",
+    "change_amount": "10.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "cashier1"
+    ],
+    "created_at": "2026-06-01T13:05:07.407Z",
+    "updated_at": "2026-06-02T14:42:09.634Z",
+    "completed_at": "2026-06-02T14:42:09.634Z",
+    "cancelled_at": null,
+    "queue_number": 12,
+    "queued_at": "2026-06-01T13:06:04.112Z",
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 21,
+  "fields": {
+    "order_number": "KDM-20260601-0013",
+    "customer_name": "Gracely",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "30.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "30.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "40.00",
+    "change_amount": "10.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "cashier1"
+    ],
+    "created_at": "2026-06-01T13:06:37.139Z",
+    "updated_at": "2026-06-02T14:42:19.109Z",
+    "completed_at": "2026-06-02T14:42:19.109Z",
+    "cancelled_at": null,
+    "queue_number": 13,
+    "queued_at": "2026-06-01T13:06:45.422Z",
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 22,
+  "fields": {
+    "order_number": "KDM-20260601-0014",
+    "customer_name": "siya na",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "60.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "60.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "100.00",
+    "change_amount": "40.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "cashier1"
+    ],
+    "created_at": "2026-06-01T13:10:56.370Z",
+    "updated_at": "2026-06-02T14:42:25.634Z",
+    "completed_at": "2026-06-02T14:42:25.634Z",
+    "cancelled_at": null,
+    "queue_number": 14,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 23,
+  "fields": {
+    "order_number": "KDM-20260602-0001",
+    "customer_name": "chase",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "60.00",
+    "discount": "0.00",
+    "packaging_fee": "7.00",
+    "total": "67.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "70.00",
+    "change_amount": "3.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "cashier1"
+    ],
+    "created_at": "2026-06-02T14:00:20.867Z",
+    "updated_at": "2026-06-02T14:43:11.918Z",
+    "completed_at": "2026-06-02T14:43:11.918Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": "2026-06-02T14:42:39.073Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 24,
+  "fields": {
+    "order_number": "KDM-20260602-0002",
+    "customer_name": "paps",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "69.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "69.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "70.00",
+    "change_amount": "1.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "cashier1"
+    ],
+    "created_at": "2026-06-02T14:35:03.131Z",
+    "updated_at": "2026-06-02T14:40:10.239Z",
+    "completed_at": "2026-06-02T14:40:10.239Z",
+    "cancelled_at": null,
+    "queue_number": 2,
+    "queued_at": null,
+    "ready_at": "2026-06-02T14:39:52.491Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 25,
+  "fields": {
+    "order_number": "KDM-20260603-0001",
+    "customer_name": "Shanne",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "59.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "59.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "60.00",
+    "change_amount": "1.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "cashier1"
+    ],
+    "created_at": "2026-06-03T07:15:11.527Z",
+    "updated_at": "2026-06-03T07:36:12.529Z",
+    "completed_at": "2026-06-03T07:36:12.529Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": "2026-06-03T07:35:53.374Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 26,
+  "fields": {
+    "order_number": "KDM-20260603-0002",
+    "customer_name": "asdas",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "69.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "69.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "70.00",
+    "change_amount": "1.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "cashier1"
+    ],
+    "created_at": "2026-06-03T07:16:04.723Z",
+    "updated_at": "2026-06-03T07:39:07.307Z",
+    "completed_at": "2026-06-03T07:39:07.307Z",
+    "cancelled_at": null,
+    "queue_number": 2,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 27,
+  "fields": {
+    "order_number": "KDM-20260603-0003",
+    "customer_name": "Hik",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "69.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "69.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "90.00",
+    "change_amount": "21.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "cashier1"
+    ],
+    "created_at": "2026-06-03T07:38:43.321Z",
+    "updated_at": "2026-06-03T07:39:44.281Z",
+    "completed_at": "2026-06-03T07:39:44.280Z",
+    "cancelled_at": null,
+    "queue_number": 3,
+    "queued_at": null,
+    "ready_at": "2026-06-03T07:39:24.765Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 28,
+  "fields": {
+    "order_number": "KDM-20260603-0004",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "60.00",
+    "discount": "0.00",
+    "packaging_fee": "7.00",
+    "total": "67.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "80.00",
+    "change_amount": "13.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-03T07:40:48.597Z",
+    "updated_at": "2026-06-03T07:42:01.291Z",
+    "completed_at": "2026-06-03T07:42:01.291Z",
+    "cancelled_at": null,
+    "queue_number": 4,
+    "queued_at": null,
+    "ready_at": "2026-06-03T07:41:22.423Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 29,
+  "fields": {
+    "order_number": "KDM-20260603-0005",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "190.00",
+    "discount": "0.00",
+    "packaging_fee": "21.00",
+    "total": "211.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "220.00",
+    "change_amount": "9.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "cashier1"
+    ],
+    "created_at": "2026-06-03T15:56:24.536Z",
+    "updated_at": "2026-06-03T15:57:33.878Z",
+    "completed_at": "2026-06-03T15:57:33.878Z",
+    "cancelled_at": null,
+    "queue_number": 5,
+    "queued_at": null,
+    "ready_at": "2026-06-03T15:57:21.540Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 30,
+  "fields": {
+    "order_number": "KDM-20260603-0006",
+    "customer_name": "Shanne",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "85.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "85.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "90.00",
+    "change_amount": "5.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "cashier1"
+    ],
+    "created_at": "2026-06-03T16:02:46.755Z",
+    "updated_at": "2026-06-03T16:04:41.602Z",
+    "completed_at": "2026-06-03T16:04:41.601Z",
+    "cancelled_at": null,
+    "queue_number": 6,
+    "queued_at": null,
+    "ready_at": "2026-06-03T16:04:22.192Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 31,
+  "fields": {
+    "order_number": "KDM-20260604-0002",
+    "customer_name": "Shanne",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "189.00",
+    "discount": "0.00",
+    "packaging_fee": "14.00",
+    "total": "203.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "210.00",
+    "change_amount": "7.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-04T13:07:56.398Z",
+    "updated_at": "2026-06-04T13:10:15.986Z",
+    "completed_at": "2026-06-04T13:10:15.986Z",
+    "cancelled_at": null,
+    "queue_number": 2,
+    "queued_at": null,
+    "ready_at": "2026-06-04T13:10:03.139Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 32,
+  "fields": {
+    "order_number": "KDM-20260605-0001",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "60.00",
+    "discount": "0.00",
+    "packaging_fee": "6.00",
+    "total": "66.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "70.00",
+    "change_amount": "4.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-05T15:34:52.572Z",
+    "updated_at": "2026-06-05T15:35:19.215Z",
+    "completed_at": "2026-06-05T15:35:19.215Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 33,
+  "fields": {
+    "order_number": "KDM-20260606-0001",
+    "customer_name": "Gracely Ibañez",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "Dapat nd init",
+    "subtotal": "104.00",
+    "discount": "0.00",
+    "packaging_fee": "6.00",
+    "total": "110.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "110.00",
+    "change_amount": "0.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-06T11:36:52.943Z",
+    "updated_at": "2026-06-07T03:22:14.904Z",
+    "completed_at": "2026-06-07T03:22:14.904Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": "2026-06-07T03:22:06.730Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 34,
+  "fields": {
+    "order_number": "KDM-20260606-0002",
+    "customer_name": "YourGrasya",
+    "customer_phone": "143",
+    "table_number": "3",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "Lutua",
+    "subtotal": "70.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "70.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "80.00",
+    "change_amount": "10.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-06T11:46:04.888Z",
+    "updated_at": "2026-06-07T03:22:24.327Z",
+    "completed_at": "2026-06-07T03:22:24.327Z",
+    "cancelled_at": null,
+    "queue_number": 2,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 35,
+  "fields": {
+    "order_number": "KDM-20260607-0001",
+    "customer_name": "Gracely Ibañez",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "69.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "69.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "70.00",
+    "change_amount": "1.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-07T03:13:59.069Z",
+    "updated_at": "2026-06-07T03:22:33.556Z",
+    "completed_at": "2026-06-07T03:22:33.556Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 36,
+  "fields": {
+    "order_number": "KDM-20260608-0001",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "25.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "25.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "30.00",
+    "change_amount": "5.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-08T04:52:24.356Z",
+    "updated_at": "2026-06-08T04:53:02.602Z",
+    "completed_at": "2026-06-08T04:53:02.601Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 37,
+  "fields": {
+    "order_number": "KDM-20260609-0001",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "60.00",
+    "discount": "0.00",
+    "packaging_fee": "6.00",
+    "total": "66.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "70.00",
+    "change_amount": "4.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-09T10:31:34.199Z",
+    "updated_at": "2026-06-09T10:32:30.944Z",
+    "completed_at": "2026-06-09T10:32:30.944Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 38,
+  "fields": {
+    "order_number": "KDM-20260609-0002",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "602.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "602.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "610.00",
+    "change_amount": "8.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-09T10:32:15.059Z",
+    "updated_at": "2026-06-09T10:32:39.822Z",
+    "completed_at": "2026-06-09T10:32:39.822Z",
+    "cancelled_at": null,
+    "queue_number": 2,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 39,
+  "fields": {
+    "order_number": "KDM-20260611-0001",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "345.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "345.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "350.00",
+    "change_amount": "5.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-11T02:04:13.756Z",
+    "updated_at": "2026-06-11T02:04:38.668Z",
+    "completed_at": "2026-06-11T02:04:38.668Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 40,
+  "fields": {
+    "order_number": "KDM-20260612-0001",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "200.00",
+    "discount": "0.00",
+    "packaging_fee": "18.00",
+    "total": "218.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "220.00",
+    "change_amount": "2.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-12T03:41:19.821Z",
+    "updated_at": "2026-06-12T03:42:15.805Z",
+    "completed_at": "2026-06-12T03:42:15.805Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 41,
+  "fields": {
+    "order_number": "KDM-20260612-0002",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "445.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "445.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "450.00",
+    "change_amount": "5.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-12T03:41:37.475Z",
+    "updated_at": "2026-06-12T03:42:23.776Z",
+    "completed_at": "2026-06-12T03:42:23.775Z",
+    "cancelled_at": null,
+    "queue_number": 2,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 42,
+  "fields": {
+    "order_number": "KDM-20260612-0003",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "195.00",
+    "discount": "0.00",
+    "packaging_fee": "18.00",
+    "total": "213.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "220.00",
+    "change_amount": "7.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-12T03:41:54.395Z",
+    "updated_at": "2026-06-12T03:42:31.400Z",
+    "completed_at": "2026-06-12T03:42:31.400Z",
+    "cancelled_at": null,
+    "queue_number": 3,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 43,
+  "fields": {
+    "order_number": "KDM-20260612-0004",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "60.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "60.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "60.00",
+    "change_amount": "0.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-12T03:41:59.880Z",
+    "updated_at": "2026-06-12T03:42:39.206Z",
+    "completed_at": "2026-06-12T03:42:39.205Z",
+    "cancelled_at": null,
+    "queue_number": 4,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 44,
+  "fields": {
+    "order_number": "KDM-20260612-0005",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "50.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "50.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "50.00",
+    "change_amount": "0.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-12T03:42:04.097Z",
+    "updated_at": "2026-06-12T03:42:46.975Z",
+    "completed_at": "2026-06-12T03:42:46.975Z",
+    "cancelled_at": null,
+    "queue_number": 5,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 45,
+  "fields": {
+    "order_number": "KDM-20260614-0001",
+    "customer_name": "Onyok",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "236.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "236.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "300.00",
+    "change_amount": "64.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-14T10:38:24.082Z",
+    "updated_at": "2026-06-15T11:43:25.988Z",
+    "completed_at": "2026-06-15T11:43:25.988Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 46,
+  "fields": {
+    "order_number": "KDM-20260615-0001",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "495.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "495.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "500.00",
+    "change_amount": "5.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-15T11:42:59.704Z",
+    "updated_at": "2026-06-15T11:43:33.394Z",
+    "completed_at": "2026-06-15T11:43:33.394Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 47,
+  "fields": {
+    "order_number": "KDM-20260617-0001",
+    "customer_name": "Meme",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "187.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "187.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "200.00",
+    "change_amount": "13.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-17T08:30:33.446Z",
+    "updated_at": "2026-06-18T13:39:13.333Z",
+    "completed_at": "2026-06-18T13:39:13.333Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 48,
+  "fields": {
+    "order_number": "KDM-20260618-0001",
+    "customer_name": "Lolly",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "110.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "110.00",
+    "is_paid": true,
+    "payment_method": "gcash",
+    "amount_paid": "110.00",
+    "change_amount": "0.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-18T12:27:06.499Z",
+    "updated_at": "2026-06-18T13:39:36.930Z",
+    "completed_at": "2026-06-18T13:39:36.930Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 49,
+  "fields": {
+    "order_number": "KDM-20260619-0001",
+    "customer_name": "Holly",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "120.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "120.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "200.00",
+    "change_amount": "80.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-19T12:37:56.378Z",
+    "updated_at": "2026-06-20T07:38:14.592Z",
+    "completed_at": "2026-06-20T07:38:14.592Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 50,
+  "fields": {
+    "order_number": "KDM-20260620-0001",
+    "customer_name": "Hello wolr",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "150.00",
+    "discount": "0.00",
+    "packaging_fee": "12.00",
+    "total": "162.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "170.00",
+    "change_amount": "8.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-20T07:37:03.600Z",
+    "updated_at": "2026-06-20T07:37:58.873Z",
+    "completed_at": "2026-06-20T07:37:58.873Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": "2026-06-20T07:37:36.218Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 51,
+  "fields": {
+    "order_number": "KDM-20260622-0001",
+    "customer_name": "Shs",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "128.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "128.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "130.00",
+    "change_amount": "2.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-22T02:12:10.965Z",
+    "updated_at": "2026-06-22T02:19:26.826Z",
+    "completed_at": "2026-06-22T02:19:26.826Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": "2026-06-22T02:18:33.911Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 52,
+  "fields": {
+    "order_number": "KDM-20260622-0002",
+    "customer_name": "fg",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "vjjv",
+    "subtotal": "95.00",
+    "discount": "0.00",
+    "packaging_fee": "6.00",
+    "total": "101.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "110.00",
+    "change_amount": "9.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-22T02:14:07.746Z",
+    "updated_at": "2026-06-22T02:19:54.324Z",
+    "completed_at": "2026-06-22T02:19:54.324Z",
+    "cancelled_at": null,
+    "queue_number": 2,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 53,
+  "fields": {
+    "order_number": "KDM-20260622-0003",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "174.00",
+    "discount": "0.00",
+    "packaging_fee": "6.00",
+    "total": "180.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "200.00",
+    "change_amount": "20.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-06-22T02:20:51.758Z",
+    "updated_at": "2026-07-23T10:29:02.828Z",
+    "completed_at": "2026-07-23T10:29:02.828Z",
+    "cancelled_at": null,
+    "queue_number": 3,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 54,
+  "fields": {
+    "order_number": "KDM-20260721-0001",
+    "customer_name": "ivan",
+    "customer_phone": "09486330142",
+    "table_number": "3",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "serve with kiss",
+    "subtotal": "60.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "60.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "100.00",
+    "change_amount": "40.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-07-21T10:49:16.447Z",
+    "updated_at": "2026-07-28T03:48:51.503Z",
+    "completed_at": "2026-07-28T03:48:51.503Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 55,
+  "fields": {
+    "order_number": "KDM-20260721-0002",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "188.00",
+    "discount": "0.00",
+    "packaging_fee": "6.00",
+    "total": "194.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "500.00",
+    "change_amount": "306.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-07-21T10:53:41.031Z",
+    "updated_at": "2026-07-28T03:48:43.737Z",
+    "completed_at": "2026-07-28T03:48:43.736Z",
+    "cancelled_at": null,
+    "queue_number": 2,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 56,
+  "fields": {
+    "order_number": "KDM-20260723-0001",
+    "customer_name": "Chu",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "65.00",
+    "discount": "0.00",
+    "packaging_fee": "6.00",
+    "total": "71.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "80.00",
+    "change_amount": "9.00",
+    "stock_deducted": true,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-07-23T10:24:09.311Z",
+    "updated_at": "2026-07-30T03:25:52.347Z",
+    "completed_at": "2026-07-30T03:25:52.347Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 57,
+  "fields": {
+    "order_number": "KDM-20260730-0001",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "60.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "60.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "70.00",
+    "change_amount": "10.00",
+    "stock_deducted": false,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-07-30T03:26:53.512Z",
+    "updated_at": "2026-07-30T03:28:55.548Z",
+    "completed_at": "2026-07-30T03:28:55.548Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 58,
+  "fields": {
+    "order_number": "KDM-20260730-0002",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "60.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "60.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "80.00",
+    "change_amount": "20.00",
+    "stock_deducted": false,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-07-30T03:26:53.716Z",
+    "updated_at": "2026-07-30T03:28:55.589Z",
+    "completed_at": "2026-07-30T03:28:55.589Z",
+    "cancelled_at": null,
+    "queue_number": 2,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 59,
+  "fields": {
+    "order_number": "KDM-20260730-0003",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "60.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "60.00",
+    "is_paid": true,
+    "payment_method": "gcash",
+    "amount_paid": "60.00",
+    "change_amount": "0.00",
+    "stock_deducted": false,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-07-30T03:26:53.863Z",
+    "updated_at": "2026-07-30T03:33:00.495Z",
+    "completed_at": "2026-07-30T03:33:00.495Z",
+    "cancelled_at": null,
+    "queue_number": 3,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 60,
+  "fields": {
+    "order_number": "KDM-20260730-0004",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "60.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "60.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "100.00",
+    "change_amount": "40.00",
+    "stock_deducted": false,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-07-30T03:26:54.012Z",
+    "updated_at": "2026-07-30T03:28:55.666Z",
+    "completed_at": "2026-07-30T03:28:55.666Z",
+    "cancelled_at": null,
+    "queue_number": 4,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 61,
+  "fields": {
+    "order_number": "KDM-20260730-0005",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "60.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "60.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "500.00",
+    "change_amount": "440.00",
+    "stock_deducted": false,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-07-30T03:26:54.157Z",
+    "updated_at": "2026-07-30T03:28:56.347Z",
+    "completed_at": "2026-07-30T03:28:56.347Z",
+    "cancelled_at": null,
+    "queue_number": 5,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 62,
+  "fields": {
+    "order_number": "KDM-20260730-0006",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "60.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "60.00",
+    "is_paid": true,
+    "payment_method": "gcash",
+    "amount_paid": "60.00",
+    "change_amount": "0.00",
+    "stock_deducted": false,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-07-30T03:26:54.422Z",
+    "updated_at": "2026-07-30T03:33:00.457Z",
+    "completed_at": "2026-07-30T03:33:00.457Z",
+    "cancelled_at": null,
+    "queue_number": 6,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 63,
+  "fields": {
+    "order_number": "KDM-20260730-0007",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "60.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "60.00",
+    "is_paid": true,
+    "payment_method": "gcash",
+    "amount_paid": "60.00",
+    "change_amount": "0.00",
+    "stock_deducted": false,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-07-30T03:26:54.574Z",
+    "updated_at": "2026-07-30T03:33:00.752Z",
+    "completed_at": "2026-07-30T03:33:00.752Z",
+    "cancelled_at": null,
+    "queue_number": 7,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 64,
+  "fields": {
+    "order_number": "KDM-20260730-0008",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "60.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "60.00",
+    "is_paid": true,
+    "payment_method": "gcash",
+    "amount_paid": "60.00",
+    "change_amount": "0.00",
+    "stock_deducted": false,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-07-30T03:26:54.724Z",
+    "updated_at": "2026-07-30T03:33:00.839Z",
+    "completed_at": "2026-07-30T03:33:00.838Z",
+    "cancelled_at": null,
+    "queue_number": 8,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 65,
+  "fields": {
+    "order_number": "KDM-20260730-0009",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "60.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "60.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "100.00",
+    "change_amount": "40.00",
+    "stock_deducted": false,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-07-30T03:26:54.881Z",
+    "updated_at": "2026-07-30T03:33:00.882Z",
+    "completed_at": "2026-07-30T03:33:00.882Z",
+    "cancelled_at": null,
+    "queue_number": 9,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 66,
+  "fields": {
+    "order_number": "KDM-20260802-0001",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "180.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "180.00",
+    "is_paid": true,
+    "payment_method": "gcash",
+    "amount_paid": "200.00",
+    "change_amount": "20.00",
+    "stock_deducted": false,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-08-02T22:21:59.376Z",
+    "updated_at": "2026-09-05T14:48:27.972Z",
+    "completed_at": "2026-09-05T14:48:27.972Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 67,
+  "fields": {
+    "order_number": "KDM-20260804-0001",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "105.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "105.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "110.00",
+    "change_amount": "5.00",
+    "stock_deducted": false,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-08-04T00:52:21.143Z",
+    "updated_at": "2026-09-05T14:48:26.596Z",
+    "completed_at": "2026-09-05T14:48:26.596Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": "2026-09-05T07:21:59.029Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 68,
+  "fields": {
+    "order_number": "KDM-20260804-0002",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "105.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "105.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "110.00",
+    "change_amount": "5.00",
+    "stock_deducted": false,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-08-04T00:52:21.794Z",
+    "updated_at": "2026-09-05T14:43:22.056Z",
+    "completed_at": "2026-09-05T14:43:22.055Z",
+    "cancelled_at": null,
+    "queue_number": 2,
+    "queued_at": null,
+    "ready_at": "2026-09-05T14:43:21.898Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 69,
+  "fields": {
+    "order_number": "KDM-20260830-0001",
+    "customer_name": "Ksksks",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "69.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "69.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "70.00",
+    "change_amount": "1.00",
+    "stock_deducted": false,
+    "request_token": null,
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-08-30T14:22:00.993Z",
+    "updated_at": "2026-09-05T07:32:36.397Z",
+    "completed_at": "2026-09-05T07:32:36.396Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": "2026-09-05T07:21:58.354Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 70,
+  "fields": {
+    "order_number": "KDM-20260902-0001",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "104.00",
+    "discount": "0.00",
+    "packaging_fee": "6.00",
+    "total": "110.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "120.00",
+    "change_amount": "10.00",
+    "stock_deducted": true,
+    "request_token": "5269603e-c7d8-415f-a67c-5d0893808824",
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-09-02T05:15:13.054Z",
+    "updated_at": "2026-09-04T01:30:24.540Z",
+    "completed_at": "2026-09-04T01:30:24.540Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 71,
+  "fields": {
+    "order_number": "KDM-20260906-0001",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "218.00",
+    "discount": "0.00",
+    "packaging_fee": "6.00",
+    "total": "224.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "230.00",
+    "change_amount": "6.00",
+    "stock_deducted": true,
+    "request_token": "844ff118-f385-4363-8326-5bbca8bf34cc",
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-09-05T16:30:18.143Z",
+    "updated_at": "2026-09-05T16:47:47.656Z",
+    "completed_at": "2026-09-05T16:47:47.656Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": "2026-09-05T16:39:41.238Z"
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 72,
+  "fields": {
+    "order_number": "KDM-20260907-0001",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "203.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "203.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "205.00",
+    "change_amount": "2.00",
+    "stock_deducted": true,
+    "request_token": "47b31381-2cb3-4daa-95b7-749397a5b53d",
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-09-07T02:01:34.128Z",
+    "updated_at": "2026-09-07T02:04:11.413Z",
+    "completed_at": "2026-09-07T02:04:11.413Z",
+    "cancelled_at": null,
+    "queue_number": 1,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 73,
+  "fields": {
+    "order_number": "KDM-20260907-0002",
+    "customer_name": "Shanne",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "Ganhan ko pork Pero chicken",
+    "subtotal": "104.00",
+    "discount": "0.00",
+    "packaging_fee": "6.00",
+    "total": "110.00",
+    "is_paid": true,
+    "payment_method": "gcash",
+    "amount_paid": "110.00",
+    "change_amount": "0.00",
+    "stock_deducted": true,
+    "request_token": "AwN8-gx7XR-_7E7AjTNWncc_aTfbYyKY2bbRGUDliH8",
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-09-07T02:04:57.867Z",
+    "updated_at": "2026-09-07T05:49:07.198Z",
+    "completed_at": "2026-09-07T05:49:07.198Z",
+    "cancelled_at": null,
+    "queue_number": 2,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 74,
+  "fields": {
+    "order_number": "KDM-20260907-0003",
+    "customer_name": "hfxfh",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "takeout",
+    "status": "completed",
+    "notes": "",
+    "subtotal": "69.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "69.00",
+    "is_paid": true,
+    "payment_method": "cash",
+    "amount_paid": "70.00",
+    "change_amount": "1.00",
+    "stock_deducted": true,
+    "request_token": "7rHFA9O3n8hC0wsixCySfKrISAOalbjjhj7CECKIIOI",
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-09-07T02:20:04.779Z",
+    "updated_at": "2026-09-07T07:11:57.727Z",
+    "completed_at": "2026-09-07T07:11:57.727Z",
+    "cancelled_at": null,
+    "queue_number": 3,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 75,
+  "fields": {
+    "order_number": "KDM-20260907-0004",
+    "customer_name": "S",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "completed",
+    "notes": "Bugnaw",
+    "subtotal": "69.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "69.00",
+    "is_paid": true,
+    "payment_method": "gcash",
+    "amount_paid": "69.00",
+    "change_amount": "0.00",
+    "stock_deducted": true,
+    "request_token": "RFhu4mu8vvIaYPCyj37Un1XNgL2UdMlyL5VwaJtoU2I",
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-09-07T02:43:20.670Z",
+    "updated_at": "2026-09-07T07:17:02.288Z",
+    "completed_at": "2026-09-07T07:17:02.288Z",
+    "cancelled_at": null,
+    "queue_number": 4,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 76,
+  "fields": {
+    "order_number": "KDM-20260907-0005",
+    "customer_name": "Shanne",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "pending",
+    "notes": "",
+    "subtotal": "69.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "69.00",
+    "is_paid": false,
+    "payment_method": "",
+    "amount_paid": "0.00",
+    "change_amount": "0.00",
+    "stock_deducted": true,
+    "request_token": "lh9emTih3L6NAcCAMLVck264MqfH_NgqAQO9QFP6gfQ",
+    "cashier": null,
+    "created_at": "2026-09-07T02:48:42.579Z",
+    "updated_at": "2026-09-07T02:48:42.579Z",
+    "completed_at": null,
+    "cancelled_at": null,
+    "queue_number": 5,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 77,
+  "fields": {
+    "order_number": "KDM-20260907-0006",
+    "customer_name": "Fj Dr",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "pending",
+    "notes": "",
+    "subtotal": "69.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "69.00",
+    "is_paid": false,
+    "payment_method": "",
+    "amount_paid": "0.00",
+    "change_amount": "0.00",
+    "stock_deducted": true,
+    "request_token": "KeFiCjlqwCdG5yoPdMhjX4Zkf5jSMFHBXAANprmPDec",
+    "cashier": null,
+    "created_at": "2026-09-07T03:32:04.938Z",
+    "updated_at": "2026-09-07T03:32:04.938Z",
+    "completed_at": null,
+    "cancelled_at": null,
+    "queue_number": 6,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 78,
+  "fields": {
+    "order_number": "KDM-20260907-0007",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "pending",
+    "notes": "",
+    "subtotal": "109.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "109.00",
+    "is_paid": false,
+    "payment_method": "",
+    "amount_paid": "0.00",
+    "change_amount": "0.00",
+    "stock_deducted": true,
+    "request_token": "0db7b878-bdc4-42c5-9244-6ddd149dd144",
+    "cashier": [
+      "cashier1"
+    ],
+    "created_at": "2026-09-07T04:57:38.623Z",
+    "updated_at": "2026-09-07T04:57:38.623Z",
+    "completed_at": null,
+    "cancelled_at": null,
+    "queue_number": 7,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.order",
+  "pk": 79,
+  "fields": {
+    "order_number": "KDM-20260907-0008",
+    "customer_name": "Walk-in Customer",
+    "customer_phone": "",
+    "table_number": "",
+    "order_type": "dine_in",
+    "status": "preparing",
+    "notes": "",
+    "subtotal": "60.00",
+    "discount": "0.00",
+    "packaging_fee": "0.00",
+    "total": "60.00",
+    "is_paid": false,
+    "payment_method": "",
+    "amount_paid": "0.00",
+    "change_amount": "0.00",
+    "stock_deducted": true,
+    "request_token": "ec26bcab-7faa-49ff-83e7-ad1d8167bdc4",
+    "cashier": [
+      "admin"
+    ],
+    "created_at": "2026-09-07T05:45:02.971Z",
+    "updated_at": "2026-09-07T05:49:06.855Z",
+    "completed_at": null,
+    "cancelled_at": null,
+    "queue_number": 8,
+    "queued_at": null,
+    "ready_at": null
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 1,
+  "fields": {
+    "order": 1,
+    "product": 2,
+    "product_name": "Mocha",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 2,
+  "fields": {
+    "order": 2,
+    "product": 2,
+    "product_name": "Mocha",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 3,
+  "fields": {
+    "order": 3,
+    "product": 31,
+    "product_name": "Chicken Meal",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 4,
+  "fields": {
+    "order": 3,
+    "product": 32,
+    "product_name": "Pork Burger",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 2,
+    "unit_price": "30.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 5,
+  "fields": {
+    "order": 3,
+    "product": 41,
+    "product_name": "Spaghetti",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "65.00",
+    "subtotal": "65.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 6,
+  "fields": {
+    "order": 3,
+    "product": 7,
+    "product_name": "Chocolate Milk Tea",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "59.00",
+    "subtotal": "59.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 7,
+  "fields": {
+    "order": 4,
+    "product": 41,
+    "product_name": "Spaghetti",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "65.00",
+    "subtotal": "65.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 8,
+  "fields": {
+    "order": 5,
+    "product": 39,
+    "product_name": "Tempura",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "25.00",
+    "subtotal": "25.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 9,
+  "fields": {
+    "order": 6,
+    "product": 36,
+    "product_name": "Steamed Siomai",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "25.00",
+    "subtotal": "25.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 10,
+  "fields": {
+    "order": 7,
+    "product": 25,
+    "product_name": "Chicken Pastil",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 3,
+    "unit_price": "35.00",
+    "subtotal": "105.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 11,
+  "fields": {
+    "order": 8,
+    "product": 26,
+    "product_name": "Pork Pastil",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 31,
+    "unit_price": "35.00",
+    "subtotal": "1085.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 12,
+  "fields": {
+    "order": 9,
+    "product": 39,
+    "product_name": "Tempura",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 10,
+    "unit_price": "25.00",
+    "subtotal": "250.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 13,
+  "fields": {
+    "order": 10,
+    "product": 25,
+    "product_name": "Chicken Pastil",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 2,
+    "unit_price": "35.00",
+    "subtotal": "70.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 14,
+  "fields": {
+    "order": 10,
+    "product": 2,
+    "product_name": "Mocha",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "large",
+    "quantity": 1,
+    "unit_price": "89.00",
+    "subtotal": "89.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 15,
+  "fields": {
+    "order": 10,
+    "product": 22,
+    "product_name": "Combo 5 - Spaghetti w/ Bread & Fries",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 2,
+    "unit_price": "99.00",
+    "subtotal": "198.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 16,
+  "fields": {
+    "order": 11,
+    "product": 40,
+    "product_name": "French Fries",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "30.00",
+    "subtotal": "30.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 17,
+  "fields": {
+    "order": 11,
+    "product": 38,
+    "product_name": "Squid Roll",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "25.00",
+    "subtotal": "25.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 18,
+  "fields": {
+    "order": 11,
+    "product": 36,
+    "product_name": "Steamed Siomai",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "25.00",
+    "subtotal": "25.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 19,
+  "fields": {
+    "order": 12,
+    "product": 39,
+    "product_name": "Tempura",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "25.00",
+    "subtotal": "25.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 20,
+  "fields": {
+    "order": 12,
+    "product": 22,
+    "product_name": "Combo 5 - Spaghetti w/ Bread & Fries",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "99.00",
+    "subtotal": "99.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 21,
+  "fields": {
+    "order": 13,
+    "product": 31,
+    "product_name": "Chicken Meal",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 22,
+  "fields": {
+    "order": 14,
+    "product": 15,
+    "product_name": "Blueberry Soda",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "29.00",
+    "subtotal": "29.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 23,
+  "fields": {
+    "order": 14,
+    "product": 12,
+    "product_name": "Strawberry Matcha",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "large",
+    "quantity": 1,
+    "unit_price": "99.00",
+    "subtotal": "99.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 24,
+  "fields": {
+    "order": 15,
+    "product": 33,
+    "product_name": "Chicken Burger",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "40.00",
+    "subtotal": "40.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 25,
+  "fields": {
+    "order": 16,
+    "product": 32,
+    "product_name": "Pork Burger",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "30.00",
+    "subtotal": "30.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 26,
+  "fields": {
+    "order": 17,
+    "product": 6,
+    "product_name": "Dark Chocolate",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "medium",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 27,
+  "fields": {
+    "order": 18,
+    "product": 5,
+    "product_name": "Spanish Latte",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "hot",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 28,
+  "fields": {
+    "order": 19,
+    "product": 33,
+    "product_name": "Chicken Burger",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "40.00",
+    "subtotal": "40.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 29,
+  "fields": {
+    "order": 20,
+    "product": 31,
+    "product_name": "Chicken Meal",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 30,
+  "fields": {
+    "order": 21,
+    "product": 40,
+    "product_name": "French Fries",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "30.00",
+    "subtotal": "30.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 31,
+  "fields": {
+    "order": 22,
+    "product": 31,
+    "product_name": "Chicken Meal",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 32,
+  "fields": {
+    "order": 23,
+    "product": 31,
+    "product_name": "Chicken Meal",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 33,
+  "fields": {
+    "order": 24,
+    "product": 2,
+    "product_name": "Mocha",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 34,
+  "fields": {
+    "order": 25,
+    "product": 9,
+    "product_name": "Red Velvet",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "59.00",
+    "subtotal": "59.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 35,
+  "fields": {
+    "order": 26,
+    "product": 1,
+    "product_name": "Salted Caramel",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 36,
+  "fields": {
+    "order": 27,
+    "product": 2,
+    "product_name": "Mocha",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 37,
+  "fields": {
+    "order": 28,
+    "product": 31,
+    "product_name": "Chicken Meal",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 38,
+  "fields": {
+    "order": 29,
+    "product": 41,
+    "product_name": "Spaghetti",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "65.00",
+    "subtotal": "65.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 39,
+  "fields": {
+    "order": 29,
+    "product": 40,
+    "product_name": "French Fries",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "30.00",
+    "subtotal": "30.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 40,
+  "fields": {
+    "order": 29,
+    "product": 35,
+    "product_name": "Special Chicken Burger",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 41,
+  "fields": {
+    "order": 29,
+    "product": 25,
+    "product_name": "Chicken Pastil",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "35.00",
+    "subtotal": "35.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 42,
+  "fields": {
+    "order": 30,
+    "product": 28,
+    "product_name": "Pastil with Chicken",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "85.00",
+    "subtotal": "85.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 43,
+  "fields": {
+    "order": 31,
+    "product": 1,
+    "product_name": "Salted Caramel",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 44,
+  "fields": {
+    "order": 31,
+    "product": 18,
+    "product_name": "Combo 1 - Burger & Fries",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 2,
+    "unit_price": "60.00",
+    "subtotal": "120.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 45,
+  "fields": {
+    "order": 32,
+    "product": 38,
+    "product_name": "Squid Roll",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "25.00",
+    "subtotal": "25.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 46,
+  "fields": {
+    "order": 32,
+    "product": 25,
+    "product_name": "Chicken Pastil",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "35.00",
+    "subtotal": "35.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 47,
+  "fields": {
+    "order": 33,
+    "product": 2,
+    "product_name": "Mocha",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 48,
+  "fields": {
+    "order": 33,
+    "product": 25,
+    "product_name": "Chicken Pastil",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "35.00",
+    "subtotal": "35.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 49,
+  "fields": {
+    "order": 34,
+    "product": 25,
+    "product_name": "Chicken Pastil",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 2,
+    "unit_price": "35.00",
+    "subtotal": "70.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 50,
+  "fields": {
+    "order": 35,
+    "product": 4,
+    "product_name": "Strawberry Coffee",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 51,
+  "fields": {
+    "order": 36,
+    "product": 39,
+    "product_name": "Tempura",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "25.00",
+    "subtotal": "25.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 52,
+  "fields": {
+    "order": 37,
+    "product": 18,
+    "product_name": "Combo 1 - Burger & Fries",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 53,
+  "fields": {
+    "order": 38,
+    "product": 2,
+    "product_name": "Mocha",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "hot",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 54,
+  "fields": {
+    "order": 38,
+    "product": 11,
+    "product_name": "Okinawa",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 55,
+  "fields": {
+    "order": 38,
+    "product": 13,
+    "product_name": "Matcha Latte",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "large",
+    "quantity": 1,
+    "unit_price": "89.00",
+    "subtotal": "89.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 56,
+  "fields": {
+    "order": 38,
+    "product": 18,
+    "product_name": "Combo 1 - Burger & Fries",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 57,
+  "fields": {
+    "order": 38,
+    "product": 29,
+    "product_name": "Pastil with Porkchop",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "105.00",
+    "subtotal": "105.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 58,
+  "fields": {
+    "order": 38,
+    "product": 35,
+    "product_name": "Special Chicken Burger",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 59,
+  "fields": {
+    "order": 38,
+    "product": 31,
+    "product_name": "Chicken Meal",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 60,
+  "fields": {
+    "order": 38,
+    "product": 38,
+    "product_name": "Squid Roll",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "25.00",
+    "subtotal": "25.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 61,
+  "fields": {
+    "order": 38,
+    "product": 41,
+    "product_name": "Spaghetti",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "65.00",
+    "subtotal": "65.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 62,
+  "fields": {
+    "order": 39,
+    "product": 2,
+    "product_name": "Mocha",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "hot",
+    "quantity": 5,
+    "unit_price": "69.00",
+    "subtotal": "345.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 63,
+  "fields": {
+    "order": 40,
+    "product": 25,
+    "product_name": "Chicken Pastil",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "35.00",
+    "subtotal": "35.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 64,
+  "fields": {
+    "order": 40,
+    "product": 29,
+    "product_name": "Pastil with Porkchop",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "105.00",
+    "subtotal": "105.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 65,
+  "fields": {
+    "order": 40,
+    "product": 31,
+    "product_name": "Chicken Meal",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 66,
+  "fields": {
+    "order": 41,
+    "product": 13,
+    "product_name": "Matcha Latte",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "large",
+    "quantity": 5,
+    "unit_price": "89.00",
+    "subtotal": "445.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 67,
+  "fields": {
+    "order": 42,
+    "product": 41,
+    "product_name": "Spaghetti",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 3,
+    "unit_price": "65.00",
+    "subtotal": "195.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 68,
+  "fields": {
+    "order": 43,
+    "product": 40,
+    "product_name": "French Fries",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 2,
+    "unit_price": "30.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 69,
+  "fields": {
+    "order": 44,
+    "product": 38,
+    "product_name": "Squid Roll",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "25.00",
+    "subtotal": "25.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 70,
+  "fields": {
+    "order": 44,
+    "product": 36,
+    "product_name": "Steamed Siomai",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "25.00",
+    "subtotal": "25.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 71,
+  "fields": {
+    "order": 45,
+    "product": 7,
+    "product_name": "Chocolate Milk Tea",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 2,
+    "unit_price": "59.00",
+    "subtotal": "118.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 72,
+  "fields": {
+    "order": 45,
+    "product": 8,
+    "product_name": "Cookies & Cream",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 2,
+    "unit_price": "59.00",
+    "subtotal": "118.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 73,
+  "fields": {
+    "order": 46,
+    "product": 10,
+    "product_name": "Wintermelon",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "large",
+    "quantity": 5,
+    "unit_price": "99.00",
+    "subtotal": "495.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 74,
+  "fields": {
+    "order": 47,
+    "product": 12,
+    "product_name": "Strawberry Matcha",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "79.00",
+    "subtotal": "79.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 75,
+  "fields": {
+    "order": 47,
+    "product": 14,
+    "product_name": "Strawberry Milk",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "79.00",
+    "subtotal": "79.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 76,
+  "fields": {
+    "order": 47,
+    "product": 17,
+    "product_name": "Strawberry Soda",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "29.00",
+    "subtotal": "29.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 77,
+  "fields": {
+    "order": 48,
+    "product": 40,
+    "product_name": "French Fries",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "30.00",
+    "subtotal": "30.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 78,
+  "fields": {
+    "order": 48,
+    "product": 37,
+    "product_name": "Fried Siomai",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "30.00",
+    "subtotal": "30.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 79,
+  "fields": {
+    "order": 48,
+    "product": 38,
+    "product_name": "Squid Roll",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "25.00",
+    "subtotal": "25.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 80,
+  "fields": {
+    "order": 48,
+    "product": 36,
+    "product_name": "Steamed Siomai",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "25.00",
+    "subtotal": "25.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 81,
+  "fields": {
+    "order": 49,
+    "product": 18,
+    "product_name": "Combo 1 - Burger & Fries",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 2,
+    "unit_price": "60.00",
+    "subtotal": "120.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 82,
+  "fields": {
+    "order": 50,
+    "product": 24,
+    "product_name": "Combo 7 - Spaghetti w/ Bread & Lumpia",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "90.00",
+    "subtotal": "90.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 83,
+  "fields": {
+    "order": 50,
+    "product": 30,
+    "product_name": "Lumpia Meal",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 84,
+  "fields": {
+    "order": 51,
+    "product": 2,
+    "product_name": "Mocha",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "medium",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 85,
+  "fields": {
+    "order": 51,
+    "product": 6,
+    "product_name": "Dark Chocolate",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "59.00",
+    "subtotal": "59.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 86,
+  "fields": {
+    "order": 52,
+    "product": 19,
+    "product_name": "Combo 2 - Spaghetti & Chicken",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "95.00",
+    "subtotal": "95.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 87,
+  "fields": {
+    "order": 53,
+    "product": 5,
+    "product_name": "Spanish Latte",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 88,
+  "fields": {
+    "order": 53,
+    "product": 29,
+    "product_name": "Pastil with Porkchop",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "105.00",
+    "subtotal": "105.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 89,
+  "fields": {
+    "order": 54,
+    "product": 31,
+    "product_name": "Chicken Meal",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 90,
+  "fields": {
+    "order": 55,
+    "product": 4,
+    "product_name": "Strawberry Coffee",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 91,
+  "fields": {
+    "order": 55,
+    "product": 7,
+    "product_name": "Chocolate Milk Tea",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "59.00",
+    "subtotal": "59.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 92,
+  "fields": {
+    "order": 55,
+    "product": 30,
+    "product_name": "Lumpia Meal",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 93,
+  "fields": {
+    "order": 56,
+    "product": 40,
+    "product_name": "French Fries",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "30.00",
+    "subtotal": "30.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 94,
+  "fields": {
+    "order": 56,
+    "product": 25,
+    "product_name": "Chicken Pastil",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "35.00",
+    "subtotal": "35.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 95,
+  "fields": {
+    "order": 57,
+    "product": 31,
+    "product_name": "Chicken Meal",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 96,
+  "fields": {
+    "order": 58,
+    "product": 31,
+    "product_name": "Chicken Meal",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 97,
+  "fields": {
+    "order": 59,
+    "product": 31,
+    "product_name": "Chicken Meal",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 98,
+  "fields": {
+    "order": 60,
+    "product": 31,
+    "product_name": "Chicken Meal",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 99,
+  "fields": {
+    "order": 61,
+    "product": 31,
+    "product_name": "Chicken Meal",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 100,
+  "fields": {
+    "order": 62,
+    "product": 31,
+    "product_name": "Chicken Meal",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 101,
+  "fields": {
+    "order": 63,
+    "product": 31,
+    "product_name": "Chicken Meal",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 102,
+  "fields": {
+    "order": 64,
+    "product": 31,
+    "product_name": "Chicken Meal",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 103,
+  "fields": {
+    "order": 65,
+    "product": 31,
+    "product_name": "Chicken Meal",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 104,
+  "fields": {
+    "order": 66,
+    "product": 19,
+    "product_name": "Combo 2 - Spaghetti & Chicken",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "95.00",
+    "subtotal": "95.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 105,
+  "fields": {
+    "order": 66,
+    "product": 28,
+    "product_name": "Pastil with Chicken",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "85.00",
+    "subtotal": "85.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 106,
+  "fields": {
+    "order": 67,
+    "product": 29,
+    "product_name": "Pastil with Porkchop",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "105.00",
+    "subtotal": "105.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 107,
+  "fields": {
+    "order": 68,
+    "product": 29,
+    "product_name": "Pastil with Porkchop",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "105.00",
+    "subtotal": "105.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 108,
+  "fields": {
+    "order": 69,
+    "product": 2,
+    "product_name": "Mocha",
+    "category_name": "",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 109,
+  "fields": {
+    "order": 70,
+    "product": 2,
+    "product_name": "Mocha",
+    "category_name": "Coffee",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 110,
+  "fields": {
+    "order": 70,
+    "product": 25,
+    "product_name": "Chicken Pastil",
+    "category_name": "Pastil Meals",
+    "packaging_eligible": true,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "35.00",
+    "subtotal": "35.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 111,
+  "fields": {
+    "order": 71,
+    "product": 2,
+    "product_name": "Mocha",
+    "category_name": "Coffee",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 112,
+  "fields": {
+    "order": 71,
+    "product": 7,
+    "product_name": "Chocolate Milk Tea",
+    "category_name": "Milk Tea",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "59.00",
+    "subtotal": "59.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 113,
+  "fields": {
+    "order": 71,
+    "product": 35,
+    "product_name": "Special Chicken Burger",
+    "category_name": "Burgers",
+    "packaging_eligible": true,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "60.00",
+    "subtotal": "60.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 114,
+  "fields": {
+    "order": 71,
+    "product": 40,
+    "product_name": "French Fries",
+    "category_name": "Appetizers",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "30.00",
+    "subtotal": "30.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 115,
+  "fields": {
+    "order": 72,
+    "product": 2,
+    "product_name": "Mocha",
+    "category_name": "Coffee",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 116,
+  "fields": {
+    "order": 72,
+    "product": 22,
+    "product_name": "Combo 5 - Spaghetti w/ Bread & Fries",
+    "category_name": "Combo Meals",
+    "packaging_eligible": true,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "99.00",
+    "subtotal": "99.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 117,
+  "fields": {
+    "order": 72,
+    "product": 26,
+    "product_name": "Pork Pastil",
+    "category_name": "Pastil Meals",
+    "packaging_eligible": true,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "35.00",
+    "subtotal": "35.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 118,
+  "fields": {
+    "order": 73,
+    "product": 2,
+    "product_name": "Mocha",
+    "category_name": "Coffee",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 119,
+  "fields": {
+    "order": 73,
+    "product": 26,
+    "product_name": "Pork Pastil",
+    "category_name": "Pastil Meals",
+    "packaging_eligible": true,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "35.00",
+    "subtotal": "35.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 120,
+  "fields": {
+    "order": 74,
+    "product": 1,
+    "product_name": "Salted Caramel",
+    "category_name": "Coffee",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 121,
+  "fields": {
+    "order": 75,
+    "product": 2,
+    "product_name": "Mocha",
+    "category_name": "Coffee",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 122,
+  "fields": {
+    "order": 76,
+    "product": 2,
+    "product_name": "Mocha",
+    "category_name": "Coffee",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 123,
+  "fields": {
+    "order": 77,
+    "product": 2,
+    "product_name": "Mocha",
+    "category_name": "Coffee",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 124,
+  "fields": {
+    "order": 78,
+    "product": 2,
+    "product_name": "Mocha",
+    "category_name": "Coffee",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00",
+    "subtotal": "69.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 125,
+  "fields": {
+    "order": 78,
+    "product": 33,
+    "product_name": "Chicken Burger",
+    "category_name": "Burgers",
+    "packaging_eligible": true,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "40.00",
+    "subtotal": "40.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 126,
+  "fields": {
+    "order": 79,
+    "product": 38,
+    "product_name": "Squid Roll",
+    "category_name": "Appetizers",
+    "packaging_eligible": false,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "25.00",
+    "subtotal": "25.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.orderitem",
+  "pk": 127,
+  "fields": {
+    "order": 79,
+    "product": 26,
+    "product_name": "Pork Pastil",
+    "category_name": "Pastil Meals",
+    "packaging_eligible": true,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "35.00",
+    "subtotal": "35.00",
+    "notes": ""
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 1,
+  "fields": {
+    "session_key": "wj5hjc1hyhj092woqkkcuntz4tbqultg",
+    "created_at": "2026-05-29T09:36:28.183Z",
+    "updated_at": "2026-05-29T09:36:28.183Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 2,
+  "fields": {
+    "session_key": "9asxqvh75kgc71w94o77smjqmgfdfl1j",
+    "created_at": "2026-05-31T12:58:36.338Z",
+    "updated_at": "2026-05-31T12:58:36.338Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 3,
+  "fields": {
+    "session_key": "m2712ujmub7sirqf9lp7xb8ql997smrj",
+    "created_at": "2026-05-31T13:09:06.042Z",
+    "updated_at": "2026-05-31T13:09:06.042Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 4,
+  "fields": {
+    "session_key": "okc0wyul0w5fs4tkrjzsh5ojzd87bcdl",
+    "created_at": "2026-05-31T13:10:02.586Z",
+    "updated_at": "2026-05-31T13:10:02.586Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 5,
+  "fields": {
+    "session_key": "kuagted62pwouugyh5iv59tcd7f8krg4",
+    "created_at": "2026-05-31T13:13:27.505Z",
+    "updated_at": "2026-05-31T13:13:27.505Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 6,
+  "fields": {
+    "session_key": "o0zs5g3nztfi5umfzyhkw6gmd0pton3h",
+    "created_at": "2026-05-31T14:03:24.320Z",
+    "updated_at": "2026-05-31T14:03:24.320Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 7,
+  "fields": {
+    "session_key": "uvak9wkhg7879l3rd160fqu1vwkcaqxo",
+    "created_at": "2026-06-01T09:36:25.713Z",
+    "updated_at": "2026-06-01T09:36:25.714Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 8,
+  "fields": {
+    "session_key": "cv4rq0jlvtizgspazcx80gguhoy6xz0q",
+    "created_at": "2026-06-01T12:47:29.403Z",
+    "updated_at": "2026-06-01T12:47:29.403Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 9,
+  "fields": {
+    "session_key": "pdgws5z93xo4jahf1jpbd7u59rgdr8hl",
+    "created_at": "2026-06-01T13:04:56.296Z",
+    "updated_at": "2026-06-01T13:04:56.296Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 10,
+  "fields": {
+    "session_key": "icp2vvanh8lwxob1594oezseda2u5h05",
+    "created_at": "2026-06-01T13:10:38.310Z",
+    "updated_at": "2026-06-01T13:10:38.310Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 11,
+  "fields": {
+    "session_key": "2qc6vk11au0qmelyrumpb8k21oocxibl",
+    "created_at": "2026-06-02T13:59:36.378Z",
+    "updated_at": "2026-06-02T13:59:36.378Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 12,
+  "fields": {
+    "session_key": "ncqtw93v0u7o5plzdvzj9b7m6bn0t4nu",
+    "created_at": "2026-06-03T07:14:46.465Z",
+    "updated_at": "2026-06-03T07:14:46.465Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 13,
+  "fields": {
+    "session_key": "qca2aflr4ea7tg9c2oqkgxe6jtbyrbuw",
+    "created_at": "2026-06-03T07:15:51.991Z",
+    "updated_at": "2026-06-03T07:15:51.991Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 14,
+  "fields": {
+    "session_key": "0d6eegwvqmwpcm1yi6qs5e7toh88ld7l",
+    "created_at": "2026-06-03T07:45:46.609Z",
+    "updated_at": "2026-06-03T07:45:46.609Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 15,
+  "fields": {
+    "session_key": "ynvuuwa55nthe775ixwf99ka799hr46g",
+    "created_at": "2026-06-03T16:00:41.531Z",
+    "updated_at": "2026-06-03T16:00:41.531Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 16,
+  "fields": {
+    "session_key": "0oii66t525tllq0dzhmesudo7i85qryu",
+    "created_at": "2026-06-04T13:07:08.270Z",
+    "updated_at": "2026-06-04T13:07:08.270Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 17,
+  "fields": {
+    "session_key": "leipqaqgsrqvlqdlg2x0tas2200b0swa",
+    "created_at": "2026-06-04T13:12:14.817Z",
+    "updated_at": "2026-06-04T13:12:14.817Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 18,
+  "fields": {
+    "session_key": "b7lzl4a2j19lq0kv5w3avjhy79wmjupk",
+    "created_at": "2026-06-06T11:35:12.529Z",
+    "updated_at": "2026-06-06T11:35:12.529Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 19,
+  "fields": {
+    "session_key": "7p6rdqkzloyi36w1paqqy8g7d0bj8m44",
+    "created_at": "2026-06-06T11:45:04.009Z",
+    "updated_at": "2026-06-06T11:45:04.009Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 20,
+  "fields": {
+    "session_key": "xqa4pcrxyt25kecbkqeq63ebx1eeq0pl",
+    "created_at": "2026-06-07T03:12:26.979Z",
+    "updated_at": "2026-06-07T03:12:26.979Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 21,
+  "fields": {
+    "session_key": "xehfdu1904ayejtywle2s0jcvnpb0m3c",
+    "created_at": "2026-06-07T03:12:27.808Z",
+    "updated_at": "2026-06-07T03:12:27.808Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 22,
+  "fields": {
+    "session_key": "gay76grmdahcu3uq0kf1wi6vsbkek1sf",
+    "created_at": "2026-06-08T12:05:10.581Z",
+    "updated_at": "2026-06-08T12:05:10.581Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 23,
+  "fields": {
+    "session_key": "lu8r5jw8wpv7iuvkl79mtna8acsrqcpx",
+    "created_at": "2026-06-14T10:37:58.863Z",
+    "updated_at": "2026-06-14T10:37:58.863Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 24,
+  "fields": {
+    "session_key": "wyw87mx9s5tcqjrg9e6wy9p1gxbqd9zm",
+    "created_at": "2026-06-17T08:30:00.571Z",
+    "updated_at": "2026-06-17T08:30:00.571Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 25,
+  "fields": {
+    "session_key": "7dzbg5e2z5vf4yg2xi8dvdv1lcpvnzgc",
+    "created_at": "2026-06-17T08:30:00.844Z",
+    "updated_at": "2026-06-17T08:30:00.844Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 26,
+  "fields": {
+    "session_key": "ahq9p1cuazg6afwq64djjk99c8w2tjcs",
+    "created_at": "2026-06-18T12:26:23.695Z",
+    "updated_at": "2026-06-18T12:26:23.695Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 27,
+  "fields": {
+    "session_key": "7jlb826e7bdtne1a752euqtlskr93vnn",
+    "created_at": "2026-06-18T12:26:36.440Z",
+    "updated_at": "2026-06-18T12:26:36.440Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 28,
+  "fields": {
+    "session_key": "2cdhidq1ow9v5l7fjaiyms1giicjkfdn",
+    "created_at": "2026-06-18T12:26:36.970Z",
+    "updated_at": "2026-06-18T12:26:36.970Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 29,
+  "fields": {
+    "session_key": "249gvp4f3qte9pf82z6bivylvsw2paqb",
+    "created_at": "2026-06-19T12:37:39.013Z",
+    "updated_at": "2026-06-19T12:37:39.013Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 30,
+  "fields": {
+    "session_key": "k2slc48txi69lstewnclfktwtbv4deut",
+    "created_at": "2026-06-22T02:09:54.269Z",
+    "updated_at": "2026-06-22T02:09:54.269Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 31,
+  "fields": {
+    "session_key": "1eyuoe0b9adees5mzsa40hpioqrwjklh",
+    "created_at": "2026-06-22T02:10:09.144Z",
+    "updated_at": "2026-06-22T02:10:09.144Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 32,
+  "fields": {
+    "session_key": "i5x9my0d19e25744ve405572gija01lo",
+    "created_at": "2026-07-21T10:48:29.853Z",
+    "updated_at": "2026-07-21T10:48:29.853Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 33,
+  "fields": {
+    "session_key": "6ltby6ql5xjfj9xyagqrx87b5ejnhqhb",
+    "created_at": "2026-07-21T10:49:20.047Z",
+    "updated_at": "2026-07-21T10:49:20.047Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 34,
+  "fields": {
+    "session_key": "wwl64zb1n07nocqyhwyaxgicijvixxsy",
+    "created_at": "2026-07-21T10:49:28.527Z",
+    "updated_at": "2026-07-21T10:49:28.527Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 35,
+  "fields": {
+    "session_key": "mble6aderdev292fkcnfki5z0g2y70x1",
+    "created_at": "2026-07-21T10:49:29.750Z",
+    "updated_at": "2026-07-21T10:49:29.750Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 36,
+  "fields": {
+    "session_key": "d7jsa48tf8r46vekcump9hxmrspxcnbc",
+    "created_at": "2026-07-21T10:49:30.751Z",
+    "updated_at": "2026-07-21T10:49:30.751Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 37,
+  "fields": {
+    "session_key": "1d2gxs1nbl2tcapdxp6ygckb14983ilk",
+    "created_at": "2026-07-23T10:22:45.474Z",
+    "updated_at": "2026-07-23T10:22:45.474Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 38,
+  "fields": {
+    "session_key": "96zzrrebei57iod3ydt833qzh34en8ry",
+    "created_at": "2026-07-23T10:22:49.543Z",
+    "updated_at": "2026-07-23T10:22:49.543Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 39,
+  "fields": {
+    "session_key": "aoig0di072sc6jaha69ak01z5uzobk5a",
+    "created_at": "2026-07-28T06:05:28.649Z",
+    "updated_at": "2026-07-28T06:05:28.649Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 40,
+  "fields": {
+    "session_key": "komb4d19ti7xdf0ns6n2t9bdneec4zcy",
+    "created_at": "2026-07-31T02:15:40.834Z",
+    "updated_at": "2026-07-31T02:15:40.834Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 41,
+  "fields": {
+    "session_key": "6xx3jld9u9hg7iohub5e42s4er11lgdp",
+    "created_at": "2026-08-23T12:22:30.217Z",
+    "updated_at": "2026-08-23T12:22:30.217Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 42,
+  "fields": {
+    "session_key": "x4h2iu88fgw2e2kb7sl0gs89gvnhovn5",
+    "created_at": "2026-08-30T14:21:46.395Z",
+    "updated_at": "2026-08-30T14:21:46.395Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 43,
+  "fields": {
+    "session_key": "sky4nn3nzpaikmm1m6ky48b67okzbo3y",
+    "created_at": "2026-08-30T14:23:21.619Z",
+    "updated_at": "2026-08-30T14:23:21.619Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 44,
+  "fields": {
+    "session_key": "bm0rlns9tinsvwhg36y0yajm8cinwjc9",
+    "created_at": "2026-08-30T14:23:22.253Z",
+    "updated_at": "2026-08-30T14:23:22.253Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 45,
+  "fields": {
+    "session_key": "nd54tzzgqvwi9hu4ggnccrqhh9vxk35q",
+    "created_at": "2026-09-02T05:04:53.182Z",
+    "updated_at": "2026-09-02T05:04:53.182Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 46,
+  "fields": {
+    "session_key": "2iqemhsttwpmrqwdobh0r66ihbdi3j9i",
+    "created_at": "2026-09-02T05:12:28.868Z",
+    "updated_at": "2026-09-02T05:12:28.868Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 47,
+  "fields": {
+    "session_key": "czntpwly5ffwicdprwhr18yhfr7imtfu",
+    "created_at": "2026-09-02T05:26:16.168Z",
+    "updated_at": "2026-09-02T05:26:16.168Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 48,
+  "fields": {
+    "session_key": "nji7ojm5pjlf5bhrr2dx2p723p32iwi7",
+    "created_at": "2026-09-02T07:06:57.818Z",
+    "updated_at": "2026-09-02T07:06:57.819Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 49,
+  "fields": {
+    "session_key": "rsifevv5iz05ur5we72r0b7ejcvieloa",
+    "created_at": "2026-09-04T00:44:48.592Z",
+    "updated_at": "2026-09-04T00:44:48.592Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 50,
+  "fields": {
+    "session_key": "jtvw58xqpk68y0hg5msjgu1w1w3ayfla",
+    "created_at": "2026-09-04T07:48:41.537Z",
+    "updated_at": "2026-09-04T07:48:41.537Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 51,
+  "fields": {
+    "session_key": "m10m8xexaicggjmx4vzqka0awbiya5mr",
+    "created_at": "2026-09-04T09:19:26.865Z",
+    "updated_at": "2026-09-04T09:19:26.865Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 52,
+  "fields": {
+    "session_key": "hsxs83rnjgbm8n7ihl9gy6ojs3rp7o4r",
+    "created_at": "2026-09-05T07:14:40.783Z",
+    "updated_at": "2026-09-05T07:14:40.783Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 53,
+  "fields": {
+    "session_key": "jtmlsb3k6nchc6rq47z098aldv08cf7s",
+    "created_at": "2026-09-07T02:04:21.048Z",
+    "updated_at": "2026-09-07T02:04:21.048Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 54,
+  "fields": {
+    "session_key": "fvm2x01mry9fw7gv38u20wliwsq3ze4k",
+    "created_at": "2026-09-07T02:19:31.065Z",
+    "updated_at": "2026-09-07T02:19:31.065Z"
+  }
+},
+{
+  "model": "orders.cart",
+  "pk": 55,
+  "fields": {
+    "session_key": "5ydsr3evs2wf4c8c3e4usgyjxasepnqo",
+    "created_at": "2026-09-07T02:19:34.003Z",
+    "updated_at": "2026-09-07T02:19:34.003Z"
+  }
+},
+{
+  "model": "orders.cartitem",
+  "pk": 2,
+  "fields": {
+    "cart": 5,
+    "product": 10,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00"
+  }
+},
+{
+  "model": "orders.cartitem",
+  "pk": 18,
+  "fields": {
+    "cart": 19,
+    "product": 1,
+    "size": "none",
+    "quantity": 3,
+    "unit_price": "69.00"
+  }
+},
+{
+  "model": "orders.cartitem",
+  "pk": 19,
+  "fields": {
+    "cart": 20,
+    "product": 4,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00"
+  }
+},
+{
+  "model": "orders.cartitem",
+  "pk": 21,
+  "fields": {
+    "cart": 22,
+    "product": 2,
+    "size": "none",
+    "quantity": 3,
+    "unit_price": "69.00"
+  }
+},
+{
+  "model": "orders.cartitem",
+  "pk": 24,
+  "fields": {
+    "cart": 24,
+    "product": 13,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00"
+  }
+},
+{
+  "model": "orders.cartitem",
+  "pk": 41,
+  "fields": {
+    "cart": 33,
+    "product": 2,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00"
+  }
+},
+{
+  "model": "orders.cartitem",
+  "pk": 42,
+  "fields": {
+    "cart": 37,
+    "product": 37,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "30.00"
+  }
+},
+{
+  "model": "orders.cartitem",
+  "pk": 45,
+  "fields": {
+    "cart": 40,
+    "product": 2,
+    "size": "none",
+    "quantity": 2,
+    "unit_price": "69.00"
+  }
+},
+{
+  "model": "orders.cartitem",
+  "pk": 47,
+  "fields": {
+    "cart": 42,
+    "product": 2,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00"
+  }
+},
+{
+  "model": "orders.cartitem",
+  "pk": 48,
+  "fields": {
+    "cart": 45,
+    "product": 25,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "35.00"
+  }
+},
+{
+  "model": "orders.cartitem",
+  "pk": 49,
+  "fields": {
+    "cart": 45,
+    "product": 15,
+    "size": "none",
+    "quantity": 2,
+    "unit_price": "29.00"
+  }
+},
+{
+  "model": "orders.cartitem",
+  "pk": 54,
+  "fields": {
+    "cart": 54,
+    "product": 2,
+    "size": "none",
+    "quantity": 1,
+    "unit_price": "69.00"
+  }
+},
+{
+  "model": "orders.dailyordersequence",
+  "pk": 1,
+  "fields": {
+    "date": "2026-09-02",
+    "last_sequence": 1
+  }
+},
+{
+  "model": "orders.dailyordersequence",
+  "pk": 2,
+  "fields": {
+    "date": "2026-09-06",
+    "last_sequence": 1
+  }
+},
+{
+  "model": "orders.dailyordersequence",
+  "pk": 3,
+  "fields": {
+    "date": "2026-09-07",
+    "last_sequence": 8
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 1,
+  "fields": {
+    "product": 25,
+    "product_name": "",
+    "action": "restock",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": 40,
+    "quantity_before": 40,
+    "quantity_after": 80,
+    "notes": "Restocked",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-05-31T13:55:53.990Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 2,
+  "fields": {
+    "product": 1,
+    "product_name": "",
+    "action": "restock",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": 1,
+    "quantity_before": 100,
+    "quantity_after": 101,
+    "notes": "",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-05-31T13:56:16.602Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 3,
+  "fields": {
+    "product": 26,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -31,
+    "quantity_before": 40,
+    "quantity_after": 9,
+    "notes": "Order #KDM-20260531-0006",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-05-31T15:25:08.679Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 4,
+  "fields": {
+    "product": 26,
+    "product_name": "",
+    "action": "adjustment",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": 31,
+    "quantity_before": 9,
+    "quantity_after": 40,
+    "notes": "Cancelled Order #KDM-20260531-0006",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T09:37:58.742Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 5,
+  "fields": {
+    "product": 39,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -10,
+    "quantity_before": 100,
+    "quantity_after": 90,
+    "notes": "Order #KDM-20260601-0001",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T09:41:01.495Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 6,
+  "fields": {
+    "product": 25,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -2,
+    "quantity_before": 77,
+    "quantity_after": 75,
+    "notes": "Order #KDM-20260601-0002",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T11:03:35.443Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 7,
+  "fields": {
+    "product": 2,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 99,
+    "quantity_after": 98,
+    "notes": "Order #KDM-20260601-0002",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T11:03:35.450Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 8,
+  "fields": {
+    "product": 22,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -2,
+    "quantity_before": 50,
+    "quantity_after": 48,
+    "notes": "Order #KDM-20260601-0002",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T11:03:35.455Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 9,
+  "fields": {
+    "product": 40,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 100,
+    "quantity_after": 99,
+    "notes": "Order #KDM-20260601-0003",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T11:19:21.417Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 10,
+  "fields": {
+    "product": 38,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 100,
+    "quantity_after": 99,
+    "notes": "Order #KDM-20260601-0003",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T11:19:21.420Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 11,
+  "fields": {
+    "product": 36,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 100,
+    "quantity_after": 99,
+    "notes": "Order #KDM-20260601-0003",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T11:19:21.422Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 12,
+  "fields": {
+    "product": 39,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 90,
+    "quantity_after": 89,
+    "notes": "Order #KDM-20260601-0004",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T11:39:18.692Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 13,
+  "fields": {
+    "product": 22,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 48,
+    "quantity_after": 47,
+    "notes": "Order #KDM-20260601-0004",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T11:39:18.695Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 14,
+  "fields": {
+    "product": 31,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 40,
+    "quantity_after": 39,
+    "notes": "Order #KDM-20260601-0005",
+    "performed_by": null,
+    "created_at": "2026-06-01T12:48:30.431Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 15,
+  "fields": {
+    "product": 15,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 60,
+    "quantity_after": 59,
+    "notes": "Order #KDM-20260601-0006",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T12:59:31.416Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 16,
+  "fields": {
+    "product": 12,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 60,
+    "quantity_after": 59,
+    "notes": "Order #KDM-20260601-0006",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T12:59:31.471Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 17,
+  "fields": {
+    "product": 33,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 50,
+    "quantity_after": 49,
+    "notes": "Order #KDM-20260601-0007",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T13:00:48.611Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 18,
+  "fields": {
+    "product": 32,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 50,
+    "quantity_after": 49,
+    "notes": "Order #KDM-20260601-0008",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T13:03:14.639Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 19,
+  "fields": {
+    "product": 6,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 80,
+    "quantity_after": 79,
+    "notes": "Order #KDM-20260601-0009",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T13:03:20.005Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 20,
+  "fields": {
+    "product": 5,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 100,
+    "quantity_after": 99,
+    "notes": "Order #KDM-20260601-0010",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T13:03:23.838Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 21,
+  "fields": {
+    "product": 33,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 49,
+    "quantity_after": 48,
+    "notes": "Order #KDM-20260601-0011",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T13:03:56.800Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 22,
+  "fields": {
+    "product": 31,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 39,
+    "quantity_after": 38,
+    "notes": "Order #KDM-20260601-0012",
+    "performed_by": null,
+    "created_at": "2026-06-01T13:05:08.259Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 23,
+  "fields": {
+    "product": 40,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 99,
+    "quantity_after": 98,
+    "notes": "Order #KDM-20260601-0013",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-01T13:06:38.498Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 24,
+  "fields": {
+    "product": 31,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 38,
+    "quantity_after": 37,
+    "notes": "Order #KDM-20260601-0014",
+    "performed_by": null,
+    "created_at": "2026-06-01T13:10:57.179Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 25,
+  "fields": {
+    "product": 31,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 37,
+    "quantity_after": 36,
+    "notes": "Order #KDM-20260602-0001",
+    "performed_by": null,
+    "created_at": "2026-06-02T14:00:21.799Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 26,
+  "fields": {
+    "product": 2,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 98,
+    "quantity_after": 97,
+    "notes": "Order #KDM-20260602-0002",
+    "performed_by": null,
+    "created_at": "2026-06-02T14:35:03.941Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 27,
+  "fields": {
+    "product": 9,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 80,
+    "quantity_after": 79,
+    "notes": "Order #KDM-20260603-0001",
+    "performed_by": null,
+    "created_at": "2026-06-03T07:15:11.611Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 28,
+  "fields": {
+    "product": 1,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 101,
+    "quantity_after": 100,
+    "notes": "Order #KDM-20260603-0002",
+    "performed_by": null,
+    "created_at": "2026-06-03T07:16:04.921Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 29,
+  "fields": {
+    "product": 2,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 97,
+    "quantity_after": 96,
+    "notes": "Order #KDM-20260603-0003",
+    "performed_by": null,
+    "created_at": "2026-06-03T07:38:43.439Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 30,
+  "fields": {
+    "product": 31,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 36,
+    "quantity_after": 35,
+    "notes": "Order #KDM-20260603-0004",
+    "performed_by": [
+      "cashier1"
+    ],
+    "created_at": "2026-06-03T07:40:48.755Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 31,
+  "fields": {
+    "product": 41,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 60,
+    "quantity_after": 59,
+    "notes": "Order #KDM-20260603-0005",
+    "performed_by": [
+      "cashier1"
+    ],
+    "created_at": "2026-06-03T15:56:24.913Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 32,
+  "fields": {
+    "product": 40,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 98,
+    "quantity_after": 97,
+    "notes": "Order #KDM-20260603-0005",
+    "performed_by": [
+      "cashier1"
+    ],
+    "created_at": "2026-06-03T15:56:24.921Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 33,
+  "fields": {
+    "product": 35,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 50,
+    "quantity_after": 49,
+    "notes": "Order #KDM-20260603-0005",
+    "performed_by": [
+      "cashier1"
+    ],
+    "created_at": "2026-06-03T15:56:24.925Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 34,
+  "fields": {
+    "product": 25,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 75,
+    "quantity_after": 74,
+    "notes": "Order #KDM-20260603-0005",
+    "performed_by": [
+      "cashier1"
+    ],
+    "created_at": "2026-06-03T15:56:24.928Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 35,
+  "fields": {
+    "product": 28,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 40,
+    "quantity_after": 39,
+    "notes": "Order #KDM-20260603-0006",
+    "performed_by": null,
+    "created_at": "2026-06-03T16:02:46.855Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 36,
+  "fields": {
+    "product": 31,
+    "product_name": "",
+    "action": "restock",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": 5,
+    "quantity_before": 35,
+    "quantity_after": 40,
+    "notes": "",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-03T16:07:00.713Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 37,
+  "fields": {
+    "product": 1,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 100,
+    "quantity_after": 99,
+    "notes": "Order #KDM-20260604-0002",
+    "performed_by": null,
+    "created_at": "2026-06-04T13:07:56.509Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 38,
+  "fields": {
+    "product": 18,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -2,
+    "quantity_before": 50,
+    "quantity_after": 48,
+    "notes": "Order #KDM-20260604-0002",
+    "performed_by": null,
+    "created_at": "2026-06-04T13:07:56.518Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 39,
+  "fields": {
+    "product": 38,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 99,
+    "quantity_after": 98,
+    "notes": "Order #KDM-20260605-0001",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-05T15:34:52.704Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 40,
+  "fields": {
+    "product": 25,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 74,
+    "quantity_after": 73,
+    "notes": "Order #KDM-20260605-0001",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-05T15:34:52.707Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 41,
+  "fields": {
+    "product": 2,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 96,
+    "quantity_after": 95,
+    "notes": "Order #KDM-20260606-0001",
+    "performed_by": null,
+    "created_at": "2026-06-06T11:36:53.084Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 42,
+  "fields": {
+    "product": 25,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 73,
+    "quantity_after": 72,
+    "notes": "Order #KDM-20260606-0001",
+    "performed_by": null,
+    "created_at": "2026-06-06T11:36:53.087Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 43,
+  "fields": {
+    "product": 25,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -2,
+    "quantity_before": 72,
+    "quantity_after": 70,
+    "notes": "Order #KDM-20260606-0002",
+    "performed_by": null,
+    "created_at": "2026-06-06T11:46:05.025Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 44,
+  "fields": {
+    "product": 4,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 100,
+    "quantity_after": 99,
+    "notes": "Order #KDM-20260607-0001",
+    "performed_by": null,
+    "created_at": "2026-06-07T03:13:59.154Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 45,
+  "fields": {
+    "product": 39,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 89,
+    "quantity_after": 88,
+    "notes": "Order #KDM-20260608-0001",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-08T04:52:24.437Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 46,
+  "fields": {
+    "product": 18,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 48,
+    "quantity_after": 47,
+    "notes": "Order #KDM-20260609-0001",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-09T10:31:34.288Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 47,
+  "fields": {
+    "product": 2,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 95,
+    "quantity_after": 94,
+    "notes": "Order #KDM-20260609-0002",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-09T10:32:15.347Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 48,
+  "fields": {
+    "product": 11,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 80,
+    "quantity_after": 79,
+    "notes": "Order #KDM-20260609-0002",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-09T10:32:15.350Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 49,
+  "fields": {
+    "product": 13,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 60,
+    "quantity_after": 59,
+    "notes": "Order #KDM-20260609-0002",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-09T10:32:15.351Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 50,
+  "fields": {
+    "product": 18,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 47,
+    "quantity_after": 46,
+    "notes": "Order #KDM-20260609-0002",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-09T10:32:15.352Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 51,
+  "fields": {
+    "product": 29,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 40,
+    "quantity_after": 39,
+    "notes": "Order #KDM-20260609-0002",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-09T10:32:15.353Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 52,
+  "fields": {
+    "product": 35,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 49,
+    "quantity_after": 48,
+    "notes": "Order #KDM-20260609-0002",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-09T10:32:15.355Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 53,
+  "fields": {
+    "product": 31,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 40,
+    "quantity_after": 39,
+    "notes": "Order #KDM-20260609-0002",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-09T10:32:15.356Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 54,
+  "fields": {
+    "product": 38,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 98,
+    "quantity_after": 97,
+    "notes": "Order #KDM-20260609-0002",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-09T10:32:15.357Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 55,
+  "fields": {
+    "product": 41,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 50,
+    "quantity_after": 49,
+    "notes": "Order #KDM-20260609-0002",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-09T10:32:15.358Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 56,
+  "fields": {
+    "product": 2,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -5,
+    "quantity_before": 94,
+    "quantity_after": 89,
+    "notes": "Order #KDM-20260611-0001",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-11T02:04:13.836Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 57,
+  "fields": {
+    "product": 25,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 70,
+    "quantity_after": 69,
+    "notes": "Order #KDM-20260612-0001",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-12T03:41:19.972Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 58,
+  "fields": {
+    "product": 29,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 39,
+    "quantity_after": 38,
+    "notes": "Order #KDM-20260612-0001",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-12T03:41:19.975Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 59,
+  "fields": {
+    "product": 31,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 39,
+    "quantity_after": 38,
+    "notes": "Order #KDM-20260612-0001",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-12T03:41:19.977Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 60,
+  "fields": {
+    "product": 13,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -5,
+    "quantity_before": 59,
+    "quantity_after": 54,
+    "notes": "Order #KDM-20260612-0002",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-12T03:41:37.573Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 61,
+  "fields": {
+    "product": 41,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -3,
+    "quantity_before": 49,
+    "quantity_after": 46,
+    "notes": "Order #KDM-20260612-0003",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-12T03:41:54.476Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 62,
+  "fields": {
+    "product": 40,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -2,
+    "quantity_before": 97,
+    "quantity_after": 95,
+    "notes": "Order #KDM-20260612-0004",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-12T03:41:59.962Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 63,
+  "fields": {
+    "product": 38,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 97,
+    "quantity_after": 96,
+    "notes": "Order #KDM-20260612-0005",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-12T03:42:04.224Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 64,
+  "fields": {
+    "product": 36,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 99,
+    "quantity_after": 98,
+    "notes": "Order #KDM-20260612-0005",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-12T03:42:04.229Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 65,
+  "fields": {
+    "product": 7,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -2,
+    "quantity_before": 80,
+    "quantity_after": 78,
+    "notes": "Order #KDM-20260614-0001",
+    "performed_by": null,
+    "created_at": "2026-06-14T10:38:24.188Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 66,
+  "fields": {
+    "product": 8,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -2,
+    "quantity_before": 80,
+    "quantity_after": 78,
+    "notes": "Order #KDM-20260614-0001",
+    "performed_by": null,
+    "created_at": "2026-06-14T10:38:24.191Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 67,
+  "fields": {
+    "product": 10,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -5,
+    "quantity_before": 80,
+    "quantity_after": 75,
+    "notes": "Order #KDM-20260615-0001",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-15T11:42:59.787Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 68,
+  "fields": {
+    "product": 12,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 59,
+    "quantity_after": 58,
+    "notes": "Order #KDM-20260617-0001",
+    "performed_by": null,
+    "created_at": "2026-06-17T08:30:33.598Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 69,
+  "fields": {
+    "product": 14,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 60,
+    "quantity_after": 59,
+    "notes": "Order #KDM-20260617-0001",
+    "performed_by": null,
+    "created_at": "2026-06-17T08:30:33.601Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 70,
+  "fields": {
+    "product": 17,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 60,
+    "quantity_after": 59,
+    "notes": "Order #KDM-20260617-0001",
+    "performed_by": null,
+    "created_at": "2026-06-17T08:30:33.603Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 71,
+  "fields": {
+    "product": 40,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 95,
+    "quantity_after": 94,
+    "notes": "Order #KDM-20260618-0001",
+    "performed_by": null,
+    "created_at": "2026-06-18T12:27:06.709Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 72,
+  "fields": {
+    "product": 37,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 100,
+    "quantity_after": 99,
+    "notes": "Order #KDM-20260618-0001",
+    "performed_by": null,
+    "created_at": "2026-06-18T12:27:06.724Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 73,
+  "fields": {
+    "product": 38,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 96,
+    "quantity_after": 95,
+    "notes": "Order #KDM-20260618-0001",
+    "performed_by": null,
+    "created_at": "2026-06-18T12:27:06.727Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 74,
+  "fields": {
+    "product": 36,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 98,
+    "quantity_after": 97,
+    "notes": "Order #KDM-20260618-0001",
+    "performed_by": null,
+    "created_at": "2026-06-18T12:27:06.728Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 75,
+  "fields": {
+    "product": 18,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -2,
+    "quantity_before": 46,
+    "quantity_after": 44,
+    "notes": "Order #KDM-20260619-0001",
+    "performed_by": null,
+    "created_at": "2026-06-19T12:37:56.525Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 76,
+  "fields": {
+    "product": 24,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 50,
+    "quantity_after": 49,
+    "notes": "Order #KDM-20260620-0001",
+    "performed_by": null,
+    "created_at": "2026-06-20T07:37:03.713Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 77,
+  "fields": {
+    "product": 30,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 40,
+    "quantity_after": 39,
+    "notes": "Order #KDM-20260620-0001",
+    "performed_by": null,
+    "created_at": "2026-06-20T07:37:03.717Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 78,
+  "fields": {
+    "product": 2,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 89,
+    "quantity_after": 88,
+    "notes": "Order #KDM-20260622-0001",
+    "performed_by": null,
+    "created_at": "2026-06-22T02:12:11.067Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 79,
+  "fields": {
+    "product": 6,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 79,
+    "quantity_after": 78,
+    "notes": "Order #KDM-20260622-0001",
+    "performed_by": null,
+    "created_at": "2026-06-22T02:12:11.070Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 80,
+  "fields": {
+    "product": 19,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 50,
+    "quantity_after": 49,
+    "notes": "Order #KDM-20260622-0002",
+    "performed_by": null,
+    "created_at": "2026-06-22T02:14:07.827Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 81,
+  "fields": {
+    "product": 5,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 99,
+    "quantity_after": 98,
+    "notes": "Order #KDM-20260622-0003",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-22T02:20:51.875Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 82,
+  "fields": {
+    "product": 29,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 38,
+    "quantity_after": 37,
+    "notes": "Order #KDM-20260622-0003",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-06-22T02:20:51.878Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 83,
+  "fields": {
+    "product": 31,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 38,
+    "quantity_after": 37,
+    "notes": "Order #KDM-20260721-0001",
+    "performed_by": null,
+    "created_at": "2026-07-21T10:49:16.546Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 84,
+  "fields": {
+    "product": 4,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 99,
+    "quantity_after": 98,
+    "notes": "Order #KDM-20260721-0002",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-07-21T10:53:41.152Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 85,
+  "fields": {
+    "product": 7,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 78,
+    "quantity_after": 77,
+    "notes": "Order #KDM-20260721-0002",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-07-21T10:53:41.154Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 86,
+  "fields": {
+    "product": 30,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 39,
+    "quantity_after": 38,
+    "notes": "Order #KDM-20260721-0002",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-07-21T10:53:41.155Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 87,
+  "fields": {
+    "product": 40,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 94,
+    "quantity_after": 93,
+    "notes": "Order #KDM-20260723-0001",
+    "performed_by": null,
+    "created_at": "2026-07-23T10:24:09.469Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 88,
+  "fields": {
+    "product": 25,
+    "product_name": "",
+    "action": "sale",
+    "source": "manual_adjustment",
+    "reason": "",
+    "quantity_change": -1,
+    "quantity_before": 69,
+    "quantity_after": 68,
+    "notes": "Order #KDM-20260723-0001",
+    "performed_by": null,
+    "created_at": "2026-07-23T10:24:09.473Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 89,
+  "fields": {
+    "product": 2,
+    "product_name": "Mocha",
+    "action": "sale",
+    "source": "pos_order",
+    "reason": "Order #KDM-20260902-0001",
+    "quantity_change": -1,
+    "quantity_before": 88,
+    "quantity_after": 87,
+    "notes": "",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-09-02T05:15:13.074Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 90,
+  "fields": {
+    "product": 25,
+    "product_name": "Chicken Pastil",
+    "action": "sale",
+    "source": "pos_order",
+    "reason": "Order #KDM-20260902-0001",
+    "quantity_change": -1,
+    "quantity_before": 68,
+    "quantity_after": 67,
+    "notes": "",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-09-02T05:15:13.078Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 91,
+  "fields": {
+    "product": 2,
+    "product_name": "Mocha",
+    "action": "sale",
+    "source": "pos_order",
+    "reason": "Order #KDM-20260906-0001",
+    "quantity_change": -1,
+    "quantity_before": 87,
+    "quantity_after": 86,
+    "notes": "",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-09-05T16:30:18.160Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 92,
+  "fields": {
+    "product": 7,
+    "product_name": "Chocolate Milk Tea",
+    "action": "sale",
+    "source": "pos_order",
+    "reason": "Order #KDM-20260906-0001",
+    "quantity_change": -1,
+    "quantity_before": 77,
+    "quantity_after": 76,
+    "notes": "",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-09-05T16:30:18.163Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 93,
+  "fields": {
+    "product": 35,
+    "product_name": "Special Chicken Burger",
+    "action": "sale",
+    "source": "pos_order",
+    "reason": "Order #KDM-20260906-0001",
+    "quantity_change": -1,
+    "quantity_before": 48,
+    "quantity_after": 47,
+    "notes": "",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-09-05T16:30:18.165Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 94,
+  "fields": {
+    "product": 40,
+    "product_name": "French Fries",
+    "action": "sale",
+    "source": "pos_order",
+    "reason": "Order #KDM-20260906-0001",
+    "quantity_change": -1,
+    "quantity_before": 93,
+    "quantity_after": 92,
+    "notes": "",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-09-05T16:30:18.169Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 95,
+  "fields": {
+    "product": 2,
+    "product_name": "Mocha",
+    "action": "sale",
+    "source": "pos_order",
+    "reason": "Order #KDM-20260907-0001",
+    "quantity_change": -1,
+    "quantity_before": 86,
+    "quantity_after": 85,
+    "notes": "",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-09-07T02:01:34.142Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 96,
+  "fields": {
+    "product": 22,
+    "product_name": "Combo 5 - Spaghetti w/ Bread & Fries",
+    "action": "sale",
+    "source": "pos_order",
+    "reason": "Order #KDM-20260907-0001",
+    "quantity_change": -1,
+    "quantity_before": 47,
+    "quantity_after": 46,
+    "notes": "",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-09-07T02:01:34.145Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 97,
+  "fields": {
+    "product": 26,
+    "product_name": "Pork Pastil",
+    "action": "sale",
+    "source": "pos_order",
+    "reason": "Order #KDM-20260907-0001",
+    "quantity_change": -1,
+    "quantity_before": 40,
+    "quantity_after": 39,
+    "notes": "",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-09-07T02:01:34.147Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 98,
+  "fields": {
+    "product": 2,
+    "product_name": "Mocha",
+    "action": "sale",
+    "source": "customer_order",
+    "reason": "Order #KDM-20260907-0002",
+    "quantity_change": -1,
+    "quantity_before": 85,
+    "quantity_after": 84,
+    "notes": "",
+    "performed_by": null,
+    "created_at": "2026-09-07T02:04:57.879Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 99,
+  "fields": {
+    "product": 26,
+    "product_name": "Pork Pastil",
+    "action": "sale",
+    "source": "customer_order",
+    "reason": "Order #KDM-20260907-0002",
+    "quantity_change": -1,
+    "quantity_before": 39,
+    "quantity_after": 38,
+    "notes": "",
+    "performed_by": null,
+    "created_at": "2026-09-07T02:04:57.883Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 100,
+  "fields": {
+    "product": 1,
+    "product_name": "Salted Caramel",
+    "action": "sale",
+    "source": "customer_order",
+    "reason": "Order #KDM-20260907-0003",
+    "quantity_change": -1,
+    "quantity_before": 99,
+    "quantity_after": 98,
+    "notes": "",
+    "performed_by": null,
+    "created_at": "2026-09-07T02:20:04.790Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 101,
+  "fields": {
+    "product": 2,
+    "product_name": "Mocha",
+    "action": "sale",
+    "source": "customer_order",
+    "reason": "Order #KDM-20260907-0004",
+    "quantity_change": -1,
+    "quantity_before": 84,
+    "quantity_after": 83,
+    "notes": "",
+    "performed_by": null,
+    "created_at": "2026-09-07T02:43:20.693Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 102,
+  "fields": {
+    "product": 2,
+    "product_name": "Mocha",
+    "action": "sale",
+    "source": "customer_order",
+    "reason": "Order #KDM-20260907-0005",
+    "quantity_change": -1,
+    "quantity_before": 83,
+    "quantity_after": 82,
+    "notes": "",
+    "performed_by": null,
+    "created_at": "2026-09-07T02:48:42.591Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 103,
+  "fields": {
+    "product": 2,
+    "product_name": "Mocha",
+    "action": "sale",
+    "source": "customer_order",
+    "reason": "Order #KDM-20260907-0006",
+    "quantity_change": -1,
+    "quantity_before": 82,
+    "quantity_after": 81,
+    "notes": "",
+    "performed_by": null,
+    "created_at": "2026-09-07T03:32:04.950Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 104,
+  "fields": {
+    "product": 2,
+    "product_name": "Mocha",
+    "action": "sale",
+    "source": "pos_order",
+    "reason": "Order #KDM-20260907-0007",
+    "quantity_change": -1,
+    "quantity_before": 81,
+    "quantity_after": 80,
+    "notes": "",
+    "performed_by": [
+      "cashier1"
+    ],
+    "created_at": "2026-09-07T04:57:38.635Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 105,
+  "fields": {
+    "product": 33,
+    "product_name": "Chicken Burger",
+    "action": "sale",
+    "source": "pos_order",
+    "reason": "Order #KDM-20260907-0007",
+    "quantity_change": -1,
+    "quantity_before": 48,
+    "quantity_after": 47,
+    "notes": "",
+    "performed_by": [
+      "cashier1"
+    ],
+    "created_at": "2026-09-07T04:57:38.638Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 106,
+  "fields": {
+    "product": 38,
+    "product_name": "Squid Roll",
+    "action": "sale",
+    "source": "pos_order",
+    "reason": "Order #KDM-20260907-0008",
+    "quantity_change": -1,
+    "quantity_before": 95,
+    "quantity_after": 94,
+    "notes": "",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-09-07T05:45:02.984Z"
+  }
+},
+{
+  "model": "inventory.inventorylog",
+  "pk": 107,
+  "fields": {
+    "product": 26,
+    "product_name": "Pork Pastil",
+    "action": "sale",
+    "source": "pos_order",
+    "reason": "Order #KDM-20260907-0008",
+    "quantity_change": -1,
+    "quantity_before": 38,
+    "quantity_after": 37,
+    "notes": "",
+    "performed_by": [
+      "admin"
+    ],
+    "created_at": "2026-09-07T05:45:02.987Z"
+  }
+},
+{
+  "model": "dashboard.systemsetting",
+  "pk": 1,
+  "fields": {
+    "key": "PACKAGING_FEE_PER_ITEM",
+    "value": "6.00",
+    "description": "Packaging fee in PHP per eligible meal item for Take-Out orders.",
+    "updated_at": "2026-06-04T13:10:52.463Z"
+  }
+}
+]
