@@ -286,7 +286,8 @@ DEFAULT_FROM_EMAIL  = os.environ.get('DEFAULT_FROM_EMAIL', 'Kape De Manubag <nor
 # Override via env if you want shorter-lived links.
 PASSWORD_RESET_TIMEOUT = int(os.environ.get('PASSWORD_RESET_TIMEOUT', str(60 * 60 * 24 * 3)))
 
-
+# ── Production security headers (ignored when DEBUG=True) ────────────────────
+if not DEBUG:
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
