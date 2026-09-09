@@ -53,20 +53,19 @@ class ProfileUpdateForm(forms.ModelForm):
         required=False,
         validators=[validate_profile_image_upload],
         widget=forms.ClearableFileInput(attrs={
-            # Client-side picker hint only -- the server always re-validates.
             'accept': 'image/jpeg,image/png,image/gif,image/webp',
+            'id': 'id_profile_image',
         }),
         help_text=f'{SUPPORTED_FORMATS_LABEL}, up to {MAX_SIZE_MB} MB.',
     )
 
     class Meta:
         model = CustomUser
-        fields = ['first_name', 'last_name', 'email', 'phone', 'profile_image']
+        fields = ['first_name', 'last_name', 'email', 'profile_image']
         widgets = {
             'first_name': forms.TextInput(attrs={'class': 'form-control'}),
             'last_name': forms.TextInput(attrs={'class': 'form-control'}),
             'email': forms.EmailInput(attrs={'class': 'form-control'}),
-            'phone': forms.TextInput(attrs={'class': 'form-control'}),
         }
 
 

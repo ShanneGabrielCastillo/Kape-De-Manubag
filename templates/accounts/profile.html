@@ -1,23 +1,193 @@
 {% extends "base_admin.html" %}
+{% load static %}
+{% load product_images %}
 {% block page_title %}My Profile{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Profile image upload section ── */
+.profile-img-section {
+  margin-bottom: 8px;
+}
+.profile-img-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.profile-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.profile-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--cream);
+  border: 3px solid var(--cream);
+  display: block;
+}
+.profile-avatar-initials {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--cream);
+  border: 3px solid #e8ddd0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--brown-mid);
+  font-family: 'Playfair Display', serif;
+}
+.profile-edit-badge {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--brown-mid);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  cursor: pointer;
+  border: 2px solid var(--cream-white);
+}
+.profile-img-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.profile-img-btns {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.profile-img-hint {
+  font-size: 0.75rem;
+  color: #aaa;
+  margin: 0;
+}
+.profile-img-filename {
+  font-size: 0.8rem;
+  color: var(--brown-mid);
+  font-weight: 600;
+  margin: 0;
+  word-break: break-all;
+}
+/* Hide the native file input — triggered by the button */
+#id_profile_image { display: none; }
+
+/* Mobile: stack avatar and buttons vertically on very small screens */
+@media (max-width: 400px) {
+  .profile-img-row { flex-direction: column; align-items: flex-start; }
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page-header">
-  <div><h1 class="page-title">My Profile</h1><p class="page-subtitle">Update your account information</p></div>
+  <div>
+    <h1 class="page-title">My Profile</h1>
+    <p class="page-subtitle">Update your account information</p>
+  </div>
 </div>
 
 <div class="card" style="max-width:560px;margin-bottom:20px">
   <div class="card-body">
-    <form method="post" enctype="multipart/form-data">
+    <form method="post" enctype="multipart/form-data" id="profile-form">
       {% csrf_token %}
-      {% for field in form %}
+
+      {# ── First Name ── #}
       <div class="form-group">
-        <label class="form-label">{{ field.label }}</label>
-        {{ field }}
-        {% if field.help_text %}<small class="text-muted">{{ field.help_text }}</small>{% endif %}
-        {% if field.errors %}<small style="color:var(--red-accent)">{{ field.errors.0 }}</small>{% endif %}
+        <label class="form-label">{{ form.first_name.label }}</label>
+        {{ form.first_name }}
+        {% if form.first_name.errors %}<small style="color:var(--red-accent)">{{ form.first_name.errors.0 }}</small>{% endif %}
       </div>
-      {% endfor %}
-      <button type="submit" class="btn btn-primary">Save Changes</button>
+
+      {# ── Last Name ── #}
+      <div class="form-group">
+        <label class="form-label">{{ form.last_name.label }}</label>
+        {{ form.last_name }}
+        {% if form.last_name.errors %}<small style="color:var(--red-accent)">{{ form.last_name.errors.0 }}</small>{% endif %}
+      </div>
+
+      {# ── Email ── #}
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        {{ form.email }}
+        {% if form.email.errors %}<small style="color:var(--red-accent)">{{ form.email.errors.0 }}</small>{% endif %}
+      </div>
+
+      {# ── Profile Image ── #}
+      <div class="form-group profile-img-section">
+        <label class="form-label">Profile Image</label>
+
+        {# Hidden native file input — still submitted with the form #}
+        {{ form.profile_image }}
+
+        <div class="profile-img-row">
+          {# Avatar preview #}
+          <div class="profile-avatar-wrap" id="avatar-wrap">
+            {% if user.profile_image %}
+            <img id="avatar-preview"
+                 src="{{ user.profile_image.url }}"
+                 alt="Profile photo"
+                 class="profile-avatar">
+            {% else %}
+            <div id="avatar-preview" class="profile-avatar-initials">
+              {{ user.first_name|first|upper|default:user.username|first|upper }}
+            </div>
+            {% endif %}
+            <span class="profile-edit-badge" onclick="document.getElementById('id_profile_image').click()" title="Change photo">✏️</span>
+          </div>
+
+          {# Action buttons + hint #}
+          <div class="profile-img-actions">
+            <div class="profile-img-btns">
+              <button type="button" class="btn btn-primary btn-sm"
+                      onclick="document.getElementById('id_profile_image').click()">
+                🖼️ Change Photo
+              </button>
+              {% if user.profile_image %}
+              <button type="button" class="btn btn-sm"
+                      id="remove-photo-btn"
+                      style="border:2px solid var(--red-accent);color:var(--red-accent);background:transparent"
+                      onclick="clearPhoto()">
+                🗑️ Remove Photo
+              </button>
+              {% else %}
+              <button type="button" class="btn btn-sm"
+                      id="remove-photo-btn"
+                      style="border:2px solid var(--red-accent);color:var(--red-accent);background:transparent;display:none"
+                      onclick="clearPhoto()">
+                🗑️ Remove Photo
+              </button>
+              {% endif %}
+              {# Hidden clear checkbox — Django's ClearableFileInput uses this #}
+              <input type="checkbox" name="profile_image-clear" id="profile_image-clear_id"
+                     style="display:none">
+            </div>
+            <p class="profile-img-filename" id="img-filename">
+              {% if user.profile_image %}{{ user.profile_image.name|cut:"profiles/" }}{% endif %}
+            </p>
+            <p class="profile-img-hint">JPG, PNG, GIF, or WEBP &bull; Max 5 MB</p>
+            {% if form.profile_image.errors %}
+            <small style="color:var(--red-accent)">{{ form.profile_image.errors.0 }}</small>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block" style="margin-top:8px">
+        Save Changes
+      </button>
     </form>
   </div>
 </div>
@@ -34,4 +204,70 @@
     </a>
   </div>
 </div>
+
+<script>
+// Live preview: when a new file is selected, show it in the avatar circle
+// and update the filename label.
+document.getElementById('id_profile_image').addEventListener('change', function() {
+  var file = this.files && this.files[0];
+  if (!file) return;
+
+  // Show the filename
+  var filenameEl = document.getElementById('img-filename');
+  if (filenameEl) filenameEl.textContent = file.name;
+
+  // Show Remove Photo button
+  var removeBtn = document.getElementById('remove-photo-btn');
+  if (removeBtn) removeBtn.style.display = '';
+
+  // Live preview in the avatar circle
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var wrap = document.getElementById('avatar-wrap');
+    // Replace initials div or existing img with a fresh <img>
+    var existing = document.getElementById('avatar-preview');
+    if (existing && existing.tagName === 'IMG') {
+      existing.src = e.target.result;
+    } else {
+      var img = document.createElement('img');
+      img.id = 'avatar-preview';
+      img.src = e.target.result;
+      img.alt = 'Profile photo';
+      img.className = 'profile-avatar';
+      if (existing) existing.replaceWith(img);
+    }
+  };
+  reader.readAsDataURL(file);
+});
+
+// Clear photo: tick Django's clear checkbox, reset preview to initials,
+// hide the filename and the Remove button.
+function clearPhoto() {
+  // Tick the clear checkbox so Django removes the image on save
+  var clearCb = document.getElementById('profile_image-clear_id');
+  if (clearCb) clearCb.checked = true;
+
+  // Reset the file input
+  var fileInput = document.getElementById('id_profile_image');
+  if (fileInput) fileInput.value = '';
+
+  // Reset filename
+  var filenameEl = document.getElementById('img-filename');
+  if (filenameEl) filenameEl.textContent = '';
+
+  // Hide remove button
+  var removeBtn = document.getElementById('remove-photo-btn');
+  if (removeBtn) removeBtn.style.display = 'none';
+
+  // Replace preview with initials
+  var existing = document.getElementById('avatar-preview');
+  if (existing) {
+    var initials = document.createElement('div');
+    initials.id = 'avatar-preview';
+    initials.className = 'profile-avatar-initials';
+    initials.textContent = '{{ user.first_name|first|upper|default:user.username|first|upper }}';
+    existing.replaceWith(initials);
+  }
+}
+</script>
 {% endblock %}
