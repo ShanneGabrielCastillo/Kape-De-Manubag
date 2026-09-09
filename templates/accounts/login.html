@@ -56,7 +56,8 @@
       </button>
     </form>
 
-    <div style="text-align:center;margin-top:20px">
+    <div style="text-align:center;margin-top:20px;display:flex;flex-direction:column;gap:10px">
+      <a href="{% url 'accounts:password_reset' %}" style="color:var(--caramel);font-size:0.85rem;font-weight:600">Forgot your password?</a>
       <a href="{% url 'menu:index' %}" style="color:#aaa;font-size:0.85rem">← Back to Menu</a>
     </div>
   </div>

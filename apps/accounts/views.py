@@ -1,12 +1,23 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth import login, logout, authenticate
+from django.contrib.auth import (
+    login, logout, authenticate,
+    update_session_auth_hash,
+)
+from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.exceptions import ValidationError
+from django.core.mail import send_mail
 from django.http import JsonResponse
-from django.utils.http import url_has_allowed_host_and_scheme
+from django.template.loader import render_to_string
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode, url_has_allowed_host_and_scheme
+from django.conf import settings
 from . import bruteforce
-from .forms import LoginForm, StaffCreateForm, ProfileUpdateForm
+from .forms import (
+    LoginForm, StaffCreateForm, ProfileUpdateForm,
+    StaffPasswordChangeForm, PasswordResetRequestForm,
+)
 from .models import CustomUser
 from apps.accounts.decorators import admin_required
 from apps.audit.services import log_action
@@ -136,3 +147,165 @@ def staff_toggle(request, pk):
             return JsonResponse({'success': False, 'error': ' '.join(exc.messages)})
         return JsonResponse({'success': True, 'status': status})
     return JsonResponse({'success': False, 'error': 'Cannot deactivate yourself'})
+
+
+# ── Password Management Views ─────────────────────────────────────────────────
+
+@login_required
+def change_password(request):
+    """Authenticated password-change for staff (admin + cashier).
+
+    Uses Django's update_session_auth_hash() after a successful change so the
+    user's session remains valid — they are NOT logged out, which is the
+    expected UX for a deliberate password change (as opposed to a reset).
+    The new password is hashed by Django's pipeline; it is never stored in
+    plaintext or surfaced in logs/errors.
+    """
+    form = StaffPasswordChangeForm(user=request.user, data=request.POST or None)
+
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        # Rotate the session auth hash so the current session stays valid
+        # after the password change (prevents an immediate self-lockout).
+        update_session_auth_hash(request, request.user)
+        log_action(request.user, 'account.password_change', request.user,
+                   object_repr=str(request.user))
+        messages.success(request, 'Your password has been changed successfully.')
+        return redirect('accounts:profile')
+
+    return render(request, 'accounts/change_password.html', {'form': form})
+
+
+def password_reset_request(request):
+    """Step 1 — staff member submits their email address.
+
+    Sends a password-reset link to the address if it belongs to an active
+    staff account (admin or cashier).  The response is always the same
+    success page whether or not a match is found (anti-enumeration: the
+    user cannot tell whether an email address is registered).
+    """
+    form = PasswordResetRequestForm(data=request.POST or None)
+
+    if request.method == 'POST' and form.is_valid():
+        email = form.cleaned_data['email']
+
+        # Look up active staff only — customers do not use this portal.
+        # Use filter().first() rather than get() to avoid DoesNotExist
+        # leaking account existence through exception timing.
+        user = CustomUser.objects.filter(
+            email__iexact=email,
+            is_active=True,
+            role__in=['admin', 'cashier'],
+        ).first()
+
+        if user:
+            # Build the uidb64/token pair using Django's built-in generator.
+            # Tokens are HMAC-signed, embed the user's password hash and last-
+            # login timestamp, and expire after PASSWORD_RESET_TIMEOUT seconds
+            # (default 3 days).  No token is stored in the database.
+            uid   = urlsafe_base64_encode(force_bytes(user.pk))
+            token = default_token_generator.make_token(user)
+
+            from django.urls import reverse
+            reset_url = request.build_absolute_uri(
+                reverse('accounts:password_reset_confirm',
+                        kwargs={'uidb64': uid, 'token': token})
+            )
+
+            subject = 'Kape De Manubag — Password Reset'
+            body = render_to_string('accounts/password_reset_email.html', {
+                'user': user,
+                'reset_url': reset_url,
+                'site_name': 'Kape De Manubag',
+            })
+
+            try:
+                send_mail(
+                    subject=subject,
+                    message=body,
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[user.email],
+                    fail_silently=False,
+                )
+            except Exception:
+                # Log the failure but do not reveal it to the requester —
+                # the same success page is shown so enumeration remains
+                # impossible even when email delivery fails.
+                import logging
+                logging.getLogger(__name__).exception(
+                    'Password reset email failed for user pk=%s', user.pk
+                )
+
+        # Always redirect to the same "check your email" page regardless of
+        # whether a matching account was found.
+        return redirect('accounts:password_reset_done')
+
+    return render(request, 'accounts/password_reset_request.html', {'form': form})
+
+
+def password_reset_done(request):
+    """Step 2 — confirmation page shown after the reset email is sent."""
+    return render(request, 'accounts/password_reset_done.html')
+
+
+def password_reset_confirm(request, uidb64, token):
+    """Step 3 — staff member clicks the link and sets a new password.
+
+    The uidb64/token pair is validated by Django's built-in token generator.
+    An invalid or expired link shows a clear error and never processes a
+    password change.  The new password is validated against every configured
+    AUTH_PASSWORD_VALIDATORS rule before being stored.
+    """
+    # Decode and look up the user — treat any error as an invalid link.
+    try:
+        uid  = force_str(urlsafe_base64_decode(uidb64))
+        user = CustomUser.objects.get(pk=uid)
+    except (TypeError, ValueError, OverflowError, CustomUser.DoesNotExist):
+        user = None
+
+    # Check the token is valid and unused for this user.
+    token_valid = (
+        user is not None
+        and default_token_generator.check_token(user, token)
+    )
+
+    if not token_valid:
+        return render(request, 'accounts/password_reset_confirm.html', {
+            'invalid_link': True,
+        })
+
+    if request.method == 'POST':
+        new_password1 = request.POST.get('new_password1', '')
+        new_password2 = request.POST.get('new_password2', '')
+        errors = []
+
+        if new_password1 != new_password2:
+            errors.append('The two passwords did not match.')
+        else:
+            from django.contrib.auth import password_validation
+            from django import forms as django_forms
+            try:
+                password_validation.validate_password(new_password1, user)
+            except django_forms.ValidationError as exc:
+                errors.extend(exc.messages)
+
+        if errors:
+            return render(request, 'accounts/password_reset_confirm.html', {
+                'invalid_link': False,
+                'errors': errors,
+                'uidb64': uidb64,
+                'token': token,
+            })
+
+        user.set_password(new_password1)
+        user.save(update_fields=['password'])
+        log_action(user, 'account.password_reset', user,
+                   object_repr=str(user))
+        messages.success(request, 'Your password has been reset. You can now log in.')
+        return redirect('accounts:login')
+
+    return render(request, 'accounts/password_reset_confirm.html', {
+        'invalid_link': False,
+        'uidb64': uidb64,
+        'token': token,
+    })

@@ -253,8 +253,40 @@ CSRF_COOKIE_SECURE = not DEBUG
 # but the idle timeout above still bounds how long an unattended session lives.
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 
-# ── Production security headers (ignored when DEBUG=True) ────────────────────
-if not DEBUG:
+# ── Email ─────────────────────────────────────────────────────────────────────
+# Never hard-code credentials here. Configure via environment variables on
+# Render (or any host). For local development, console backend prints emails
+# to stdout so no SMTP server is required.
+#
+# Required env vars for production SMTP (e.g. Gmail, SendGrid, Mailgun):
+#   EMAIL_HOST          — e.g. smtp.gmail.com
+#   EMAIL_PORT          — e.g. 587
+#   EMAIL_HOST_USER     — your sending address / API key username
+#   EMAIL_HOST_PASSWORD — your SMTP password or API key (keep out of git!)
+#   DEFAULT_FROM_EMAIL  — e.g. "Kape De Manubag <noreply@yourdomain.com>"
+#   EMAIL_USE_TLS       — "True" for port 587; set "False" for port 465 + SSL
+
+if DEBUG:
+    # Development: print emails to the console instead of sending them.
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+else:
+    EMAIL_BACKEND = os.environ.get(
+        'EMAIL_BACKEND',
+        'django.core.mail.backends.smtp.EmailBackend',
+    )
+
+EMAIL_HOST          = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT          = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_HOST_USER     = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS       = os.environ.get('EMAIL_USE_TLS', 'True').strip().lower() in {'1', 'true', 'yes'}
+DEFAULT_FROM_EMAIL  = os.environ.get('DEFAULT_FROM_EMAIL', 'Kape De Manubag <noreply@example.com>')
+
+# Django's password-reset token expires after this many seconds (default 3 days).
+# Override via env if you want shorter-lived links.
+PASSWORD_RESET_TIMEOUT = int(os.environ.get('PASSWORD_RESET_TIMEOUT', str(60 * 60 * 24 * 3)))
+
+
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
