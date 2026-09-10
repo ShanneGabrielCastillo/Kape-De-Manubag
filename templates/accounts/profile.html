@@ -1,23 +1,20 @@
 {% extends "base_admin.html" %}
 {% load static %}
-{% load product_images %}
 {% block page_title %}My Profile{% endblock %}
 
 {% block extra_css %}
 <style>
-/* ── Profile image upload section ── */
-.profile-img-section {
-  margin-bottom: 8px;
-}
 .profile-img-row {
   display: flex;
   align-items: center;
   gap: 20px;
   flex-wrap: wrap;
+  margin-top: 8px;
 }
 .profile-avatar-wrap {
   position: relative;
   flex-shrink: 0;
+  cursor: pointer;
 }
 .profile-avatar {
   width: 80px;
@@ -25,7 +22,7 @@
   border-radius: 50%;
   object-fit: cover;
   background: var(--cream);
-  border: 3px solid var(--cream);
+  border: 3px solid #e8ddd0;
   display: block;
 }
 .profile-avatar-initials {
@@ -41,6 +38,7 @@
   font-weight: 700;
   color: var(--brown-mid);
   font-family: 'Playfair Display', serif;
+  user-select: none;
 }
 .profile-edit-badge {
   position: absolute;
@@ -54,25 +52,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   cursor: pointer;
   border: 2px solid var(--cream-white);
+  pointer-events: none; /* click handled by parent wrap */
 }
 .profile-img-actions {
   display: flex;
   flex-direction: column;
   gap: 8px;
   min-width: 0;
-}
-.profile-img-btns {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.profile-img-hint {
-  font-size: 0.75rem;
-  color: #aaa;
-  margin: 0;
 }
 .profile-img-filename {
   font-size: 0.8rem;
@@ -81,10 +70,14 @@
   margin: 0;
   word-break: break-all;
 }
-/* Hide the native file input — triggered by the button */
-#id_profile_image { display: none; }
+.profile-img-hint {
+  font-size: 0.75rem;
+  color: #aaa;
+  margin: 0;
+}
+/* Hide the native file input completely — opened via JS */
+#id_profile_image { display: none !important; }
 
-/* Mobile: stack avatar and buttons vertically on very small screens */
 @media (max-width: 400px) {
   .profile-img-row { flex-direction: column; align-items: flex-start; }
 }
@@ -104,82 +97,79 @@
     <form method="post" enctype="multipart/form-data" id="profile-form">
       {% csrf_token %}
 
-      {# ── First Name ── #}
+      {# First Name #}
       <div class="form-group">
         <label class="form-label">{{ form.first_name.label }}</label>
         {{ form.first_name }}
         {% if form.first_name.errors %}<small style="color:var(--red-accent)">{{ form.first_name.errors.0 }}</small>{% endif %}
       </div>
 
-      {# ── Last Name ── #}
+      {# Last Name #}
       <div class="form-group">
         <label class="form-label">{{ form.last_name.label }}</label>
         {{ form.last_name }}
         {% if form.last_name.errors %}<small style="color:var(--red-accent)">{{ form.last_name.errors.0 }}</small>{% endif %}
       </div>
 
-      {# ── Email ── #}
+      {# Email #}
       <div class="form-group">
         <label class="form-label">Email Address</label>
         {{ form.email }}
         {% if form.email.errors %}<small style="color:var(--red-accent)">{{ form.email.errors.0 }}</small>{% endif %}
       </div>
 
-      {# ── Profile Image ── #}
-      <div class="form-group profile-img-section">
+      {# Profile Image #}
+      <div class="form-group">
         <label class="form-label">Profile Image</label>
 
-        {# Hidden native file input — still submitted with the form #}
+        {# Hidden file input — opened by clicking the avatar or pencil #}
         {{ form.profile_image }}
 
         <div class="profile-img-row">
-          {# Avatar preview #}
-          <div class="profile-avatar-wrap" id="avatar-wrap">
+
+          {# Clickable avatar — opens file picker #}
+          <div class="profile-avatar-wrap" id="avatar-wrap"
+               onclick="document.getElementById('id_profile_image').click()"
+               title="Click to change photo">
             {% if user.profile_image %}
-            <img id="avatar-preview"
-                 src="{{ user.profile_image.url }}"
-                 alt="Profile photo"
-                 class="profile-avatar">
+              {# onerror falls back to initials if the image URL is unreachable #}
+              <img id="avatar-preview"
+                   src="{{ user.profile_image.url }}"
+                   alt="{{ user.first_name|first|upper|default:user.username|first|upper }}"
+                   class="profile-avatar"
+                   onerror="this.style.display='none';document.getElementById('avatar-initials').style.display='flex';">
+              <div id="avatar-initials" class="profile-avatar-initials" style="display:none">
+                {{ user.first_name|first|upper|default:user.username|first|upper }}
+              </div>
             {% else %}
-            <div id="avatar-preview" class="profile-avatar-initials">
-              {{ user.first_name|first|upper|default:user.username|first|upper }}
-            </div>
+              <img id="avatar-preview" class="profile-avatar" src="" alt="" style="display:none">
+              <div id="avatar-initials" class="profile-avatar-initials">
+                {{ user.first_name|first|upper|default:user.username|first|upper }}
+              </div>
             {% endif %}
-            <span class="profile-edit-badge" onclick="document.getElementById('id_profile_image').click()" title="Change photo">✏️</span>
+            <span class="profile-edit-badge">✏️</span>
           </div>
 
-          {# Action buttons + hint #}
+          {# Side: filename + Remove Photo + hint #}
           <div class="profile-img-actions">
-            <div class="profile-img-btns">
-              <button type="button" class="btn btn-primary btn-sm"
-                      onclick="document.getElementById('id_profile_image').click()">
-                🖼️ Change Photo
-              </button>
-              {% if user.profile_image %}
-              <button type="submit" form="remove-photo-form"
-                      id="remove-photo-btn"
-                      class="btn btn-sm"
-                      style="border:2px solid var(--red-accent);color:var(--red-accent);background:transparent">
-                🗑️ Remove Photo
-              </button>
-              {% else %}
-              <button type="button"
-                      id="remove-photo-btn"
-                      class="btn btn-sm"
-                      style="border:2px solid var(--red-accent);color:var(--red-accent);background:transparent;display:none"
-                      onclick="clearPhoto()">
-                🗑️ Remove Photo
-              </button>
-              {% endif %}
-            </div>
             <p class="profile-img-filename" id="img-filename">
               {% if user.profile_image %}{{ user.profile_image.name|cut:"profiles/" }}{% endif %}
             </p>
+
+            <button type="submit" form="remove-photo-form"
+                    id="remove-photo-btn"
+                    class="btn btn-sm"
+                    style="border:2px solid var(--red-accent);color:var(--red-accent);background:transparent;{% if not user.profile_image %}display:none{% endif %}">
+              🗑️ Remove Photo
+            </button>
+
             <p class="profile-img-hint">JPG, PNG, GIF, or WEBP &bull; Max 5 MB</p>
+
             {% if form.profile_image.errors %}
             <small style="color:var(--red-accent)">{{ form.profile_image.errors.0 }}</small>
             {% endif %}
           </div>
+
         </div>
       </div>
 
@@ -190,11 +180,9 @@
   </div>
 </div>
 
-{# ── Password card ── #}
+{# Password card #}
 <div class="card" style="max-width:560px">
-  <div class="card-header">
-    <h3>🔒 Password</h3>
-  </div>
+  <div class="card-header"><h3>🔒 Password</h3></div>
   <div class="card-body" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
     <p style="margin:0;font-size:0.88rem;color:#888">Keep your account secure by using a strong, unique password.</p>
     <a href="{% url 'accounts:password_change' %}" class="btn btn-outline" style="white-space:nowrap;flex-shrink:0">
@@ -203,41 +191,44 @@
   </div>
 </div>
 
-{# ── Separate form for Remove Photo — POSTs remove_photo=1 ── #}
-{% if user.profile_image %}
+{# Hidden form for Remove Photo — POSTs remove_photo=1 to profile_view #}
 <form id="remove-photo-form" method="post" style="display:none">
   {% csrf_token %}
   <input type="hidden" name="remove_photo" value="1">
 </form>
-{% endif %}
 
 <script>
-// Live preview when a new file is chosen
-document.getElementById('id_profile_image').addEventListener('change', function() {
-  var file = this.files && this.files[0];
-  if (!file) return;
+(function () {
+  var fileInput   = document.getElementById('id_profile_image');
+  var preview     = document.getElementById('avatar-preview');
+  var initials    = document.getElementById('avatar-initials');
+  var filenameEl  = document.getElementById('img-filename');
+  var removeBtn   = document.getElementById('remove-photo-btn');
 
-  var filenameEl = document.getElementById('img-filename');
-  if (filenameEl) filenameEl.textContent = file.name;
+  if (!fileInput) return;
 
-  var removeBtn = document.getElementById('remove-photo-btn');
-  if (removeBtn) removeBtn.style.display = '';
+  fileInput.addEventListener('change', function () {
+    var file = this.files && this.files[0];
+    if (!file) return;
 
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    var existing = document.getElementById('avatar-preview');
-    if (existing && existing.tagName === 'IMG') {
-      existing.src = e.target.result;
-    } else {
-      var img = document.createElement('img');
-      img.id = 'avatar-preview';
-      img.src = e.target.result;
-      img.alt = 'Profile photo';
-      img.className = 'profile-avatar';
-      if (existing) existing.replaceWith(img);
-    }
-  };
-  reader.readAsDataURL(file);
-});
+    // Update filename label
+    if (filenameEl) filenameEl.textContent = file.name;
+
+    // Show Remove Photo button
+    if (removeBtn) removeBtn.style.display = '';
+
+    // Live preview using FileReader
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      // Show the <img> with the new data URL, hide the initials div
+      if (preview) {
+        preview.src = e.target.result;
+        preview.style.display = 'block';
+      }
+      if (initials) initials.style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+  });
+})();
 </script>
 {% endblock %}
