@@ -103,6 +103,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'cloudinary_storage',          # must be before django.contrib.staticfiles
+    'cloudinary',
     # Custom apps
     'apps.accounts',
     'apps.audit',
@@ -195,10 +197,35 @@ STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# WhiteNoise compressed static files for production
+# ── Cloudinary — persistent media file storage ───────────────────────────────
+# On Render the local filesystem is ephemeral: uploaded files are lost on
+# every redeploy or dyno restart. Cloudinary provides permanent cloud storage.
+# Configure the three env vars below on Render (never commit credentials).
+#
+# Sign up free at cloudinary.com → Dashboard → copy Cloud Name, API Key,
+# API Secret → add them as Render environment variables.
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': os.environ.get('CLOUDINARY_CLOUD_NAME', ''),
+    'API_KEY':    os.environ.get('CLOUDINARY_API_KEY', ''),
+    'API_SECRET': os.environ.get('CLOUDINARY_API_SECRET', ''),
+}
+
+# WhiteNoise compressed static files for production.
+# Media files use Cloudinary in production (env vars set) or local filesystem
+# in development (env vars absent).
+_cloudinary_configured = bool(
+    os.environ.get('CLOUDINARY_CLOUD_NAME')
+    and os.environ.get('CLOUDINARY_API_KEY')
+    and os.environ.get('CLOUDINARY_API_SECRET')
+)
+
 STORAGES = {
     'default': {
-        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+        'BACKEND': (
+            'cloudinary_storage.storage.MediaCloudinaryStorage'
+            if _cloudinary_configured
+            else 'django.core.files.storage.FileSystemStorage'
+        ),
     },
     'staticfiles': {
         'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',

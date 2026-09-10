@@ -75,7 +75,7 @@
 
     <div class="sidebar-user">
       <div class="user-avatar">
-        {% if user.profile_image %}<img src="{{ user.profile_image.url }}" alt="">{% else %}{{ user.first_name|first|upper|default:user.username|first|upper }}{% endif %}
+        {% if user.profile_image %}<img src="{{ user.profile_image.url }}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span style="display:none">{{ user.first_name|first|upper|default:user.username|first|upper }}</span>{% else %}{{ user.first_name|first|upper|default:user.username|first|upper }}{% endif %}
       </div>
       <div class="user-info">
         <div class="user-name">{{ user.get_full_name|default:user.username }}</div>
