@@ -57,9 +57,11 @@
     max-width: 100%;
   }
 
-  /* Main content area */
+  /* Main content area — no overflow set here intentionally.
+     Setting overflow-x:hidden would create a new scroll container,
+     which breaks position:sticky on the topbar. Body already clips
+     horizontal overflow. */
   .main-content {
-    overflow-x: hidden;
     max-width: 100%;
   }
 }
@@ -655,9 +657,6 @@
   .topbar {
     padding: 0 var(--mobile-space-sm);
     height: 56px;
-    position: sticky;
-    top: 0;
-    z-index: 200;
   }
 
   .topbar-title {

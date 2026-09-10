@@ -13,7 +13,9 @@
   /* ── Page-level overflow guard ── */
   body          { overflow-x: hidden; }
   .page-content { padding: 16px; overflow-x: hidden; }
-  .main-content { overflow-x: hidden; }
+  /* Do NOT set overflow-x on .main-content — it would make .main-content
+     the scroll container instead of the window, breaking position:sticky
+     on the topbar. Horizontal overflow is already guarded by body. */
 
   /* ── Page header: stack title + button vertically ── */
   .page-header {
@@ -254,9 +256,6 @@
   .topbar {
     padding: 0 12px;
     height: 56px;
-    position: sticky;
-    top: 0;
-    z-index: 200;   /* above sidebar overlay (z-index 150) and content */
   }
   .topbar-title {
     font-size: 0.9rem;
@@ -418,7 +417,7 @@
 
   body          { overflow-x: hidden; }
   .page-content { padding: 20px; overflow-x: hidden; }
-  .main-content { overflow-x: hidden; }
+  /* Do NOT set overflow-x on .main-content — see note in XS media query. */
 
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
