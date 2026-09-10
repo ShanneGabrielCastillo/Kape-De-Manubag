@@ -316,13 +316,14 @@ tbody tr:last-child { border-bottom: none; }
   left: 0;
   height: 100vh;
   z-index: 100;
-  overflow-y: auto;
+  overflow: hidden;   /* sidebar itself does NOT scroll — only nav wrapper does */
   transition: transform 0.3s ease;
 }
 
 .sidebar-brand {
   padding: 24px 20px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
+  flex-shrink: 0;     /* always visible — never squashed by nav growth */
 }
 .sidebar-brand .brand-name {
   font-family: 'Playfair Display', serif;
@@ -339,7 +340,13 @@ tbody tr:last-child { border-bottom: none; }
   letter-spacing: 0.1em;
 }
 
-.sidebar-nav { flex: 1; padding: 16px 0; }
+.sidebar-nav-wrapper {
+  flex: 1;            /* takes all space between brand header and user footer */
+  overflow-y: auto;   /* only this middle section scrolls */
+  min-height: 0;      /* critical: allows flex child to shrink below content height */
+  -webkit-overflow-scrolling: touch;
+}
+.sidebar-nav { padding: 16px 0; }
 .nav-section-title {
   padding: 8px 20px 4px;
   font-size: 0.65rem;
@@ -373,6 +380,7 @@ tbody tr:last-child { border-bottom: none; }
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-shrink: 0;     /* always visible — never pushed off screen */
 }
 .user-avatar {
   width: 36px;
