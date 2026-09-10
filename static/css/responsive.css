@@ -254,6 +254,9 @@
   .topbar {
     padding: 0 12px;
     height: 56px;
+    position: sticky;
+    top: 0;
+    z-index: 200;   /* above sidebar overlay (z-index 150) and content */
   }
   .topbar-title {
     font-size: 0.9rem;

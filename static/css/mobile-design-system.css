@@ -655,6 +655,9 @@
   .topbar {
     padding: 0 var(--mobile-space-sm);
     height: 56px;
+    position: sticky;
+    top: 0;
+    z-index: 200;
   }
 
   .topbar-title {
