@@ -52,7 +52,7 @@ class ProfileUpdateForm(forms.ModelForm):
     profile_image = forms.ImageField(
         required=False,
         validators=[validate_profile_image_upload],
-        widget=forms.ClearableFileInput(attrs={
+        widget=forms.FileInput(attrs={
             'accept': 'image/jpeg,image/png,image/gif,image/webp',
             'id': 'id_profile_image',
         }),

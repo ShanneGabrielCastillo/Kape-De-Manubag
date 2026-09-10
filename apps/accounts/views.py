@@ -95,6 +95,16 @@ def logout_view(request):
 @login_required
 def profile_view(request):
     if request.method == 'POST':
+        # Remove Photo: clear the image without touching other fields
+        if request.POST.get('remove_photo') == '1':
+            user = request.user
+            if user.profile_image:
+                user.profile_image.delete(save=False)
+                user.profile_image = None
+                user.save(update_fields=['profile_image'])
+            messages.success(request, 'Profile photo removed.')
+            return redirect('accounts:profile')
+
         form = ProfileUpdateForm(request.POST, request.FILES, instance=request.user)
         if form.is_valid():
             form.save()

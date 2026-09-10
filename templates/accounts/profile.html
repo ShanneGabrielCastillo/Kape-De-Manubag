@@ -156,23 +156,21 @@
                 🖼️ Change Photo
               </button>
               {% if user.profile_image %}
-              <button type="button" class="btn btn-sm"
+              <button type="submit" form="remove-photo-form"
                       id="remove-photo-btn"
-                      style="border:2px solid var(--red-accent);color:var(--red-accent);background:transparent"
-                      onclick="clearPhoto()">
+                      class="btn btn-sm"
+                      style="border:2px solid var(--red-accent);color:var(--red-accent);background:transparent">
                 🗑️ Remove Photo
               </button>
               {% else %}
-              <button type="button" class="btn btn-sm"
+              <button type="button"
                       id="remove-photo-btn"
+                      class="btn btn-sm"
                       style="border:2px solid var(--red-accent);color:var(--red-accent);background:transparent;display:none"
                       onclick="clearPhoto()">
                 🗑️ Remove Photo
               </button>
               {% endif %}
-              {# Hidden clear checkbox — Django's ClearableFileInput uses this #}
-              <input type="checkbox" name="profile_image-clear" id="profile_image-clear_id"
-                     style="display:none">
             </div>
             <p class="profile-img-filename" id="img-filename">
               {% if user.profile_image %}{{ user.profile_image.name|cut:"profiles/" }}{% endif %}
@@ -205,26 +203,28 @@
   </div>
 </div>
 
+{# ── Separate form for Remove Photo — POSTs remove_photo=1 ── #}
+{% if user.profile_image %}
+<form id="remove-photo-form" method="post" style="display:none">
+  {% csrf_token %}
+  <input type="hidden" name="remove_photo" value="1">
+</form>
+{% endif %}
+
 <script>
-// Live preview: when a new file is selected, show it in the avatar circle
-// and update the filename label.
+// Live preview when a new file is chosen
 document.getElementById('id_profile_image').addEventListener('change', function() {
   var file = this.files && this.files[0];
   if (!file) return;
 
-  // Show the filename
   var filenameEl = document.getElementById('img-filename');
   if (filenameEl) filenameEl.textContent = file.name;
 
-  // Show Remove Photo button
   var removeBtn = document.getElementById('remove-photo-btn');
   if (removeBtn) removeBtn.style.display = '';
 
-  // Live preview in the avatar circle
   var reader = new FileReader();
   reader.onload = function(e) {
-    var wrap = document.getElementById('avatar-wrap');
-    // Replace initials div or existing img with a fresh <img>
     var existing = document.getElementById('avatar-preview');
     if (existing && existing.tagName === 'IMG') {
       existing.src = e.target.result;
@@ -239,35 +239,5 @@ document.getElementById('id_profile_image').addEventListener('change', function(
   };
   reader.readAsDataURL(file);
 });
-
-// Clear photo: tick Django's clear checkbox, reset preview to initials,
-// hide the filename and the Remove button.
-function clearPhoto() {
-  // Tick the clear checkbox so Django removes the image on save
-  var clearCb = document.getElementById('profile_image-clear_id');
-  if (clearCb) clearCb.checked = true;
-
-  // Reset the file input
-  var fileInput = document.getElementById('id_profile_image');
-  if (fileInput) fileInput.value = '';
-
-  // Reset filename
-  var filenameEl = document.getElementById('img-filename');
-  if (filenameEl) filenameEl.textContent = '';
-
-  // Hide remove button
-  var removeBtn = document.getElementById('remove-photo-btn');
-  if (removeBtn) removeBtn.style.display = 'none';
-
-  // Replace preview with initials
-  var existing = document.getElementById('avatar-preview');
-  if (existing) {
-    var initials = document.createElement('div');
-    initials.id = 'avatar-preview';
-    initials.className = 'profile-avatar-initials';
-    initials.textContent = '{{ user.first_name|first|upper|default:user.username|first|upper }}';
-    existing.replaceWith(initials);
-  }
-}
 </script>
 {% endblock %}
