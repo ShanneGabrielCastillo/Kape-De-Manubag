@@ -112,6 +112,71 @@
 </div>
 {% endif %}
 
+{# ── Customer Chatbot — visible on menu page only ── #}
+<link rel="stylesheet" href="{% static 'css/chatbot.css' %}">
+
+{# Floating chat button #}
+<button id="kdm-chat-btn"
+        class="kdm-chat-btn"
+        aria-label="Open customer assistant"
+        aria-expanded="false"
+        aria-controls="kdm-chat-panel"
+        title="Need help? Chat with us!">
+  💬
+  <span id="kdm-chat-dot" class="kdm-chat-btn-dot" aria-hidden="true"></span>
+</button>
+
+{# Chat panel #}
+<div id="kdm-chat-panel"
+     class="kdm-chat-panel"
+     role="dialog"
+     aria-label="Kape De Manubag Customer Assistant"
+     aria-modal="false">
+
+  {# Header #}
+  <div class="kdm-chat-header">
+    <div class="kdm-chat-header-info">
+      <div class="kdm-chat-avatar" aria-hidden="true">☕</div>
+      <div>
+        <div class="kdm-chat-header-title">Kape De Manubag Assistant</div>
+        <div class="kdm-chat-header-sub">Ask me anything about our menu!</div>
+      </div>
+    </div>
+    <button id="kdm-chat-close"
+            class="kdm-chat-close"
+            aria-label="Close chat assistant">×</button>
+  </div>
+
+  {# Messages #}
+  <div id="kdm-chat-messages"
+       class="kdm-chat-messages"
+       role="log"
+       aria-live="polite"
+       aria-label="Chat messages"></div>
+
+  {# Quick replies #}
+  <div id="kdm-quick-replies" class="kdm-quick-replies" role="group" aria-label="Quick questions"></div>
+
+  {# Input row #}
+  <div class="kdm-chat-input-row">
+    <textarea id="kdm-chat-input"
+              class="kdm-chat-input"
+              placeholder="Type your message..."
+              rows="1"
+              maxlength="500"
+              aria-label="Type your message to the assistant"></textarea>
+    <button id="kdm-chat-send"
+            class="kdm-chat-send"
+            aria-label="Send message"
+            title="Send">
+      ➤
+    </button>
+  </div>
+
+</div>
+
+<script src="{% static 'js/chatbot.js' %}"></script>
+
 <script>
 // ── Size selector → hidden input sync ─────────────────────────────────────
 document.querySelectorAll('.size-selector').forEach(sel => {

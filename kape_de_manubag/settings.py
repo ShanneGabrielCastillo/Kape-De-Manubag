@@ -115,6 +115,7 @@ INSTALLED_APPS = [
     'apps.dashboard',
     'apps.realtime',
     'apps.finance',
+    'apps.chatbot',
 ]
 
 MIDDLEWARE = [
@@ -280,7 +281,12 @@ CSRF_COOKIE_SECURE = not DEBUG
 # but the idle timeout above still bounds how long an unattended session lives.
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 
-# ── Email ─────────────────────────────────────────────────────────────────────
+# ── AI / Chatbot ──────────────────────────────────────────────────────────────
+# Gemini API key — set as environment variable, NEVER commit to source control.
+# On Render: add GEMINI_API_KEY in the environment variables panel.
+# For local dev: add GEMINI_API_KEY=<your-key> in your .env file.
+# If not set, the chatbot uses deterministic fallback responses only.
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 # Never hard-code credentials here. Configure via environment variables on
 # Render (or any host). For local development, console backend prints emails
 # to stdout so no SMTP server is required.

@@ -8,3 +8,4 @@ dj-database-url==2.2.0
 gunicorn==22.0.0
 cloudinary==1.40.0
 django-cloudinary-storage==0.3.0
+google-generativeai==0.8.3
