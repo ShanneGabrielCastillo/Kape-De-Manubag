@@ -253,9 +253,21 @@
   #sidebar-toggle { display: flex; }
 
   /* ── Topbar ── */
+  /* Use position:fixed on mobile so it always stays at the top regardless
+     of scroll container. Add padding-top to page-content to compensate
+     so content is not hidden behind the fixed bar. */
   .topbar {
     padding: 0 12px;
     height: 56px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 200;
+  }
+  /* Push page content down to clear the fixed topbar */
+  .main-content {
+    padding-top: 56px;
   }
   .topbar-title {
     font-size: 0.9rem;
