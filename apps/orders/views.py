@@ -762,7 +762,6 @@ def process_payment(request, pk):
         order.cashier = request.user
         order.save()
 
-    messages.success(request, f'Payment processed! Change: ₱{order.change_amount:.2f}')
     return JsonResponse({
         'success': True,
         'change': float(order.change_amount),
