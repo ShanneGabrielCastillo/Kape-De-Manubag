@@ -2,6 +2,8 @@
 Order Models for Kape De Manubag System
 Handles cart, orders, order items, and payments
 """
+import secrets
+
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.db.models.signals import pre_delete
@@ -68,6 +70,23 @@ class Order(models.Model):
         ),
     )
 
+    # Secure public order tracking token.  This is a cryptographically random
+    # URL-safe string that the customer uses to access their order tracker.
+    # Unlike the predictable order_number (KDM-YYYYMMDD-NNNN), this token
+    # cannot be guessed or enumerated, so it prevents one customer from
+    # reading another customer's order details via the public tracker endpoint.
+    # It is null for orders that pre-date this field and is backfilled by the
+    # data migration 0017_order_tracking_token.
+    tracking_token = models.CharField(
+        max_length=64, unique=True, null=True, blank=True,
+        db_index=True,
+        help_text=(
+            'Server-generated cryptographically random token used for the '
+            'customer-facing order tracker URL. Cannot be predicted from the '
+            'order number, date, or any other public field.'
+        ),
+    )
+
     # Staff
     cashier = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -99,8 +118,17 @@ class Order(models.Model):
                     self.order_number = f"KDM-{today:%Y%m%d}-{seq:04d}"
                 if not self.queue_number:
                     self.queue_number = seq
+                # Assign a secure random tracking token if one has not been
+                # set yet.  This covers all new orders including POS orders,
+                # customer checkout orders, and any ORM path that calls save().
+                if not self.tracking_token:
+                    self.tracking_token = secrets.token_urlsafe(32)
                 super().save(*args, **kwargs)
         else:
+            # For updates to existing orders, still generate a tracking_token
+            # if somehow missing (safety net — the migration backfills these).
+            if not self.tracking_token:
+                self.tracking_token = secrets.token_urlsafe(32)
             super().save(*args, **kwargs)
 
     def __str__(self):

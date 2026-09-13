@@ -23,10 +23,13 @@ urlpatterns = [
     path('pos/create/', views.create_pos_order, name='create_pos_order'),
     path('pos/draft-status/', views.pos_draft_status, name='pos_draft_status'),
     path('api/packaging-fee/', views.packaging_fee_preview, name='packaging_fee_preview'),
-    # Queue / Tracker
-    path('track/<str:order_number>/', views.order_tracker, name='order_tracker'),
+
+    # Queue / Tracker — public customer endpoints use the secure tracking_token
+    # rather than the predictable order_number.  The token is URL-safe base64
+    # (~43 characters) and cannot be enumerated from the order number.
+    path('track/<str:tracking_token>/', views.order_tracker, name='order_tracker'),
     path('queue-board/', views.queue_board, name='queue_board'),
-    path('api/track/<str:order_number>/', views.api_track_order, name='api_track_order'),
+    path('api/track/<str:tracking_token>/', views.api_track_order, name='api_track_order'),
     path('api/queue-board/', views.api_queue_board, name='api_queue_board'),
     path('manage/<int:pk>/advance/', views.quick_status_advance, name='quick_status_advance'),
 ]

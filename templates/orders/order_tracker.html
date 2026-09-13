@@ -267,11 +267,10 @@ window.TRACKER_CONFIG = {
   orderNumber:   '{{ order.order_number }}',
   queueNumber:   {{ order.queue_number }},
   initialStatus: '{{ order.status }}',
-  apiUrl:        '{% url "orders:api_track_order" order.order_number %}',
-  // SSE endpoint: push-based updates from the server.  The JS connects here
-  // first; if the browser or network does not support SSE it falls back to
-  // polling automatically.
-  sseUrl:        '{% url "realtime:customer_order_stream" %}?order_number={{ order.order_number|urlencode }}',
+  // API and SSE URLs use the secure tracking_token, not the predictable
+  // order_number, so one customer cannot enumerate another's order data.
+  apiUrl:        '{% url "orders:api_track_order" order.tracking_token %}',
+  sseUrl:        '{% url "realtime:customer_order_stream" %}?tracking_token={{ order.tracking_token|urlencode }}',
   pollInterval:  5000,
 };
 </script>

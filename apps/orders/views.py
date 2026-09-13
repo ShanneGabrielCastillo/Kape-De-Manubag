@@ -4,7 +4,9 @@ Order views - Cart, Checkout, Order management for cashier/admin
 import json
 import logging
 import secrets
+import time
 
+from django.conf import settings
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -29,6 +31,63 @@ from apps.orders.services import (
     create_order_item,
     VALID_TRANSITIONS,
 )
+
+# ── Anonymous order rate limiting ─────────────────────────────────────────────
+# Session key under which the sliding-window counter is stored.
+# Format: {'timestamps': [epoch_float, ...]}  — list of successful order
+# creation times within the current window.  Stored in the Django session so
+# it persists across processes (PostgreSQL-backed session store on Render) and
+# is automatically scoped to one browser session.
+_ORDER_RATE_SESSION_KEY = 'order_rate_timestamps'
+
+
+def _check_order_rate_limit(request):
+    """Return (allowed: bool, wait_seconds: int).
+
+    Reads ORDER_RATE_LIMIT (max orders) and ORDER_RATE_WINDOW (seconds) from
+    Django settings.  Only timestamps of *successfully created* orders within
+    the current sliding window are counted — failed validation attempts never
+    consume quota.
+
+    The counter is session-stored, which is appropriate for anonymous customers
+    and compatible with multi-worker deployments (sessions are PostgreSQL-backed
+    on Render).  We accept a small race window for truly simultaneous requests
+    from the same session (an extremely rare edge case for a physical café); a
+    database-level solution would add significant complexity for negligible
+    practical benefit at this scale.
+    """
+    limit = getattr(settings, 'ORDER_RATE_LIMIT', 3)
+    window = getattr(settings, 'ORDER_RATE_WINDOW', 600)
+    now = time.time()
+    cutoff = now - window
+
+    timestamps = request.session.get(_ORDER_RATE_SESSION_KEY, [])
+    # Prune timestamps that are outside the current window.
+    timestamps = [t for t in timestamps if t > cutoff]
+
+    if len(timestamps) >= limit:
+        oldest = min(timestamps)
+        wait = int(oldest + window - now) + 1  # +1 so display is never 0
+        return False, max(wait, 1)
+
+    return True, 0
+
+
+def _record_order_created(request):
+    """Append the current timestamp to the session's order rate counter.
+
+    Called exactly once per *successfully created* order so that failed
+    checkouts (validation errors, stock issues, etc.) do not penalise the
+    customer.
+    """
+    window = getattr(settings, 'ORDER_RATE_WINDOW', 600)
+    now = time.time()
+    cutoff = now - window
+
+    timestamps = request.session.get(_ORDER_RATE_SESSION_KEY, [])
+    timestamps = [t for t in timestamps if t > cutoff]  # prune expired
+    timestamps.append(now)
+    request.session[_ORDER_RATE_SESSION_KEY] = timestamps
 
 logger = logging.getLogger(__name__)
 
@@ -312,6 +371,33 @@ def checkout_view(request):
             # everything rolls back, so a failed checkout can never leave a
             # half-created order, a partial deduction or an inventory log
             # without the matching order.
+            #
+            # Rate-limit check: enforce the per-session order limit BEFORE
+            # attempting to create anything.  This sits here (after all
+            # cart-validation bounces) so that failed validation attempts
+            # (empty cart, unavailable products, quantity adjustments) never
+            # consume quota — only a genuine new-order attempt does.
+            # The idempotency check above already short-circuits replays of
+            # an already-created order, so those never reach this point.
+            rate_allowed, rate_wait = _check_order_rate_limit(request)
+            if not rate_allowed:
+                wait_minutes = (rate_wait + 59) // 60  # ceil to whole minutes
+                messages.error(
+                    request,
+                    f"You've reached the ordering limit. "
+                    f"Please wait about {wait_minutes} minute"
+                    f"{'s' if wait_minutes != 1 else ''} before placing "
+                    "another order.",
+                )
+                # Do not clear the cart — the customer's items are preserved
+                # so they can retry once the window expires.
+                return render(request, 'orders/checkout.html', {
+                    'cart': cart,
+                    'items': items,
+                    'form': form,
+                    'request_token': request_token,
+                })
+
             try:
                 with transaction.atomic():
                     order = Order.objects.create(
@@ -440,6 +526,11 @@ def checkout_view(request):
                 return redirect('orders:cart')
 
             request.session['last_order_id'] = order.pk
+            # Record this successful order creation in the rate-limit counter.
+            # This is called only on the genuine success path — failed
+            # checkouts, stock rejections, and idempotency replays never
+            # reach this line, so they never consume quota.
+            _record_order_created(request)
             request.session.pop('checkout_request_token', None)
             return redirect('orders:order_success', pk=order.pk)
     else:
@@ -464,7 +555,7 @@ def order_success(request, pk):
         Order.objects.only(
             'order_number', 'customer_name', 'table_number',
             'order_type', 'total', 'subtotal', 'packaging_fee',
-             'discount', 'queue_number', 'status',
+             'discount', 'queue_number', 'status', 'tracking_token',
         ),
         pk=pk,
     )
@@ -916,18 +1007,24 @@ def packaging_fee_preview(request):
 
 # ========== QUEUE / TRACKER VIEWS ==========
 
-def order_tracker(request, order_number):
-    """Customer-facing live order tracker. No login required."""
-    # Load only the fields the tracker template and get_queue_position() need.
-    # The items sub-query is passed separately so order.items.all in the
-    # template does not fire an extra unbounded query.
+# ========== QUEUE / TRACKER VIEWS ==========
+
+def order_tracker(request, tracking_token):
+    """Customer-facing live order tracker. No login required.
+
+    Access is gated by the order's cryptographically random tracking_token
+    (URL-safe, ~256 bits of entropy) rather than the predictable order_number,
+    so one customer cannot enumerate another customer's order details.  The
+    order_number is still displayed on the page and used for the queue board
+    and staff workflows — it is just not the access key for this endpoint.
+    """
     order = get_object_or_404(
         Order.objects.only(
             'order_number', 'queue_number', 'status',
             'customer_name', 'order_type', 'table_number',
-            'packaging_fee', 'total', 'created_at',
+            'packaging_fee', 'total', 'created_at', 'tracking_token',
         ),
-        order_number=order_number,
+        tracking_token=tracking_token,
     )
     items = order.items.only(
         'product_name', 'size', 'quantity',
@@ -962,8 +1059,14 @@ def queue_board(request):
     })
 
 
-def api_track_order(request, order_number):
-    """AJAX polling endpoint for order tracker. No login required."""
+def api_track_order(request, tracking_token):
+    """AJAX polling endpoint for order tracker. No login required.
+
+    Looks up the order by its cryptographically random tracking_token so
+    enumeration of order numbers cannot expose other customers' data.
+    Returns only the fields the tracker UI needs — no payment amounts,
+    cashier info, or internal flags are included.
+    """
     try:
         order = Order.objects.only(
             'order_number', 'queue_number', 'customer_name',
@@ -971,7 +1074,7 @@ def api_track_order(request, order_number):
             # created_at is required by get_queue_position() — must be in
             # only() to avoid a deferred-field lazy-load on every poll.
             'created_at', 'queued_at', 'ready_at',
-        ).get(order_number=order_number)
+        ).get(tracking_token=tracking_token)
     except Order.DoesNotExist:
         return JsonResponse({'error': 'Order not found'}, status=404)
 

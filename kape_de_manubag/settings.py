@@ -253,6 +253,14 @@ LOGIN_MAX_ATTEMPTS_PER_USERNAME = 5
 LOGIN_MAX_ATTEMPTS_PER_IP = 10
 LOGIN_LOCKOUT_MINUTES = 15
 
+# ── Anonymous customer order rate limiting ────────────────────────────────────
+# Maximum number of successful orders an anonymous customer session may place
+# within the sliding time window (seconds).  Only successfully created orders
+# count toward the limit — failed validation attempts are not penalised.
+# Override via environment variables on Render (or any host).
+ORDER_RATE_LIMIT = int(os.environ.get('ORDER_RATE_LIMIT', '3'))
+ORDER_RATE_WINDOW = int(os.environ.get('ORDER_RATE_WINDOW', '600'))  # 10 minutes
+
 # ── Session ───────────────────────────────────────────────────────────────────
 # Absolute maximum session lifetime (hard ceiling). The session also expires
 # after SESSION_IDLE_TIMEOUT_MINUTES of inactivity (see the

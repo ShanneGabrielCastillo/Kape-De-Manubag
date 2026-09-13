@@ -71,7 +71,7 @@
     </p>
 
     <div style="margin:0 0 20px">
-      <a href="{% url 'orders:order_tracker' order.order_number %}" class="btn btn-caramel btn-block btn-lg">📱 Track Your Order Live</a>
+      <a href="{% url 'orders:order_tracker' order.tracking_token %}" class="btn btn-caramel btn-block btn-lg">📱 Track Your Order Live</a>
       <p style="font-size:0.75rem;color:#aaa;text-align:center;margin-top:8px">Updates automatically — no need to refresh</p>
     </div>
     <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
