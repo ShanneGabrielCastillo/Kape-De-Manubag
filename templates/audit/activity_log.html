@@ -16,58 +16,113 @@
 
 {# ── Filter Bar ── #}
 <div class="filter-bar">
-  <form method="get" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+  <form method="get" class="audit-filter-form">
 
-    <div style="flex:1;min-width:180px">
-      <label style="font-size:0.75rem;color:#999;display:block;margin-bottom:4px">Search</label>
+    {# Row 1: Search — full width on all screen sizes #}
+    <div class="audit-filter-full">
+      <label class="audit-filter-label">Search</label>
       <input type="text" name="q" value="{{ q }}"
              placeholder="Username, action, record, details…"
              class="form-control">
     </div>
 
-    <div>
-      <label style="font-size:0.75rem;color:#999;display:block;margin-bottom:4px">Category</label>
-      <select name="category" class="form-control" style="min-width:140px">
-        <option value="">All Categories</option>
-        {% for cat in categories %}
-        <option value="{{ cat }}" {% if category == cat %}selected{% endif %}>
-          {{ cat|capfirst }}
-        </option>
-        {% endfor %}
-      </select>
+    {# Row 2: Category + User — side by side on mobile and desktop #}
+    <div class="audit-filter-row">
+      <div class="audit-filter-col">
+        <label class="audit-filter-label">Category</label>
+        <select name="category" class="form-control">
+          <option value="">All Categories</option>
+          {% for cat in categories %}
+          <option value="{{ cat }}" {% if category == cat %}selected{% endif %}>
+            {{ cat|capfirst }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="audit-filter-col">
+        <label class="audit-filter-label">User</label>
+        <select name="user" class="form-control">
+          <option value="">All Users</option>
+          {% for staff in staff_users %}
+          <option value="{{ staff.pk }}" {% if user_id == staff.pk|stringformat:"s" %}selected{% endif %}>
+            {{ staff.username }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
     </div>
 
-    <div>
-      <label style="font-size:0.75rem;color:#999;display:block;margin-bottom:4px">User</label>
-      <select name="user" class="form-control" style="min-width:130px">
-        <option value="">All Users</option>
-        {% for staff in staff_users %}
-        <option value="{{ staff.pk }}" {% if user_id == staff.pk|stringformat:"s" %}selected{% endif %}>
-          {{ staff.username }}
-        </option>
-        {% endfor %}
-      </select>
+    {# Row 3: From + To — side by side on mobile and desktop #}
+    <div class="audit-filter-row">
+      <div class="audit-filter-col">
+        <label class="audit-filter-label">From</label>
+        <input type="date" name="date_from" value="{{ date_from }}" class="form-control">
+      </div>
+      <div class="audit-filter-col">
+        <label class="audit-filter-label">To</label>
+        <input type="date" name="date_to" value="{{ date_to }}" class="form-control">
+      </div>
     </div>
 
-    <div>
-      <label style="font-size:0.75rem;color:#999;display:block;margin-bottom:4px">From</label>
-      <input type="date" name="date_from" value="{{ date_from }}" class="form-control" style="width:145px">
-    </div>
-
-    <div>
-      <label style="font-size:0.75rem;color:#999;display:block;margin-bottom:4px">To</label>
-      <input type="date" name="date_to" value="{{ date_to }}" class="form-control" style="width:145px">
-    </div>
-
-    <div style="display:flex;gap:6px;align-items:flex-end">
-      <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+    {# Row 4: Buttons — right-aligned #}
+    <div class="audit-filter-actions">
       {% if q or category or user_id or date_from or date_to %}
       <a href="{% url 'audit:activity_log' %}" class="btn btn-outline btn-sm">Clear</a>
       {% endif %}
+      <button type="submit" class="btn btn-primary btn-sm">Filter</button>
     </div>
 
   </form>
 </div>
+
+<style>
+/* ── Activity Log filter form layout ─────────────────────────────────────────
+   Scoped to .audit-filter-form so nothing else in the project is affected.
+   Works identically on desktop (inputs sit naturally in their rows) and
+   mobile (the 2-column grid gives the exact side-by-side layout in the
+   screenshot without any horizontal overflow or misalignment).          */
+
+.audit-filter-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.audit-filter-label {
+  font-size: 0.75rem;
+  color: #999;
+  display: block;
+  margin-bottom: 4px;
+}
+
+/* Full-width row (search bar) */
+.audit-filter-full {
+  width: 100%;
+}
+
+/* Two-column row — equal-width columns, gap between them */
+.audit-filter-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* Each column fills its grid cell; the form-control inside stretches to fill */
+.audit-filter-col {
+  min-width: 0; /* prevent overflow inside grid cells */
+}
+.audit-filter-col .form-control {
+  width: 100%;
+}
+
+/* Buttons row — align to the right */
+.audit-filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+</style>
 
 {# ── Active Filter Chips ── #}
 {% if q or category or user_id or date_from or date_to %}
