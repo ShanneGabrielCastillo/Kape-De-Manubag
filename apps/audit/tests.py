@@ -354,3 +354,374 @@ class ScopeBoundaryTests(TestCase):
             'quantity': '1', 'size': 'none',
         })
         self.assertEqual(AuditLog.objects.count(), 0)
+
+
+# ── Order Audit Tests ─────────────────────────────────────────────────────────
+
+
+class OrderAuditTests(TestCase):
+    """Order payment, cancellation and status changes are logged."""
+
+    def setUp(self):
+        self.admin = _create_user('order_audit_admin', 'admin')
+        self.cashier = _create_user('order_audit_cashier', 'cashier')
+        self.client.force_login(self.cashier)
+        self.category = Category.objects.create(name='Drinks', slug='drinks-oa')
+        self.product = Product.objects.create(
+            category=self.category, name='Latte', price='60.00',
+            stock_quantity=50,
+        )
+
+    def _create_order(self):
+        """Create a minimal pending POS order for the cashier."""
+        response = self.client.post(
+            '/orders/pos/create/',
+            json.dumps({
+                'customer_name': 'Walk-in Customer',
+                'items': [{'product_id': self.product.pk, 'quantity': 1, 'size': 'none'}],
+                'order_type': 'dine_in', 'table_number': '', 'notes': '',
+            }),
+            content_type='application/json',
+        )
+        self.assertTrue(response.json()['success'])
+        from apps.orders.models import Order
+        return Order.objects.get(pk=response.json()['order_id'])
+
+    def test_payment_creates_exactly_one_audit_entry(self):
+        order = self._create_order()
+        AuditLog.objects.all().delete()  # clear order-creation entries
+        response = self.client.post(
+            f'/orders/manage/{order.pk}/payment/',
+            {'amount_paid': '100.00', 'payment_method': 'cash'},
+        )
+        self.assertTrue(response.json()['success'])
+        self.assertEqual(AuditLog.objects.filter(action='order.payment').count(), 1)
+        # No duplicate entries from signals or other paths.
+        self.assertEqual(AuditLog.objects.count(), 1)
+
+    def test_payment_audit_detail_contains_method_and_amounts(self):
+        order = self._create_order()
+        AuditLog.objects.all().delete()
+        self.client.post(
+            f'/orders/manage/{order.pk}/payment/',
+            {'amount_paid': '100.00', 'payment_method': 'cash'},
+        )
+        entry = AuditLog.objects.get(action='order.payment')
+        self.assertIn('Cash', entry.detail)
+        self.assertIn('₱', entry.detail)
+
+    def test_payment_audit_detail_contains_no_sensitive_data(self):
+        order = self._create_order()
+        AuditLog.objects.all().delete()
+        self.client.post(
+            f'/orders/manage/{order.pk}/payment/',
+            {'amount_paid': '100.00', 'payment_method': 'cash'},
+        )
+        entry = AuditLog.objects.get(action='order.payment')
+        # Passwords and tokens must never appear in audit entries.
+        self.assertNotIn('password', entry.detail.lower())
+        self.assertNotIn('token', entry.detail.lower())
+        self.assertNotIn('secret', entry.detail.lower())
+
+    def test_failed_payment_insufficient_amount_creates_no_audit_entry(self):
+        order = self._create_order()
+        AuditLog.objects.all().delete()
+        response = self.client.post(
+            f'/orders/manage/{order.pk}/payment/',
+            {'amount_paid': '1.00', 'payment_method': 'cash'},
+        )
+        self.assertFalse(response.json()['success'])
+        self.assertEqual(AuditLog.objects.filter(action='order.payment').count(), 0)
+
+    def test_status_change_creates_exactly_one_audit_entry(self):
+        order = self._create_order()
+        AuditLog.objects.all().delete()
+        response = self.client.post(
+            f'/orders/manage/{order.pk}/status/',
+            {'status': 'preparing'},
+        )
+        self.assertTrue(response.json()['success'])
+        self.assertEqual(
+            AuditLog.objects.filter(action='order.status_changed').count(), 1,
+        )
+        entry = AuditLog.objects.get(action='order.status_changed')
+        self.assertIn('pending', entry.detail)
+        self.assertIn('preparing', entry.detail)
+
+    def test_cancel_creates_order_cancel_not_order_status_changed(self):
+        order = self._create_order()
+        AuditLog.objects.all().delete()
+        response = self.client.post(
+            f'/orders/manage/{order.pk}/status/',
+            {'status': 'cancelled'},
+        )
+        self.assertTrue(response.json()['success'])
+        self.assertEqual(AuditLog.objects.filter(action='order.cancel').count(), 1)
+        self.assertEqual(
+            AuditLog.objects.filter(action='order.status_changed').count(), 0,
+        )
+
+    def test_invalid_status_transition_creates_no_audit_entry(self):
+        order = self._create_order()
+        AuditLog.objects.all().delete()
+        # pending → completed is not a valid transition.
+        response = self.client.post(
+            f'/orders/manage/{order.pk}/status/',
+            {'status': 'completed'},
+        )
+        self.assertFalse(response.json()['success'])
+        self.assertEqual(AuditLog.objects.count(), 0)
+
+    def test_quick_advance_creates_one_status_changed_entry(self):
+        order = self._create_order()
+        AuditLog.objects.all().delete()
+        response = self.client.post(f'/orders/manage/{order.pk}/advance/')
+        self.assertTrue(response.json()['success'])
+        self.assertEqual(
+            AuditLog.objects.filter(action='order.status_changed').count(), 1,
+        )
+        entry = AuditLog.objects.get(action='order.status_changed')
+        self.assertIn('pending', entry.detail)
+        self.assertIn('preparing', entry.detail)
+
+
+# ── Activity Log View Tests ───────────────────────────────────────────────────
+
+
+class ActivityLogViewTests(TestCase):
+    """The /audit/ Activity Log page — access control and UI behavior."""
+
+    def setUp(self):
+        self.admin = _create_user('view_admin', 'admin')
+        self.cashier = _create_user('view_cashier', 'cashier')
+        self.category = Category.objects.create(name='Coffee', slug='coffee-vt')
+
+    def test_admin_can_access_activity_log(self):
+        self.client.force_login(self.admin)
+        response = self.client.get('/audit/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_cashier_cannot_access_activity_log(self):
+        self.client.force_login(self.cashier)
+        response = self.client.get('/audit/')
+        # @admin_required redirects non-admin to dashboard.
+        self.assertIn(response.status_code, [302, 403])
+
+    def test_unauthenticated_redirected_to_login(self):
+        response = self.client.get('/audit/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+
+    def test_page_shows_entries_newest_first(self):
+        self.client.force_login(self.admin)
+        cat = Category.objects.get(slug='coffee-vt')
+        log_action(self.admin, 'category.create', cat, detail='first')
+        log_action(self.admin, 'category.update', cat, detail='second')
+        response = self.client.get('/audit/')
+        self.assertEqual(response.status_code, 200)
+        logs = list(response.context['logs'])
+        self.assertEqual(logs[0].detail, 'second')
+        self.assertEqual(logs[1].detail, 'first')
+
+    def test_search_filters_by_username(self):
+        self.client.force_login(self.admin)
+        cat = Category.objects.get(slug='coffee-vt')
+        log_action(self.admin, 'category.create', cat)
+        log_action(self.cashier, 'category.update', cat)
+        response = self.client.get('/audit/', {'q': 'view_admin'})
+        self.assertEqual(response.status_code, 200)
+        logs = list(response.context['logs'])
+        self.assertTrue(all(e.user == self.admin for e in logs))
+
+    def test_search_filters_by_detail(self):
+        self.client.force_login(self.admin)
+        log_action(self.admin, 'settings.update', detail='unique_detail_xyz')
+        log_action(self.admin, 'settings.update', detail='other_detail')
+        response = self.client.get('/audit/', {'q': 'unique_detail_xyz'})
+        logs = list(response.context['logs'])
+        self.assertEqual(len(logs), 1)
+        self.assertEqual(logs[0].detail, 'unique_detail_xyz')
+
+    def test_category_filter_shows_only_matching_actions(self):
+        self.client.force_login(self.admin)
+        cat = Category.objects.get(slug='coffee-vt')
+        log_action(self.admin, 'order.payment', object_repr='Order #001')
+        log_action(self.admin, 'category.create', cat)
+        response = self.client.get('/audit/', {'category': 'orders'})
+        logs = list(response.context['logs'])
+        self.assertTrue(all(e.action.startswith('order.') for e in logs))
+
+    def test_user_filter_works(self):
+        self.client.force_login(self.admin)
+        cat = Category.objects.get(slug='coffee-vt')
+        log_action(self.admin, 'category.create', cat)
+        log_action(self.cashier, 'category.update', cat)
+        response = self.client.get('/audit/', {'user': str(self.cashier.pk)})
+        logs = list(response.context['logs'])
+        self.assertTrue(all(e.user == self.cashier for e in logs))
+
+    def test_date_filter_works(self):
+        self.client.force_login(self.admin)
+        from django.utils import timezone as tz
+        today_str = tz.localdate().isoformat()
+        log_action(self.admin, 'settings.update', detail='today_entry')
+        response = self.client.get('/audit/', {
+            'date_from': today_str, 'date_to': today_str,
+        })
+        self.assertEqual(response.status_code, 200)
+        logs = list(response.context['logs'])
+        self.assertTrue(len(logs) >= 1)
+
+    def test_pagination_50_per_page(self):
+        self.client.force_login(self.admin)
+        # Create 55 entries.
+        for i in range(55):
+            log_action(self.admin, 'settings.update', detail=f'entry {i}')
+        response = self.client.get('/audit/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context['logs']), 50)
+        response2 = self.client.get('/audit/', {'page': '2'})
+        self.assertEqual(response2.status_code, 200)
+        self.assertEqual(len(response2.context['logs']), 5)
+
+    def test_empty_state_renders(self):
+        self.client.force_login(self.admin)
+        AuditLog.objects.all().delete()
+        response = self.client.get('/audit/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No activity logs')
+
+    def test_category_label_attached_to_entries(self):
+        """Each log entry should have category_label set by the view."""
+        self.client.force_login(self.admin)
+        log_action(self.admin, 'order.payment', object_repr='Order #001')
+        response = self.client.get('/audit/')
+        logs = list(response.context['logs'])
+        payment_entry = next(e for e in logs if e.action == 'order.payment')
+        self.assertEqual(payment_entry.category_label, 'orders')
+
+
+# ── Regression Tests ──────────────────────────────────────────────────────────
+
+
+class RegressionTests(TestCase):
+    """Existing functionality is not broken by the Activity Log feature."""
+
+    def setUp(self):
+        self.admin = _create_user('regression_admin', 'admin')
+        self.cashier = _create_user('regression_cashier', 'cashier')
+        self.category = Category.objects.create(name='Drinks', slug='drinks-rt')
+        self.product = Product.objects.create(
+            category=self.category, name='Americano', price='55.00',
+            stock_quantity=100,
+        )
+
+    def test_existing_inventory_log_still_works_after_restock(self):
+        from apps.inventory.models import InventoryLog
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            f'/inventory/{self.product.pk}/restock/',
+            {'quantity': '10', 'notes': 'test restock'},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['success'])
+        # Both InventoryLog and AuditLog entries must exist.
+        self.assertTrue(
+            InventoryLog.objects.filter(
+                product=self.product, action='restock',
+            ).exists()
+        )
+        self.assertTrue(
+            AuditLog.objects.filter(action='inventory.restock').exists()
+        )
+
+    def test_customer_order_stock_deduction_creates_no_order_audit_entries(self):
+        """POS order creation is intentionally not logged per scope."""
+        self.client.force_login(self.admin)
+        AuditLog.objects.all().delete()
+        response = self.client.post(
+            '/orders/pos/create/',
+            json.dumps({
+                'customer_name': 'Walk-in',
+                'items': [{'product_id': self.product.pk, 'quantity': 1, 'size': 'none'}],
+                'order_type': 'dine_in', 'table_number': '', 'notes': '',
+            }),
+            content_type='application/json',
+        )
+        self.assertTrue(response.json()['success'])
+        self.assertEqual(
+            AuditLog.objects.filter(action__startswith='order.').count(), 0,
+        )
+
+    def test_payment_processing_still_works_functionally(self):
+        self.client.force_login(self.cashier)
+        r = self.client.post(
+            '/orders/pos/create/',
+            json.dumps({
+                'customer_name': 'Walk-in',
+                'items': [{'product_id': self.product.pk, 'quantity': 1, 'size': 'none'}],
+                'order_type': 'dine_in', 'table_number': '', 'notes': '',
+            }),
+            content_type='application/json',
+        )
+        from apps.orders.models import Order
+        order = Order.objects.get(pk=r.json()['order_id'])
+        response = self.client.post(
+            f'/orders/manage/{order.pk}/payment/',
+            {'amount_paid': '100.00', 'payment_method': 'cash'},
+        )
+        self.assertTrue(response.json()['success'])
+        order.refresh_from_db()
+        self.assertTrue(order.is_paid)
+        self.assertEqual(order.status, 'completed')
+
+    def test_cancel_order_restores_inventory_and_creates_cancel_audit(self):
+        self.client.force_login(self.cashier)
+        original_stock = self.product.stock_quantity
+        r = self.client.post(
+            '/orders/pos/create/',
+            json.dumps({
+                'customer_name': 'Walk-in',
+                'items': [{'product_id': self.product.pk, 'quantity': 2, 'size': 'none'}],
+                'order_type': 'dine_in', 'table_number': '', 'notes': '',
+            }),
+            content_type='application/json',
+        )
+        from apps.orders.models import Order
+        order = Order.objects.get(pk=r.json()['order_id'])
+        AuditLog.objects.all().delete()
+        self.client.post(
+            f'/orders/manage/{order.pk}/status/',
+            {'status': 'cancelled'},
+        )
+        # Stock must be restored.
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock_quantity, original_stock)
+        # Exactly one order.cancel audit entry.
+        self.assertEqual(AuditLog.objects.filter(action='order.cancel').count(), 1)
+
+    def test_inventory_stock_movements_not_duplicated_in_audit_log(self):
+        """InventoryLog records stock movements; AuditLog only records restock actions."""
+        from apps.inventory.models import InventoryLog
+        self.client.force_login(self.cashier)
+        initial_stock = self.product.stock_quantity
+        # Place an order — deducts stock.
+        r = self.client.post(
+            '/orders/pos/create/',
+            json.dumps({
+                'customer_name': 'Walk-in',
+                'items': [{'product_id': self.product.pk, 'quantity': 3, 'size': 'none'}],
+                'order_type': 'dine_in', 'table_number': '', 'notes': '',
+            }),
+            content_type='application/json',
+        )
+        self.assertTrue(r.json()['success'])
+        # InventoryLog has the sale deduction — AuditLog does NOT.
+        self.assertTrue(
+            InventoryLog.objects.filter(action='sale').exists()
+        )
+        self.assertEqual(
+            AuditLog.objects.filter(action__startswith='order.').count(), 0,
+        )
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock_quantity, initial_stock - 3)

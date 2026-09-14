@@ -19,6 +19,7 @@ urlpatterns = [
     path('realtime/', include('apps.realtime.urls')),
     path('reports/', include('apps.reports.urls')),
     path('chatbot/', include('apps.chatbot.urls')),
+    path('audit/', include('apps.audit.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 # NOTE: /health/ is intentionally public and registered above; it must never
 # require authentication or expose sensitive information (see health.py).

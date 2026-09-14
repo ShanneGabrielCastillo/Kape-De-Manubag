@@ -1,0 +1,261 @@
+{% extends "base_admin.html" %}
+{% block page_title %}Activity Log{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Activity Log</h1>
+    <p class="page-subtitle">Audit trail of important system actions by staff</p>
+  </div>
+  {% if total_count %}
+  <div style="font-size:0.85rem;color:#999;align-self:center">
+    {{ total_count }} entr{{ total_count|pluralize:"y,ies" }} total
+  </div>
+  {% endif %}
+</div>
+
+{# ── Filter Bar ── #}
+<div class="filter-bar">
+  <form method="get" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+
+    <div style="flex:1;min-width:180px">
+      <label style="font-size:0.75rem;color:#999;display:block;margin-bottom:4px">Search</label>
+      <input type="text" name="q" value="{{ q }}"
+             placeholder="Username, action, record, details…"
+             class="form-control">
+    </div>
+
+    <div>
+      <label style="font-size:0.75rem;color:#999;display:block;margin-bottom:4px">Category</label>
+      <select name="category" class="form-control" style="min-width:140px">
+        <option value="">All Categories</option>
+        {% for cat in categories %}
+        <option value="{{ cat }}" {% if category == cat %}selected{% endif %}>
+          {{ cat|capfirst }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div>
+      <label style="font-size:0.75rem;color:#999;display:block;margin-bottom:4px">User</label>
+      <select name="user" class="form-control" style="min-width:130px">
+        <option value="">All Users</option>
+        {% for staff in staff_users %}
+        <option value="{{ staff.pk }}" {% if user_id == staff.pk|stringformat:"s" %}selected{% endif %}>
+          {{ staff.username }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div>
+      <label style="font-size:0.75rem;color:#999;display:block;margin-bottom:4px">From</label>
+      <input type="date" name="date_from" value="{{ date_from }}" class="form-control" style="width:145px">
+    </div>
+
+    <div>
+      <label style="font-size:0.75rem;color:#999;display:block;margin-bottom:4px">To</label>
+      <input type="date" name="date_to" value="{{ date_to }}" class="form-control" style="width:145px">
+    </div>
+
+    <div style="display:flex;gap:6px;align-items:flex-end">
+      <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+      {% if q or category or user_id or date_from or date_to %}
+      <a href="{% url 'audit:activity_log' %}" class="btn btn-outline btn-sm">Clear</a>
+      {% endif %}
+    </div>
+
+  </form>
+</div>
+
+{# ── Active Filter Chips ── #}
+{% if q or category or user_id or date_from or date_to %}
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;font-size:0.8rem">
+  {% if q %}
+  <span style="background:var(--cream);border:1px solid var(--caramel);color:var(--brown-mid);padding:3px 10px;border-radius:20px">
+    🔍 "{{ q }}"
+  </span>
+  {% endif %}
+  {% if category %}
+  <span style="background:var(--cream);border:1px solid var(--caramel);color:var(--brown-mid);padding:3px 10px;border-radius:20px">
+    📁 {{ category|capfirst }}
+  </span>
+  {% endif %}
+  {% if user_id %}
+  <span style="background:var(--cream);border:1px solid var(--caramel);color:var(--brown-mid);padding:3px 10px;border-radius:20px">
+    👤 User filtered
+  </span>
+  {% endif %}
+  {% if date_from %}
+  <span style="background:var(--cream);border:1px solid var(--caramel);color:var(--brown-mid);padding:3px 10px;border-radius:20px">
+    📅 From {{ date_from }}
+  </span>
+  {% endif %}
+  {% if date_to %}
+  <span style="background:var(--cream);border:1px solid var(--caramel);color:var(--brown-mid);padding:3px 10px;border-radius:20px">
+    📅 To {{ date_to }}
+  </span>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ── Main Table ── #}
+<div class="card">
+  <div class="table-wrapper">
+    <table data-mobile-cards="true">
+      <thead>
+        <tr>
+          <th data-role="date">Date / Time</th>
+          <th data-role="secondary">User</th>
+          <th data-role="status">Category</th>
+          <th data-role="primary">Action</th>
+          <th data-role="secondary">Affected</th>
+          <th data-role="secondary">Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in logs %}
+        <tr>
+
+          {# Date / Time #}
+          <td style="font-size:0.8rem;color:#888;white-space:nowrap">
+            {{ log.created_at|date:"M d, Y" }}<br>
+            <span style="font-size:0.75rem">{{ log.created_at|date:"g:i A" }}</span>
+          </td>
+
+          {# User #}
+          <td style="font-weight:600;font-size:0.88rem">
+            {{ log.user.username|default:"System" }}
+            {% if log.user %}
+            <div style="font-size:0.75rem;color:#aaa;font-weight:400">{{ log.user.get_role_display }}</div>
+            {% endif %}
+          </td>
+
+          {# Category badge #}
+          <td>
+            {% with cat=log.category_label %}
+            {% if cat == "orders" %}
+              <span class="badge" style="background:rgba(41,128,185,0.12);color:#1a6693;border:1px solid rgba(41,128,185,0.3)">Orders</span>
+            {% elif cat == "products" %}
+              <span class="badge" style="background:rgba(193,122,59,0.12);color:var(--brown-warm);border:1px solid rgba(193,122,59,0.3)">Products</span>
+            {% elif cat == "categories" %}
+              <span class="badge" style="background:rgba(212,168,83,0.15);color:#8a6a00;border:1px solid rgba(212,168,83,0.4)">Categories</span>
+            {% elif cat == "staff" %}
+              <span class="badge" style="background:rgba(74,44,42,0.1);color:var(--brown-mid);border:1px solid rgba(74,44,42,0.25)">Staff</span>
+            {% elif cat == "finance" %}
+              <span class="badge" style="background:rgba(39,174,96,0.12);color:#1a7a44;border:1px solid rgba(39,174,96,0.3)">Finance</span>
+            {% elif cat == "inventory" %}
+              <span class="badge badge-preparing">Inventory</span>
+            {% elif cat == "authentication" %}
+              <span class="badge badge-muted">Auth</span>
+            {% else %}
+              <span class="badge badge-muted">System</span>
+            {% endif %}
+            {% endwith %}
+          </td>
+
+          {# Action label #}
+          <td style="font-size:0.88rem;font-weight:500">
+            {% if log.action == "order.payment" %}
+              💳 Payment Processed
+            {% elif log.action == "order.cancel" %}
+              <span style="color:var(--red-accent)">✖ Order Cancelled</span>
+            {% elif log.action == "order.status_changed" %}
+              🔄 Status Changed
+            {% elif log.action == "product.create" %}
+              ➕ Product Created
+            {% elif log.action == "product.update" %}
+              ✏️ Product Updated
+            {% elif log.action == "product.deactivate" %}
+              <span style="color:var(--red-accent)">🚫 Product Deactivated</span>
+            {% elif log.action == "product.reactivate" %}
+              <span style="color:var(--green-success)">✅ Product Reactivated</span>
+            {% elif log.action == "product.availability" %}
+              👁️ Availability Changed
+            {% elif log.action == "category.create" %}
+              ➕ Category Created
+            {% elif log.action == "category.update" %}
+              ✏️ Category Updated
+            {% elif log.action == "category.deactivate" %}
+              <span style="color:var(--red-accent)">🚫 Category Deactivated</span>
+            {% elif log.action == "category.reactivate" %}
+              <span style="color:var(--green-success)">✅ Category Reactivated</span>
+            {% elif log.action == "category.delete" %}
+              <span style="color:var(--red-accent)">🗑️ Category Deleted</span>
+            {% elif log.action == "staff.create" %}
+              👤 Staff Account Created
+            {% elif log.action == "staff.deactivate" %}
+              <span style="color:var(--red-accent)">🔒 Account Deactivated</span>
+            {% elif log.action == "staff.activate" %}
+              <span style="color:var(--green-success)">🔓 Account Activated</span>
+            {% elif log.action == "account.password_change" %}
+              🔑 Password Changed
+            {% elif log.action == "account.password_reset" %}
+              🔑 Password Reset
+            {% elif log.action == "inventory.restock" %}
+              📦 Inventory Restocked
+            {% elif log.action == "finance.create" %}
+              💰 Finance Record Created
+            {% elif log.action == "finance.update" %}
+              💰 Finance Record Updated
+            {% elif log.action == "settings.update" %}
+              ⚙️ Settings Updated
+            {% else %}
+              {{ log.action }}
+            {% endif %}
+          </td>
+
+          {# Affected record #}
+          <td style="font-size:0.85rem;color:#666;max-width:180px;word-break:break-word">
+            {{ log.object_repr|default:"—" }}
+          </td>
+
+          {# Details #}
+          <td style="font-size:0.8rem;color:#888;max-width:220px;word-break:break-word">
+            {{ log.detail|default:"—" }}
+          </td>
+
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="6" style="text-align:center;color:#aaa;padding:48px 16px">
+            <div style="font-size:2rem;margin-bottom:8px">📜</div>
+            {% if q or category or user_id or date_from or date_to %}
+            No activity logs match the current filters.
+            {% else %}
+            No activity logs yet. Actions by staff will appear here.
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ── Pagination ── #}
+{% if logs.has_other_pages %}
+<div class="pagination">
+  {% if logs.has_previous %}
+  <a href="?page={{ logs.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if user_id %}&user={{ user_id }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}"
+     class="page-link">‹ Prev</a>
+  {% endif %}
+
+  {% for num in logs.paginator.page_range %}
+    {% if logs.number == num %}
+    <span class="page-link active">{{ num }}</span>
+    {% elif num > logs.number|add:"-3" and num < logs.number|add:"3" %}
+    <a href="?page={{ num }}{% if q %}&q={{ q }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if user_id %}&user={{ user_id }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}"
+       class="page-link">{{ num }}</a>
+    {% endif %}
+  {% endfor %}
+
+  {% if logs.has_next %}
+  <a href="?page={{ logs.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if user_id %}&user={{ user_id }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}"
+     class="page-link">Next ›</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}

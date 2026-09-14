@@ -31,6 +31,7 @@ from apps.orders.services import (
     create_order_item,
     VALID_TRANSITIONS,
 )
+from apps.audit.services import log_action
 
 # ── Anonymous order rate limiting ─────────────────────────────────────────────
 # Session key under which the sliding-window counter is stored.
@@ -665,6 +666,10 @@ def update_order_status(request, pk):
                 # lock so a concurrent transition cannot race this one.
                 order = get_object_or_404(Order.objects.select_for_update(), pk=pk)
 
+                # Capture the previous status now, after the lock is acquired,
+                # so the audit entry records the accurate before/after transition.
+                previous_status = order.status
+
                 # Re-validate inside the lock: the status may have changed
                 # between the pre-check above and acquiring the lock.
                 try:
@@ -688,6 +693,23 @@ def update_order_status(request, pk):
 
                 order.status = new_status
                 order.save()
+
+                # ── Audit log ────────────────────────────────────────────────
+                # Placed inside the transaction so a rolled-back save never
+                # leaves a false "success" entry in the audit trail.
+                # Cancellation gets its own distinct action so admins can
+                # filter/search for cancellations specifically.
+                if new_status == 'cancelled':
+                    log_action(
+                        request.user, 'order.cancel', order,
+                        detail=f'Cancelled — was {previous_status}',
+                    )
+                else:
+                    log_action(
+                        request.user, 'order.status_changed', order,
+                        detail=f'{previous_status} → {new_status}',
+                    )
+
             return JsonResponse({'success': True, 'status': order.get_status_display()})
     return JsonResponse({'success': False})
 
@@ -761,6 +783,18 @@ def process_payment(request, pk):
         order.completed_at = timezone.now()
         order.cashier = request.user
         order.save()
+
+        # ── Audit log ────────────────────────────────────────────────────────
+        # Placed inside the transaction so the audit entry is automatically
+        # rolled back if the payment save fails for any reason.
+        # No sensitive data is recorded — amounts are business data, not credentials.
+        log_action(
+            request.user, 'order.payment', order,
+            detail=(
+                f'{order.get_payment_method_display()} '
+                f'₱{order.amount_paid} — Change ₱{order.change_amount}'
+            ),
+        )
 
     return JsonResponse({
         'success': True,
@@ -1168,6 +1202,10 @@ def quick_status_advance(request, pk):
         except ValueError as e:
             return JsonResponse({'success': False, 'error': str(e)})
 
+        # Capture the current status before advancing so the audit entry
+        # records the accurate before/after transition.
+        prev_status = order.status
+
         now = timezone.now()
         if next_status == 'ready':
             order.ready_at = now
@@ -1177,6 +1215,15 @@ def quick_status_advance(request, pk):
 
         order.status = next_status
         order.save()
+
+        # ── Audit log ────────────────────────────────────────────────────────
+        # Placed inside the transaction so the audit entry rolls back if the
+        # save fails. quick_status_advance only moves forward (never cancels),
+        # so order.status_changed is always the correct action here.
+        log_action(
+            request.user, 'order.status_changed', order,
+            detail=f'{prev_status} → {next_status}',
+        )
 
     return JsonResponse({
         'success':          True,
