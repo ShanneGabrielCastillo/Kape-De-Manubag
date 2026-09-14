@@ -30,6 +30,16 @@ class DailyFinance(models.Model):
             "auto-populated from yesterday's record."
         )
     )
+    is_auto_generated = models.BooleanField(
+        default=False,
+        help_text=(
+            "True if this record was auto-generated because the cashier "
+            "did not save a finance record for this day. "
+            "Expenses, coins, cash advance, and floating cash default to "
+            "zero; gcash_payments is auto-filled from Order data. "
+            "The cashier should review and correct this record."
+        )
+    )
 
     # Deduction fields — all stored, all editable
     expenses = models.DecimalField(
