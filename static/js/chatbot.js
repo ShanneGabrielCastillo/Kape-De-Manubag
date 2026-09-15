@@ -48,8 +48,10 @@
     if (!hasOpened) {
       hasOpened = true;
       appendBotMessage(
-        "Hi! 👋 I'm the Kape De Manubag Assistant. " +
-        "How can I help you today?"
+        "Hi! 👋 I'm the Kape De Manubag Assistant.\n" +
+        "Kumusta! / Maayong adlaw!\n\n" +
+        "I can help you with our menu, recommendations, payment, ordering, and order tracking.\n" +
+        "Feel free to ask in English, Filipino, or Bisaya!"
       );
       showQuickReplies();
     }
@@ -75,10 +77,11 @@
 
   // ── Quick reply buttons ───────────────────────────────────────────────────
   const QUICK_QUESTIONS = [
-    { label: '🍽️ What food do you have?',        msg: 'What food do you have?' },
+    { label: '🍽️ What\'s on the menu?',           msg: 'What food and drinks do you have?' },
+    { label: '⭐ What do you recommend?',          msg: 'What do you recommend?' },
     { label: '💳 Payment methods?',               msg: 'What payment methods do you accept?' },
-    { label: '🥡 Is takeout available?',          msg: 'Is takeout available? Tell me about the packaging fee.' },
-    { label: '🛒 How do I place an order?',       msg: 'How do I place an order?' },
+    { label: '🥡 Takeout & packaging fee?',       msg: 'Is takeout available? Tell me about the packaging fee.' },
+    { label: '🛒 How do I order?',                msg: 'How do I place an order?' },
     { label: '📦 Track my order',                 msg: 'I want to track my order' },
   ];
 
