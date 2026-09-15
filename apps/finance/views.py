@@ -251,6 +251,14 @@ def finance_index(request):
                 if not existing_record:
                     record.previous_coh_is_manual = not previous_coh_is_auto
 
+                # ── Clear auto-generated flag when a real user saves ──────────
+                # If the cashier edits and saves a previously auto-generated
+                # record, it is now a human-reviewed record — remove the flag
+                # and assign the current user as the preparer.
+                if existing_record and record.is_auto_generated:
+                    record.is_auto_generated = False
+                    record.prepared_by = request.user
+
                 try:
                     record.save()
                     log_action(
