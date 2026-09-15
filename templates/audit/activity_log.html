@@ -77,17 +77,13 @@
 
 <style>
 /* ── Activity Log filter form layout ─────────────────────────────────────────
-   Scoped to .audit-filter-form so nothing else in the project is affected.
-   Works identically on desktop (inputs sit naturally in their rows) and
-   mobile (the 2-column grid gives the exact side-by-side layout in the
-   screenshot without any horizontal overflow or misalignment).          */
+   Desktop (≥ 769 px): single flex row, matches every other filter-bar in
+   the project — inputs sit inline exactly as before.
+   Mobile  (≤ 768 px): structured grid — search full-width, then
+   Category/User side-by-side, then From/To side-by-side, button right.
+   Scoped to .audit-filter-form so nothing else in the project is touched. */
 
-.audit-filter-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
+/* ── Shared (both breakpoints) ── */
 .audit-filter-label {
   font-size: 0.75rem;
   color: #999;
@@ -95,32 +91,61 @@
   margin-bottom: 4px;
 }
 
-/* Full-width row (search bar) */
-.audit-filter-full {
-  width: 100%;
+/* ── Desktop: restore the original inline-flex row behaviour ── */
+@media (min-width: 769px) {
+  .audit-filter-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: flex-end;
+  }
+  .audit-filter-full {
+    flex: 1;
+    min-width: 180px;
+  }
+  .audit-filter-row {
+    display: contents; /* children participate directly in the flex row */
+  }
+  .audit-filter-col {
+    /* each col is just a natural flex item */
+  }
+  .audit-filter-col .form-control {
+    min-width: 130px;
+  }
+  .audit-filter-actions {
+    display: flex;
+    gap: 6px;
+    align-items: flex-end;
+  }
 }
 
-/* Two-column row — equal-width columns, gap between them */
-.audit-filter-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-/* Each column fills its grid cell; the form-control inside stretches to fill */
-.audit-filter-col {
-  min-width: 0; /* prevent overflow inside grid cells */
-}
-.audit-filter-col .form-control {
-  width: 100%;
-}
-
-/* Buttons row — align to the right */
-.audit-filter-actions {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 8px;
+/* ── Mobile: structured 2-column grid ── */
+@media (max-width: 768px) {
+  .audit-filter-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .audit-filter-full {
+    width: 100%;
+  }
+  .audit-filter-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .audit-filter-col {
+    min-width: 0;
+  }
+  .audit-filter-col .form-control {
+    width: 100%;
+  }
+  .audit-filter-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+  }
 }
 </style>
 
