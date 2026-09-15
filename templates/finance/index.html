@@ -21,15 +21,6 @@
   </div>
 </div>
 
-{# Messages #}
-{% if messages %}
-<div style="margin-bottom:16px">
-  {% for message in messages %}
-  <div class="alert alert-{{ message.tags }}">{{ message }}<button class="alert-dismiss">×</button></div>
-  {% endfor %}
-</div>
-{% endif %}
-
 {# ── SECTION 2: Finance Entry ── #}
 <form method="post" id="finance-form"
       data-previous-coh="{{ prev_coh_display }}"

@@ -372,7 +372,6 @@ def category_delete(request, pk):
         # Django nulls obj.pk on delete, so the id is passed explicitly.
         log_action(request.user, 'category.delete', category,
                    object_id=pk, object_repr=str(category))
-        messages.success(request, 'Category deleted!')
         return JsonResponse({'success': True})
     return JsonResponse({'success': False})
 

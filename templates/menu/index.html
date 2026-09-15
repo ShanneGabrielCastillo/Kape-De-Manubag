@@ -104,14 +104,6 @@
 </a>
 {% endif %}
 
-{% if messages %}
-<div class="messages-container">
-  {% for message in messages %}
-  <div class="alert alert-{{ message.tags }}">{{ message }}<button class="alert-dismiss">×</button></div>
-  {% endfor %}
-</div>
-{% endif %}
-
 {# ── Customer Chatbot — visible on menu page only ── #}
 <link rel="stylesheet" href="{% static 'css/chatbot.css' %}">
 

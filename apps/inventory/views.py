@@ -71,7 +71,6 @@ def restock_product(request, pk):
                     request.user, 'inventory.restock', product,
                     detail=f'{quantity:+d} units ({old_qty} -> {product.stock_quantity})',
                 )
-            messages.success(request, f'Restocked {product.name} with {quantity} units.')
             return JsonResponse({'success': True, 'new_qty': product.stock_quantity})
         return JsonResponse({'success': False, 'error': 'Invalid quantity'})
     return redirect('inventory:list')

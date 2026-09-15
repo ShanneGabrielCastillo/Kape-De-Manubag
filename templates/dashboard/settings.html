@@ -9,17 +9,6 @@
   </div>
 </div>
 
-{% if messages %}
-<div style="margin-bottom:20px">
-  {% for message in messages %}
-  <div class="alert alert-{{ message.tags }}">
-    {{ message }}
-    <button class="alert-dismiss">×</button>
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
-
 <form method="post">
   {% csrf_token %}
   <div class="card" style="max-width:680px">

@@ -85,14 +85,6 @@
   {% endif %}
 </div>
 
-{% if messages %}
-<div class="messages-container">
-  {% for message in messages %}
-  <div class="alert alert-{{ message.tags }}">{{ message }}<button class="alert-dismiss">×</button></div>
-  {% endfor %}
-</div>
-{% endif %}
-
 {% block extra_js %}
 <script>
 // ── Stale-session detection ────────────────────────────────────────────────
