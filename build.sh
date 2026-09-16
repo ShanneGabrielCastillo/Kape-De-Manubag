@@ -18,3 +18,10 @@ if [ -f data_export.json ]; then
   python manage.py loaddata data_export.json
   echo "==> Data loaded successfully."
 fi
+
+# Load data from data.json if present (one-time seed from PythonAnywhere).
+if [ -f data.json ]; then
+  echo "==> Loading data from data.json..."
+  python manage.py loaddata data.json
+  echo "==> data.json loaded successfully."
+fi
