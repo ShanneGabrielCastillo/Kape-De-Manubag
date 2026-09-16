@@ -129,7 +129,33 @@
   .pos-clear-btn { min-height: 40px; padding: 8px 14px !important; display: inline-flex; align-items: center; }
   /* Order-type radios: tappable pills */
   .pos-order-type label { min-height: 44px; display: inline-flex; align-items: center; gap: 6px; padding: 10px 14px; border-radius: 10px; background: rgba(255,255,255,.6); }
-}
+
+  /* ── Collapsed drawer: show only the header bar ── */
+  /* .pos-layout--collapsed is toggled on the parent wrapper by the JS drawer
+     toggle so both .pos-left padding and .pos-right height can be driven by
+     a single CSS class. Controls remain in the DOM but are made invisible,
+     zero-height, and non-interactive so no blank space or focus leakage. */
+  .pos-layout--collapsed .pos-right {
+    max-height: none;       /* let height be driven by content only */
+    overflow: hidden;       /* clip anything that escapes */
+  }
+  .pos-layout--collapsed .pos-checkout-controls,
+  .pos-layout--collapsed .pos-body,
+  .pos-layout--collapsed .pos-footer {
+    visibility: hidden;
+    height: 0;
+    overflow: hidden;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    /* Keep out of tab order while collapsed */
+    pointer-events: none;
+  }
+  /* Tighten the product grid clearance to match the collapsed header height
+     (~60px) instead of the 160px reserved for the fully expanded drawer. */
+  .pos-layout--collapsed .pos-left {
+    padding-bottom: 72px;
+  }
 </style>
 {% endblock %}
 
@@ -205,7 +231,7 @@
     </div>
 
     <!-- Customer Info -->
-    <div style="padding:10px 12px;background:var(--cream);border-bottom:2px solid #e8ddd0">
+    <div class="pos-checkout-controls" style="padding:10px 12px;background:var(--cream);border-bottom:2px solid #e8ddd0">
       <div style="margin-bottom:8px">
         <input type="text" id="pos-customer-name" placeholder="Customer name" class="form-control" style="font-size:0.82rem;padding:6px 10px">
       </div>
@@ -349,18 +375,37 @@ function handlePosAdd(id, name, price, el) {
   const header = document.getElementById('pos-drawer-header');
   const body   = document.querySelector('.pos-body');
   const icon   = document.getElementById('pos-drawer-toggle-icon');
+  const layout = document.querySelector('.pos-layout');
   if (!header || !body) return;
 
   let isExpanded = false;
+
+  // Single source-of-truth setter: keeps .pos-body.expanded and
+  // .pos-layout--collapsed (used by the mobile CSS to hide checkout controls
+  // and tighten the product-grid clearance) in sync at all times.
+  // .pos-layout--collapsed is only applied on mobile; on desktop the class is
+  // never set so the desktop layout is completely unaffected.
+  function setExpanded(expanded) {
+    isExpanded = expanded;
+    body.classList.toggle('expanded', isExpanded);
+    if (layout && window.innerWidth <= 767) {
+      layout.classList.toggle('pos-layout--collapsed', !isExpanded);
+    }
+    if (icon) icon.textContent = isExpanded ? '▼' : '▲';
+  }
+
+  // Apply the correct initial state on page load (mobile: start collapsed).
+  if (window.innerWidth <= 767) {
+    layout && layout.classList.add('pos-layout--collapsed');
+    // isExpanded stays false; icon already shows ▲ in the HTML
+  }
 
   // Toggle on header tap (mobile only)
   header.addEventListener('click', function(e) {
     // Don't trigger if Clear button was clicked
     if (e.target.tagName === 'BUTTON') return;
     if (window.innerWidth > 767) return;
-    isExpanded = !isExpanded;
-    body.classList.toggle('expanded', isExpanded);
-    if (icon) icon.textContent = isExpanded ? '▼' : '▲';
+    setExpanded(!isExpanded);
   });
 
   // Keep the drawer expand/collapse state in sync after every render.
@@ -369,15 +414,11 @@ function handlePosAdd(id, name, price, el) {
   POS._afterRender = function() {
     // Auto-expand on first item add (mobile only)
     if (POS.items.length > 0 && !isExpanded && window.innerWidth <= 767) {
-      isExpanded = true;
-      body.classList.add('expanded');
-      if (icon) icon.textContent = '▼';
+      setExpanded(true);
     }
     // Collapse when cart is cleared
     if (POS.items.length === 0 && isExpanded) {
-      isExpanded = false;
-      body.classList.remove('expanded');
-      if (icon) icon.textContent = '▲';
+      setExpanded(false);
     }
   };
 })();
