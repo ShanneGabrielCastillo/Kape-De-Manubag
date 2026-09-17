@@ -190,10 +190,13 @@ def finance_index(request):
     today = timezone.localdate()
 
     # Auto-fill any missed days (up to yesterday) before doing anything else.
-    # This runs on every GET and POST so gaps are closed the moment anyone
-    # opens the finance page — no manual command or scheduler needed.
-    # fill_missing_finance_records() is a no-op when there are no gaps.
-    fill_missing_finance_records()
+    # Only runs on GET and only triggers the full scan when yesterday has no
+    # record — the common case (no gaps) costs one indexed lookup instead of
+    # multiple queries scanning all existing dates in range.
+    if request.method == 'GET':
+        yesterday = today - datetime.timedelta(days=1)
+        if not DailyFinance.objects.filter(date=yesterday).exists():
+            fill_missing_finance_records()
 
     # Resolve selected date from GET param
     date_str = request.GET.get('date', '')

@@ -671,6 +671,9 @@ def api_payment_waiting_status(request, tracking_token):
 @login_required
 @cashier_or_admin_required
 def order_list(request):
+    status_filter = request.GET.get('status', '')
+    search = request.GET.get('q', '')
+
     orders = (
         Order.objects
         .select_related('cashier')
@@ -683,9 +686,8 @@ def order_list(request):
                'amount_paid', 'change_amount', 'stock_deducted',
                'request_token', 'queued_at', 'ready_at',
                'completed_at', 'cancelled_at')
+        .order_by('-created_at')
     )
-    status_filter = request.GET.get('status', '')
-    search = request.GET.get('q', '')
 
     if status_filter:
         orders = orders.filter(status=status_filter)
@@ -695,8 +697,6 @@ def order_list(request):
             Q(customer_name__icontains=search) |
             Q(table_number__icontains=search)
         )
-
-    orders = orders.order_by('-created_at')
 
     paginator = Paginator(orders, 20)
     page = request.GET.get('page', 1)
