@@ -513,8 +513,14 @@ if (paymentForm) {
       });
       const data = await response.json();
       if (data.success) {
-        showToast(`Payment accepted! Change: ₱${data.change.toFixed(2)}`, 'success');
         document.getElementById('payment-modal').style.display = 'none';
+        if (data.awaiting_acceptance) {
+          // Payment-first flow: payment confirmed, but order still needs
+          // staff acceptance before it enters the preparation queue.
+          showToast(`Payment confirmed! ₱${data.change.toFixed(2)} change. Order is awaiting your acceptance.`, 'success', 5000);
+        } else {
+          showToast(`Payment accepted! Change: ₱${data.change.toFixed(2)}`, 'success');
+        }
         setTimeout(() => location.reload(), 1500);
       } else {
         showToast(data.error || 'Payment failed', 'error');

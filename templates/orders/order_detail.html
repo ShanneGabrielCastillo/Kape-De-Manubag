@@ -112,33 +112,54 @@
     <div class="card" style="margin-bottom:16px">
       <div class="card-header"><h3>Update Status</h3></div>
       <div class="card-body">
-        <form class="status-update-form" data-order-id="{{ order.pk }}" data-url="{% url 'orders:update_status' order.pk %}">
-          {% csrf_token %}
-          <div class="form-group">
-            {% if order.status == 'completed' or order.status == 'cancelled' %}
-            <span class="badge {% if order.status == 'completed' %}badge-ready{% else %}badge-cancelled{% endif %}">{{ order.get_status_display }}</span>
-            {% else %}
-            <select name="status" class="form-control form-select">
-              <option value="{{ order.status }}" selected>{{ order.get_status_display }}</option>
-              {% for value, label in status_choices %}{% if value != order.status %}<option value="{{ value }}">{{ label }}</option>{% endif %}{% endfor %}
-            </select>
-            {# Inline hint shown by JS when Completed is selected but order is unpaid #}
-            <div class="complete-unpaid-hint" style="display:none;font-size:0.85rem;color:var(--red-accent);background:#fff5f5;border:1px solid #fcc;border-radius:6px;padding:8px 12px;margin-top:8px;line-height:1.5">
-              ⚠️ Cannot mark as Completed — this order is not paid yet. Please collect payment first.
-            </div>
-            {% if order.is_paid %}
-            <div style="font-size:0.82rem;color:var(--green-success);background:#f0fff4;border:1px solid #b7eac7;border-radius:6px;padding:6px 10px;margin-top:8px">
-              ✅ This order is already paid. You can mark it as Completed.
-            </div>
-            {% endif %}
-            {% endif %}
+        {% if order.status == 'awaiting_payment' %}
+          {# Payment-first flow: show explicit payment + accept buttons #}
+          <div style="background:#fff8e1;border:1px solid #ffc107;border-radius:8px;padding:12px 16px;margin-bottom:12px;font-size:0.85rem">
+            <strong>💳 Awaiting Payment</strong> — this order was placed by the customer and is waiting for payment confirmation.
           </div>
-          {% if order.next_status %}<button type="submit" class="btn btn-primary btn-block">Update Status</button>{% endif %}
-        </form>
+          {% if not order.is_paid %}
+            <p style="color:#aaa;font-size:0.85rem;margin-bottom:12px">Total: <strong style="color:var(--caramel)">₱{{ order.total|floatformat:2 }}</strong></p>
+            <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}')" class="btn btn-caramel btn-block" style="margin-bottom:8px">
+              💳 Confirm Payment
+            </button>
+            <button class="btn btn-outline btn-block" disabled title="Process payment before accepting">
+              ✓ Accept Order (pay first)
+            </button>
+          {% else %}
+            <div style="background:#d1e7dd;border:1px solid #a3cfbb;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:0.85rem;color:#0f5132">
+              ✅ Payment confirmed via {{ order.get_payment_method_display }}
+            </div>
+            <button onclick="acceptOrder({{ order.pk }}, '{% url 'orders:accept_order' order.pk %}')" class="btn btn-primary btn-block">
+              ✓ Accept Order
+            </button>
+          {% endif %}
+        {% elif order.status == 'completed' or order.status == 'cancelled' %}
+          <span class="badge {% if order.status == 'completed' %}badge-ready{% else %}badge-cancelled{% endif %}">{{ order.get_status_display }}</span>
+        {% else %}
+          <form class="status-update-form" data-order-id="{{ order.pk }}" data-url="{% url 'orders:update_status' order.pk %}">
+            {% csrf_token %}
+            <div class="form-group">
+              <select name="status" class="form-control form-select">
+                <option value="{{ order.status }}" selected>{{ order.get_status_display }}</option>
+                {% for value, label in status_choices %}{% if value != order.status %}<option value="{{ value }}">{{ label }}</option>{% endif %}{% endfor %}
+              </select>
+              {# Inline hint shown by JS when Completed is selected but order is unpaid #}
+              <div class="complete-unpaid-hint" style="display:none;font-size:0.85rem;color:var(--red-accent);background:#fff5f5;border:1px solid #fcc;border-radius:6px;padding:8px 12px;margin-top:8px;line-height:1.5">
+                ⚠️ Cannot mark as Completed — this order is not paid yet. Please collect payment first.
+              </div>
+              {% if order.is_paid %}
+              <div style="font-size:0.82rem;color:var(--green-success);background:#f0fff4;border:1px solid #b7eac7;border-radius:6px;padding:6px 10px;margin-top:8px">
+                ✅ This order is already paid. You can mark it as Completed.
+              </div>
+              {% endif %}
+            </div>
+            {% if order.next_status %}<button type="submit" class="btn btn-primary btn-block">Update Status</button>{% endif %}
+          </form>
+        {% endif %}
       </div>
     </div>
 
-    {% if not order.is_paid and order.status != 'cancelled' %}
+    {% if not order.is_paid and order.status != 'cancelled' and order.status != 'awaiting_payment' %}
     <div class="card">
       <div class="card-header"><h3>Payment</h3></div>
       <div class="card-body">
@@ -146,7 +167,7 @@
         <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}')" class="btn btn-caramel btn-block">💳 Process Payment</button>
       </div>
     </div>
-    {% else %}
+    {% elif order.is_paid %}
     <div class="card">
       <div class="card-body">
         <span class="badge badge-paid" style="font-size:0.9rem;padding:6px 14px">✓ Paid via {{ order.get_payment_method_display }}</span>
@@ -159,4 +180,35 @@
 
 <!-- Payment Modal -->
 {% include "partials/payment_modal.html" %}
+
+{% block extra_js %}
+<script>
+// ── Accept Order (payment-first flow) ─────────────────────────────────────
+// Called from the "Accept Order" button on order_detail for awaiting_payment
+// orders that have already been paid. The server enforces the payment gate
+// independently of this JS, so disabling the button in the UI is
+// defence-in-depth only.
+async function acceptOrder(orderId, url) {
+  if (!confirm('Confirm acceptance of this paid order? It will move to Pending and enter the preparation queue.')) return;
+  const btn = document.querySelector('[onclick*="acceptOrder"]');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Accepting…'; }
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCookie('csrftoken') },
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('Order accepted — now Pending!', 'success');
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      showToast(data.error || 'Could not accept order', 'error');
+      if (btn) { btn.disabled = false; btn.textContent = '✓ Accept Order'; }
+    }
+  } catch (err) {
+    showToast('Network error — please try again', 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Accept Order'; }
+  }
+}
+</script>
 {% endblock %}

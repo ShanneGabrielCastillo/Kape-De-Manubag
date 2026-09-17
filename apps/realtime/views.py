@@ -96,24 +96,58 @@ def customer_order_stream(request):
             while True:
                 try:
                     event = client_queue.get(timeout=15)
-                    # Forward only status_changed events for THIS order.
+                    # ── Events forwarded to the customer waiting/tracker page ──
+                    #
+                    # status_changed: standard order-status updates (pending →
+                    #   preparing → ready → completed).  Also fired when the order
+                    #   is accepted (awaiting_payment → pending), so the tracker
+                    #   already handles it — but we keep order_accepted as a
+                    #   dedicated signal for the payment_waiting page which needs
+                    #   to distinguish between "payment confirmed" and "order
+                    #   accepted" as separate UI transitions.
+                    #
+                    # payment_confirmed: fired by process_payment when the cashier
+                    #   marks an awaiting_payment order as paid.  Lets the waiting
+                    #   page transition from "Awaiting Payment" to "Payment
+                    #   Confirmed — waiting for staff acceptance".
+                    #
+                    # order_accepted: fired by accept_order when the cashier moves
+                    #   the paid order from awaiting_payment → pending.  Tells the
+                    #   waiting page to redirect to the order tracker / success page.
+                    #
                     # All other event types (new_order, inventory_changed,
                     # inventory_low) are irrelevant to the customer tracker
                     # and must never be sent to unauthenticated clients.
-                    if (
-                        event['event'] == 'status_changed'
-                        and event['data'].get('order_number') == order_number
-                    ):
-                        # Only expose the fields the tracker UI needs.
-                        # Payment amounts, cashier info, and internal flags
-                        # are deliberately excluded.
+
+                    evt  = event['event']
+                    data = event['data']
+
+                    if evt == 'status_changed' and data.get('order_number') == order_number:
                         payload = {
-                            'order_number':       event['data']['order_number'],
-                            'queue_number':       event['data']['queue_number'],
-                            'new_status':         event['data']['new_status'],
-                            'new_status_display': event['data']['new_status_display'],
+                            'order_number':       data['order_number'],
+                            'queue_number':       data['queue_number'],
+                            'new_status':         data['new_status'],
+                            'new_status_display': data['new_status_display'],
+                            'is_paid':            data.get('is_paid', False),
                         }
                         yield format_sse('status_changed', payload)
+
+                    elif evt == 'payment_confirmed' and data.get('order_number') == order_number:
+                        payload = {
+                            'order_number': data['order_number'],
+                            'is_paid':      data.get('is_paid', True),
+                            'status':       data.get('status', ''),
+                        }
+                        yield format_sse('payment_confirmed', payload)
+
+                    elif evt == 'order_accepted' and data.get('order_number') == order_number:
+                        payload = {
+                            'order_number':       data['order_number'],
+                            'new_status':         data.get('new_status', 'pending'),
+                            'new_status_display': data.get('new_status_display', 'Pending'),
+                        }
+                        yield format_sse('order_accepted', payload)
+
                 except queue.Empty:
                     pass
                 # Keep the TCP connection alive.

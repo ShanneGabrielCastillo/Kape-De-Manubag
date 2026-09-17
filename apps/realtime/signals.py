@@ -14,29 +14,20 @@ from apps.realtime.broker import publish
 def order_saved(sender, instance, created, **kwargs):
     order = instance
     if created:
-        publish('new_order', {
-            'order_id':     order.pk,
-            'order_number': order.order_number,
-            'queue_number': order.queue_number,
-            'customer_name': order.customer_name,
-            'order_type':   order.get_order_type_display(),
-            'total':        float(order.total),
-            'status':       order.status,
-            'created_at':   order.created_at.isoformat(),
-            # The idempotency key the ordering terminal submitted. The
-            # originating POS knows its token BEFORE the response arrives, so
-            # it can ignore the echo of its own order before the broadcast is
-            # even delivered (an order_id-only suppression can race).
-            'request_token': order.request_token,
-        })
+        # new_order is NOT published here because total=0 at creation time.
+        # Items and totals are added after Order.objects.create() inside the
+        # same transaction, so this signal fires too early.  Each view that
+        # creates an order (checkout_view, create_pos_order) publishes
+        # new_order explicitly once the transaction commits and totals are set.
+        pass
     else:
         publish('status_changed', {
-            'order_id':          order.pk,
-            'order_number':      order.order_number,
-            'queue_number':      order.queue_number,
-            'new_status':        order.status,
+            'order_id':           order.pk,
+            'order_number':       order.order_number,
+            'queue_number':       order.queue_number,
+            'new_status':         order.status,
             'new_status_display': order.get_status_display(),
-            'is_paid':           order.is_paid,
+            'is_paid':            order.is_paid,
         })
 
 

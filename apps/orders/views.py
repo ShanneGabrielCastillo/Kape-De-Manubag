@@ -304,6 +304,10 @@ def checkout_view(request):
         duplicate = Order.objects.filter(request_token=posted_token).first()
         if duplicate:
             request.session['last_order_id'] = duplicate.pk
+            # Route to payment-waiting for customer orders still awaiting
+            # payment; otherwise fall through to the normal success page.
+            if duplicate.status == 'awaiting_payment':
+                return redirect('orders:payment_waiting', tracking_token=duplicate.tracking_token)
             return redirect('orders:order_success', pk=duplicate.pk)
 
     items = cart.cart_items.select_related('product__category').all()
@@ -408,6 +412,11 @@ def checkout_view(request):
                         order_type=form.cleaned_data['order_type'],
                         notes=form.cleaned_data.get('notes', ''),
                         request_token=request_token,
+                        # Payment-first flow: customer orders start in
+                        # awaiting_payment. They only move to pending
+                        # (Order Received) after staff confirms payment
+                        # AND accepts the order.
+                        status='awaiting_payment',
                     )
 
                     # Add items — all prices and quantities are validated
@@ -486,6 +495,27 @@ def checkout_view(request):
 
                     # Clear cart
                     cart.cart_items.all().delete()
+
+                    # Broadcast new_order AFTER totals are set and the
+                    # transaction is fully committed, so the cashier dashboard
+                    # always sees the correct total (not 0.00).
+                    # on_commit() defers the call until the outer
+                    # transaction.atomic() block commits successfully — if
+                    # anything rolls back, the broadcast is never sent.
+                    def _broadcast_new_order():
+                        from apps.realtime.broker import publish as rt_publish
+                        rt_publish('new_order', {
+                            'order_id':      order.pk,
+                            'order_number':  order.order_number,
+                            'queue_number':  order.queue_number,
+                            'customer_name': order.customer_name,
+                            'order_type':    order.get_order_type_display(),
+                            'total':         float(order.total),
+                            'status':        order.status,
+                            'created_at':    order.created_at.isoformat(),
+                            'request_token': order.request_token,
+                        })
+                    transaction.on_commit(_broadcast_new_order)
             except ValueError as e:
                 # The atomic block above was rolled back: no order, no items,
                 # no stock change and no inventory log were persisted.
@@ -502,6 +532,8 @@ def checkout_view(request):
                 )
                 if duplicate:
                     request.session['last_order_id'] = duplicate.pk
+                    if duplicate.status == 'awaiting_payment':
+                        return redirect('orders:payment_waiting', tracking_token=duplicate.tracking_token)
                     return redirect('orders:order_success', pk=duplicate.pk)
                 messages.error(
                     request, 'Order could not be created. Please try again.',
@@ -533,7 +565,11 @@ def checkout_view(request):
             # reach this line, so they never consume quota.
             _record_order_created(request)
             request.session.pop('checkout_request_token', None)
-            return redirect('orders:order_success', pk=order.pk)
+            # Payment-first flow: send the customer to the payment-waiting
+            # page rather than the "Order Received" success page.  The
+            # success page is only shown after staff confirms payment AND
+            # accepts the order.
+            return redirect('orders:payment_waiting', tracking_token=order.tracking_token)
     else:
         form = CheckoutForm()
 
@@ -569,6 +605,64 @@ def order_success(request, pk):
     return render(request, 'orders/order_success.html', {
         'order': order,
         'items': items,
+    })
+
+
+def payment_waiting(request, tracking_token):
+    """Customer-facing payment-waiting page.
+
+    Shown immediately after checkout, before staff confirms payment and
+    accepts the order.  Access is gated by the cryptographically random
+    tracking_token (same mechanism as order_tracker), so one customer
+    cannot view another's waiting page.
+
+    States handled client-side (driven by SSE + polling):
+      awaiting_payment  → "Payment Required — please go to the cashier"
+      pending/preparing/ready/completed → order accepted; redirect to tracker
+    """
+    order = get_object_or_404(
+        Order.objects.only(
+            'order_number', 'queue_number', 'customer_name',
+            'order_type', 'table_number', 'total', 'subtotal',
+            'packaging_fee', 'status', 'is_paid', 'tracking_token',
+            'created_at',
+        ),
+        tracking_token=tracking_token,
+    )
+    items = order.items.only(
+        'product_name', 'size', 'quantity', 'unit_price', 'subtotal',
+    )
+    return render(request, 'orders/payment_waiting.html', {
+        'order': order,
+        'items': items,
+    })
+
+
+def api_payment_waiting_status(request, tracking_token):
+    """AJAX/polling endpoint for the payment-waiting page.
+
+    Returns the order's current status and payment state so the waiting
+    page can update without a full page reload.  Only the fields needed
+    by the waiting page are returned — no payment amounts or cashier info.
+    """
+    try:
+        order = Order.objects.only(
+            'order_number', 'queue_number', 'customer_name',
+            'order_type', 'status', 'is_paid', 'tracking_token',
+        ).get(tracking_token=tracking_token)
+    except Order.DoesNotExist:
+        return JsonResponse({'error': 'Order not found'}, status=404)
+
+    return JsonResponse({
+        'order_number':      order.order_number,
+        'queue_number':      order.queue_number,
+        'status':            order.status,
+        'status_display':    order.get_status_display(),
+        'is_paid':           order.is_paid,
+        # True once the customer should be shown the Order Received page.
+        'order_accepted':    order.status not in ('awaiting_payment', 'cancelled'),
+        'is_cancelled':      order.status == 'cancelled',
+        'tracker_url':       f'/orders/track/{order.tracking_token}/',
     })
 
 
@@ -608,7 +702,7 @@ def order_list(request):
     page = request.GET.get('page', 1)
     orders_page = paginator.get_page(page)
 
-    pending_count = Order.objects.filter(status='pending').count()
+    pending_count = Order.objects.filter(status__in=['awaiting_payment', 'pending']).count()
 
     # Serialize VALID_TRANSITIONS and STATUS_LABELS as JSON for the template's
     # real-time JS handlers.  Injecting from Python keeps the JS literals in
@@ -779,10 +873,28 @@ def process_payment(request, pk):
         order.amount_paid = amount_paid
         # Decimal subtraction — exact peso/centavo arithmetic, no float rounding.
         order.change_amount = amount_paid - order.total
-        order.status = 'completed'
-        order.completed_at = timezone.now()
-        order.cashier = request.user
-        order.save()
+
+        # ── Payment-first flow vs legacy POS flow ────────────────────────
+        # Customer orders (placed anonymously via checkout) start with
+        # status='awaiting_payment'.  Confirming payment marks them paid but
+        # does NOT complete them — staff must still explicitly accept the
+        # order (accept_order view) to move it to 'pending' so preparation
+        # can begin.  This is the payment-first two-step.
+        #
+        # POS orders (placed by staff via cashier_pos) start with
+        # status='pending'.  Confirming payment on a POS order completes it
+        # immediately — the legacy single-step POS workflow is unchanged.
+        if order.status == 'awaiting_payment':
+            # Payment confirmed; order waits for staff acceptance.
+            # Do not change status here — accept_order does that.
+            order.save()
+        else:
+            # Legacy POS / any order already past awaiting_payment:
+            # completing on payment is the old behaviour.
+            order.status = 'completed'
+            order.completed_at = timezone.now()
+            order.cashier = request.user
+            order.save()
 
         # ── Audit log ────────────────────────────────────────────────────────
         # Placed inside the transaction so the audit entry is automatically
@@ -796,10 +908,93 @@ def process_payment(request, pk):
             ),
         )
 
+        # Broadcast a dedicated payment_confirmed event so the customer's
+        # waiting page can transition from "Awaiting Payment" to
+        # "Payment Confirmed" in real time without polling.
+        from apps.realtime.broker import publish as rt_publish
+        rt_publish('payment_confirmed', {
+            'order_id':     order.pk,
+            'order_number': order.order_number,
+            'is_paid':      True,
+            'status':       order.status,
+        })
+
     return JsonResponse({
         'success': True,
         'change': float(order.change_amount),
         'order_number': order.order_number,
+        # Tell the client whether the order is now awaiting acceptance or
+        # already completed (POS legacy path), so the UI can update correctly.
+        'awaiting_acceptance': order.status == 'awaiting_payment',
+    })
+
+
+@login_required
+@cashier_or_admin_required
+def accept_order(request, pk):
+    """Accept a paid customer order, moving it from awaiting_payment → pending.
+
+    This is the staff-side "Confirm Order" action in the payment-first flow.
+    It enforces server-side:
+      - The order must be in awaiting_payment status.
+      - The order must already be marked is_paid=True.
+      - Only authenticated cashier/admin staff can call this endpoint.
+    Attempting to accept an unpaid order returns a 400 JSON error regardless
+    of UI state — the client-side button being disabled is defence-in-depth only.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+    with transaction.atomic():
+        order = get_object_or_404(Order.objects.select_for_update(), pk=pk)
+
+        # ── Guard: must be in awaiting_payment ───────────────────────────
+        if order.status != 'awaiting_payment':
+            return JsonResponse({
+                'success': False,
+                'error': (
+                    f'Cannot accept order: current status is '
+                    f'"{order.get_status_display()}", not Awaiting Payment.'
+                ),
+            }, status=400)
+
+        # ── Server-side payment gate — NOT just a UI guard ────────────────
+        # Even if the button is hidden for unpaid orders in the UI, a direct
+        # API call must be rejected here so the invariant cannot be bypassed.
+        if not order.is_paid:
+            return JsonResponse({
+                'success': False,
+                'error': (
+                    'Cannot accept order: payment has not been confirmed yet. '
+                    'Please process the payment first.'
+                ),
+            }, status=400)
+
+        # All checks pass — transition to pending (kitchen queue).
+        order.status = 'pending'
+        order.cashier = request.user
+        order.save()
+
+        log_action(
+            request.user, 'order.accepted', order,
+            detail='Order accepted after payment confirmation — moved to Pending.',
+        )
+
+        # Broadcast a dedicated order_accepted event.  The customer's waiting
+        # page listens for this to transition to the "Order Received" state.
+        from apps.realtime.broker import publish as rt_publish
+        rt_publish('order_accepted', {
+            'order_id':          order.pk,
+            'order_number':      order.order_number,
+            'new_status':        order.status,
+            'new_status_display': order.get_status_display(),
+        })
+
+    return JsonResponse({
+        'success':           True,
+        'order_number':      order.order_number,
+        'new_status':        order.status,
+        'new_status_display': order.get_status_display(),
     })
 
 
@@ -935,6 +1130,23 @@ def create_pos_order(request):
                 performed_by=request.user,
                 extra_order_update_fields=['subtotal', 'packaging_fee', 'total'],
             )
+
+            # Broadcast new_order after totals are committed so the
+            # cashier list always shows the correct amount.
+            def _broadcast_pos_order():
+                from apps.realtime.broker import publish as rt_publish
+                rt_publish('new_order', {
+                    'order_id':      order.pk,
+                    'order_number':  order.order_number,
+                    'queue_number':  order.queue_number,
+                    'customer_name': order.customer_name,
+                    'order_type':    order.get_order_type_display(),
+                    'total':         float(order.total),
+                    'status':        order.status,
+                    'created_at':    order.created_at.isoformat(),
+                    'request_token': order.request_token,
+                })
+            transaction.on_commit(_broadcast_pos_order)
     except ValueError as e:
         # The atomic block rolled back: no order, no items and no stock
         # change were persisted. Same friendly error as before.
@@ -1103,7 +1315,7 @@ def api_track_order(request, tracking_token):
     try:
         order = Order.objects.only(
             'order_number', 'queue_number', 'customer_name',
-            'order_type', 'status', 'table_number',
+            'order_type', 'status', 'table_number', 'is_paid',
             # created_at is required by get_queue_position() — must be in
             # only() to avoid a deferred-field lazy-load on every poll.
             'created_at', 'queued_at', 'ready_at',
@@ -1129,6 +1341,7 @@ def api_track_order(request, tracking_token):
         'status':             order.status,
         'status_display':     order.get_status_display(),
         'status_emoji':       order.status_emoji,
+        'is_paid':            order.is_paid,
         'queue_position':     queue_position,
         'estimated_minutes':  estimated_minutes,
         'table_number':       order.table_number or '',

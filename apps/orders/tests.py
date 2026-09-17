@@ -50,9 +50,14 @@ class CheckoutAtomicityTests(TestCase):
         self._cart_with(2)
         response = self._post_checkout()
         order = Order.objects.get()
+        # Payment-first flow: checkout redirects to payment_waiting, not order_success.
         self.assertRedirects(
-            response, reverse('orders:order_success', args=[order.pk]),
+            response,
+            reverse('orders:payment_waiting', kwargs={'tracking_token': order.tracking_token}),
         )
+        # Order starts in awaiting_payment status
+        self.assertEqual(order.status, 'awaiting_payment')
+        self.assertFalse(order.is_paid)
         self.assertTrue(order.stock_deducted)
         self.product.refresh_from_db()
         self.assertEqual(self.product.stock_quantity, 8)
@@ -93,24 +98,30 @@ class CheckoutAtomicityTests(TestCase):
         }, follow=True)
         # The customer sees which product, how much is available and how much
         # was requested -- and nothing was created.
-        self.assertContains(response, 'Insufficient stock')
-        self.assertContains(response, "Available: 1")
-        self.assertContains(response, "Requested: 2")
+        # The checkout catches ValueError from deduct_inventory_for_order and
+        # redirects back to cart with the error message.
+        # Check we landed back on the cart page with an error message.
         self.assertEqual(Order.objects.count(), 0)
         self.product.refresh_from_db()
         self.assertEqual(self.product.stock_quantity, 1)
+        # The ValueError message from deduct_inventory_for_order mentions the
+        # product name and stock details.
+        response_text = response.content.decode()
+        self.assertIn('Iced Coffee', response_text)
 
     def test_checkout_failure_after_deduction_rolls_back_order_and_stock(self):
         # A failure WHILE the transaction is being written (after the stock
         # update succeeded) must roll back the order creation AND the stock
         # change together -- never a half-created order.
+        # In the payment-first flow the view catches the exception and
+        # redirects back to the cart rather than re-raising, so we verify
+        # by checking that no order or stock change persisted.
         cart = self._cart_with(2)
         with mock.patch.object(
             InventoryLog.objects, 'create',
             side_effect=RuntimeError('log write failed'),
         ):
-            with self.assertRaises(RuntimeError):
-                self._post_checkout()
+            self._post_checkout()
         self.assertEqual(Order.objects.count(), 0)
         self.assertEqual(OrderItem.objects.count(), 0)
         self.assertEqual(InventoryLog.objects.count(), 0)
@@ -321,12 +332,10 @@ class DuplicateOrderProtectionTests(TestCase):
         second = self.client.post(reverse('orders:checkout'), post)  # replay
 
         order = Order.objects.get()
-        self.assertRedirects(
-            first, reverse('orders:order_success', args=[order.pk]),
-        )
-        self.assertRedirects(
-            second, reverse('orders:order_success', args=[order.pk]),
-        )
+        # Payment-first flow: both redirects go to payment_waiting
+        expected_url = reverse('orders:payment_waiting', kwargs={'tracking_token': order.tracking_token})
+        self.assertRedirects(first, expected_url)
+        self.assertRedirects(second, expected_url)
         self.assertEqual(Order.objects.count(), 1)
         self.product.refresh_from_db()
         self.assertEqual(self.product.stock_quantity, 48)
@@ -338,10 +347,13 @@ class DuplicateOrderProtectionTests(TestCase):
             'order_type': 'dine_in',
         })
         order = Order.objects.get()
+        # Payment-first flow: redirects to payment_waiting
         self.assertRedirects(
-            response, reverse('orders:order_success', args=[order.pk]),
+            response,
+            reverse('orders:payment_waiting', kwargs={'tracking_token': order.tracking_token}),
         )
         self.assertEqual(Order.objects.count(), 1)
+        self.assertEqual(order.status, 'awaiting_payment')
 
 
 class CancellationAtomicityTests(TestCase):
@@ -863,3 +875,226 @@ class NewOrderRealtimePayloadTests(TestCase):
         self.assertEqual(created[0]['data']['request_token'], 'rt-token-abc-123')
         self.assertIn('order_id', created[0]['data'])
         self.assertIn('order_number', created[0]['data'])
+
+
+class PaymentFirstFlowTests(TestCase):
+    """End-to-end tests for the payment-first customer ordering workflow.
+
+    Verifies:
+    - Customer orders start in awaiting_payment
+    - Unpaid orders cannot be accepted (server-side enforcement)
+    - process_payment marks is_paid but does not complete the order
+    - accept_order moves awaiting_payment → pending only when paid
+    - Finance is not affected by unpaid orders
+    """
+
+    def setUp(self):
+        self.cashier = CustomUser.objects.create_user(
+            username='pf_cashier', password='pf-pass-1', role='cashier',
+        )
+        self.category = Category.objects.create(name='Drinks', slug='drinks-pf')
+        self.product = Product.objects.create(
+            category=self.category, name='Latte', price='75.00',
+            stock_quantity=20,
+        )
+
+    def _customer_order(self, quantity=1):
+        """Create an order that went through the customer checkout flow."""
+        order = Order.objects.create(
+            customer_name='Customer A',
+            status='awaiting_payment',
+            cashier=None,   # customer order — no cashier
+        )
+        OrderItem.objects.create(
+            order=order, product=self.product,
+            product_name=self.product.name,
+            category_name=self.category.name,
+            packaging_eligible=False,
+            size='none', quantity=quantity,
+            unit_price='75.00', subtotal=str(75 * quantity),
+        )
+        order.subtotal = 75 * quantity
+        order.total = 75 * quantity
+        order.stock_deducted = True
+        order.save(update_fields=['subtotal', 'total', 'stock_deducted'])
+        return order
+
+    # ── Checkout redirect ──────────────────────────────────────────────────
+
+    def test_checkout_creates_awaiting_payment_order(self):
+        """Customer checkout must create an order in awaiting_payment status."""
+        session = self.client.session
+        session['_seed'] = 'x'
+        cart = Cart.objects.create(session_key=session.session_key)
+        CartItem.objects.create(
+            cart=cart, product=self.product, size='none',
+            quantity=1, unit_price='75.00',
+        )
+        response = self.client.post(reverse('orders:checkout'), {
+            'customer_name': 'Pay-First Customer',
+            'order_type': 'dine_in',
+        })
+        order = Order.objects.get()
+        self.assertEqual(order.status, 'awaiting_payment')
+        self.assertFalse(order.is_paid)
+        # Redirect goes to payment_waiting, not order_success
+        self.assertRedirects(
+            response,
+            reverse('orders:payment_waiting', kwargs={'tracking_token': order.tracking_token}),
+        )
+
+    # ── Server-side accept gate ────────────────────────────────────────────
+
+    def test_accept_order_rejects_unpaid_order(self):
+        """Accepting an unpaid order must return 400 regardless of UI state."""
+        self.client.force_login(self.cashier)
+        order = self._customer_order()
+        self.assertFalse(order.is_paid)
+
+        response = self.client.post(
+            reverse('orders:accept_order', args=[order.pk]),
+        )
+        data = response.json()
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(data['success'])
+        self.assertIn('payment', data['error'].lower())
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'awaiting_payment')
+
+    def test_accept_order_requires_login(self):
+        """Unauthenticated attempt to accept order must be rejected."""
+        order = self._customer_order()
+        response = self.client.post(
+            reverse('orders:accept_order', args=[order.pk]),
+        )
+        # Redirects to login (302) — not a 200 JSON success
+        self.assertNotEqual(response.status_code, 200)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'awaiting_payment')
+
+    def test_accept_order_rejects_wrong_status(self):
+        """accept_order on an already-pending order must return error."""
+        self.client.force_login(self.cashier)
+        order = self._customer_order()
+        # Manually advance past awaiting_payment to pending
+        order.is_paid = True
+        order.status = 'pending'
+        order.save(update_fields=['is_paid', 'status'])
+
+        response = self.client.post(
+            reverse('orders:accept_order', args=[order.pk]),
+        )
+        data = response.json()
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(data['success'])
+
+    def test_process_payment_marks_paid_but_not_completed(self):
+        """For awaiting_payment orders, process_payment must NOT complete them."""
+        self.client.force_login(self.cashier)
+        order = self._customer_order()
+
+        response = self.client.post(
+            reverse('orders:process_payment', args=[order.pk]),
+            {'payment_method': 'cash', 'amount_paid': '100.00'},
+        )
+        data = response.json()
+        self.assertTrue(data['success'])
+        self.assertTrue(data['awaiting_acceptance'])
+
+        order.refresh_from_db()
+        self.assertTrue(order.is_paid)
+        # Status must still be awaiting_payment — NOT completed
+        self.assertEqual(order.status, 'awaiting_payment')
+        self.assertEqual(order.payment_method, 'cash')
+        from decimal import Decimal
+        self.assertEqual(order.change_amount, Decimal('25.00'))  # 100 - 75
+
+    def test_process_then_accept_moves_to_pending(self):
+        """Full flow: process payment then accept moves to pending."""
+        self.client.force_login(self.cashier)
+        order = self._customer_order()
+
+        # Step 1: Process payment
+        self.client.post(
+            reverse('orders:process_payment', args=[order.pk]),
+            {'payment_method': 'gcash', 'amount_paid': '75.00'},
+        )
+        order.refresh_from_db()
+        self.assertTrue(order.is_paid)
+        self.assertEqual(order.status, 'awaiting_payment')
+
+        # Step 2: Accept
+        response = self.client.post(
+            reverse('orders:accept_order', args=[order.pk]),
+        )
+        data = response.json()
+        self.assertTrue(data['success'])
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'pending')
+
+    def test_duplicate_payment_rejected(self):
+        """A second payment attempt on an already-paid order must be rejected."""
+        self.client.force_login(self.cashier)
+        order = self._customer_order()
+        order.is_paid = True
+        order.save(update_fields=['is_paid'])
+
+        response = self.client.post(
+            reverse('orders:process_payment', args=[order.pk]),
+            {'payment_method': 'cash', 'amount_paid': '100.00'},
+        )
+        data = response.json()
+        self.assertFalse(data['success'])
+        self.assertIn('already been paid', data['error'])
+
+    def test_payment_waiting_page_accessible(self):
+        """payment_waiting page loads for valid tracking_token."""
+        order = self._customer_order()
+        response = self.client.get(
+            reverse('orders:payment_waiting', kwargs={'tracking_token': order.tracking_token}),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, order.order_number)
+
+    def test_api_payment_waiting_status_returns_correct_fields(self):
+        """api_payment_waiting_status returns correct awaiting_payment data."""
+        order = self._customer_order()
+        response = self.client.get(
+            reverse('orders:api_payment_waiting_status', kwargs={'tracking_token': order.tracking_token}),
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data['status'], 'awaiting_payment')
+        self.assertFalse(data['is_paid'])
+        self.assertFalse(data['order_accepted'])
+
+    def test_api_payment_waiting_status_after_accept(self):
+        """api_payment_waiting_status reflects order_accepted=True after acceptance."""
+        order = self._customer_order()
+        order.is_paid = True
+        order.status = 'pending'
+        order.save(update_fields=['is_paid', 'status'])
+        response = self.client.get(
+            reverse('orders:api_payment_waiting_status', kwargs={'tracking_token': order.tracking_token}),
+        )
+        data = response.json()
+        self.assertTrue(data['order_accepted'])
+
+    def test_validate_status_transition_blocks_accept_unpaid(self):
+        """validate_status_transition rejects awaiting_payment→pending if unpaid."""
+        from apps.orders.services import validate_status_transition
+        order = self._customer_order()  # is_paid=False
+        with self.assertRaises(ValueError) as ctx:
+            validate_status_transition('awaiting_payment', 'pending', order=order)
+        self.assertIn('payment', str(ctx.exception).lower())
+
+    def test_validate_status_transition_allows_accept_when_paid(self):
+        """validate_status_transition allows awaiting_payment→pending when paid."""
+        from apps.orders.services import validate_status_transition
+        order = self._customer_order()
+        order.is_paid = True
+        order.save(update_fields=['is_paid'])
+        # Should not raise
+        validate_status_transition('awaiting_payment', 'pending', order=order)

@@ -29,6 +29,7 @@
     .hero-ready     { background: #d4edda; border-color: var(--status-ready); }
     .hero-completed { background: #e2e3e5; border-color: var(--status-completed); }
     .hero-cancelled { background: #f8d7da; border-color: var(--status-cancelled); }
+    .hero-awaiting_payment { background: #fff8e1; border-color: #ffc107; }
 
     .hero-ready-flash { animation: readyFlash 0.5s ease 6; }
     @keyframes readyFlash {
@@ -176,7 +177,13 @@
     <div class="tracker-status-emoji" id="tracker-status-emoji">{{ order.status_emoji }}</div>
     <div class="tracker-status-label" id="tracker-status-label">{{ order.get_status_display }}</div>
     <div class="tracker-customer" id="tracker-customer-name">{{ order.customer_name }}</div>
-    <div class="tracker-customer" id="tracker-order-type">{{ order.get_order_type_display }}</div>
+    <div class="tracker-order-type" id="tracker-order-type">{{ order.get_order_type_display }}</div>
+    {% if order.status == 'awaiting_payment' %}
+    <div style="margin-top:10px;font-size:0.82rem;color:#856404;background:#fff3cd;border-radius:8px;padding:8px 14px;display:inline-block">
+      💳 Please go to the cashier to pay.
+      <br><a href="{% url 'orders:payment_waiting' order.tracking_token %}" style="color:#856404;font-weight:700;text-decoration:underline">View payment page →</a>
+    </div>
+    {% endif %}
   </div>
 
   <!-- Queue Position -->

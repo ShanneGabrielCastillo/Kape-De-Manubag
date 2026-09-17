@@ -225,6 +225,9 @@
       return;
     }
 
+    // awaiting_payment on the tracker page means the customer may have
+    // navigated directly here rather than to payment_waiting. Still poll
+    // so the page updates when the order is accepted.
     // Run one immediate poll to get fresh data (queue position, wait time).
     poll();
 

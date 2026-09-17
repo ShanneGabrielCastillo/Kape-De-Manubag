@@ -13,11 +13,16 @@ urlpatterns = [
     path('checkout/', views.checkout_view, name='checkout'),
     path('success/<int:pk>/', views.order_success, name='order_success'),
 
+    # Payment-first flow: customer waiting page (reached immediately after checkout)
+    path('waiting/<str:tracking_token>/', views.payment_waiting, name='payment_waiting'),
+    path('api/waiting/<str:tracking_token>/', views.api_payment_waiting_status, name='api_payment_waiting_status'),
+
     # Staff/Cashier
     path('manage/', views.order_list, name='order_list'),
     path('manage/<int:pk>/', views.order_detail, name='order_detail'),
     path('manage/<int:pk>/status/', views.update_order_status, name='update_status'),
     path('manage/<int:pk>/payment/', views.process_payment, name='process_payment'),
+    path('manage/<int:pk>/accept/', views.accept_order, name='accept_order'),
     path('manage/<int:pk>/receipt/', views.print_receipt, name='print_receipt'),
     path('pos/', views.cashier_pos, name='pos'),
     path('pos/create/', views.create_pos_order, name='create_pos_order'),
