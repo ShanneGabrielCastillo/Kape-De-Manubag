@@ -106,8 +106,13 @@ def reports_index(request):
     # Top products — ranked by revenue (existing intended behaviour).
     # Secondary sort on product_name makes ties alphabetically deterministic
     # so the same dataset always produces the same report order.
+    # Direct join filters on OrderItem via order__ fields so the DB can use
+    # the composite index on Order instead of an IN subquery.
     top_products = OrderItem.objects.filter(
-        order__in=orders
+        order__is_paid=True,
+        order__status='completed',
+        order__created_at__date__gte=start_date,
+        order__created_at__date__lte=end_date,
     ).values('product_name').annotate(
         total_qty=Sum('quantity'),
         total_revenue=Sum('subtotal')
@@ -125,10 +130,17 @@ def reports_index(request):
     #
     # Items with a blank category_name are excluded so they don't produce
     # an unnamed row in the report.
+    # Direct join (order__ fields) replaces the order__in subquery so the DB
+    # can use the composite index on Order directly.
     category_sales = []
     for row in (
         OrderItem.objects
-        .filter(order__in=orders)
+        .filter(
+            order__is_paid=True,
+            order__status='completed',
+            order__created_at__date__gte=start_date,
+            order__created_at__date__lte=end_date,
+        )
         .exclude(category_name='')
         .values('category_name')
         .annotate(total=Sum('subtotal'), qty=Sum('quantity'))

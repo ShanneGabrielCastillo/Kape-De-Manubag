@@ -35,7 +35,7 @@ class InventoryLog(models.Model):
         max_length=200, blank=True, default='',
         help_text="Snapshot of the product's name at the time of this log entry.",
     )
-    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES, db_index=True)
     # Where the movement originated. Every production write site passes an
     # explicit source; the default only backfills legacy rows.
     source = models.CharField(
@@ -55,7 +55,7 @@ class InventoryLog(models.Model):
     performed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True
     )
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     @classmethod
     def record(cls, *, product, action, source, reason, quantity_change,
@@ -92,3 +92,15 @@ class InventoryLog(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            # Covers inventory log list filtered by action type + ORDER BY -created_at.
+            models.Index(
+                fields=['action', '-created_at'],
+                name='idx_invlog_action_created',
+            ),
+            # Covers per-product log history (product detail / inventory views).
+            models.Index(
+                fields=['product', '-created_at'],
+                name='idx_invlog_product_created',
+            ),
+        ]

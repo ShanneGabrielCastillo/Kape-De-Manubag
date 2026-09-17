@@ -1,3 +1,4 @@
+from django.db.models import Count
 from .models import Cart
 
 
@@ -9,6 +10,10 @@ def cart_count(request):
     database lookup is skipped for admin/cashier users. This removes one query
     from every staff page load (e.g. the dashboard) without changing what any
     staff page displays.
+
+    For customer sessions a single annotated query fetches both the cart row
+    and the item count in one DB round-trip, replacing the previous two-query
+    pattern (Cart.objects.get + cart.item_count property).
     """
     user = getattr(request, 'user', None)
     if user is not None and user.is_authenticated \
@@ -19,9 +24,13 @@ def cart_count(request):
     if hasattr(request, 'session'):
         session_key = request.session.session_key
         if session_key:
-            try:
-                cart = Cart.objects.get(session_key=session_key)
-                count = cart.item_count
-            except Cart.DoesNotExist:
-                pass
+            result = (
+                Cart.objects
+                .filter(session_key=session_key)
+                .annotate(_item_count=Count('cart_items'))
+                .values_list('_item_count', flat=True)
+                .first()
+            )
+            if result is not None:
+                count = result
     return {'cart_count': count}

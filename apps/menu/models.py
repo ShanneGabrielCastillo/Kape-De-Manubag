@@ -405,6 +405,14 @@ class Product(models.Model):
 
     class Meta:
         ordering = ['category', 'name']
+        indexes = [
+            # Covers Product.objects.sellable() — filter(is_active=True, is_available=True)
+            # which runs on nearly every page (menu, POS, dashboard low-stock, inventory).
+            models.Index(
+                fields=['is_active', 'is_available'],
+                name='idx_product_sellable',
+            ),
+        ]
         constraints = [
             # Hard database-level guarantee: stock can never be negative,
             # even if a future code path forgets to check before writing.
