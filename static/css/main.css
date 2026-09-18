@@ -1263,8 +1263,7 @@ tbody tr:last-child { border-bottom: none; }
 
 /* ── Queue / Tracker Status Variables ── */
 :root {
-  --status-pending:           #6c757d;
-  --status-awaiting-payment:  #ffc107;
+  --status-pending:   #6c757d;
   --status-queued:    #0d6efd;
   --status-preparing: #fd7e14;
   --status-ready:     #198754;

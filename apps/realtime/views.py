@@ -99,21 +99,19 @@ def customer_order_stream(request):
                     # ── Events forwarded to the customer waiting/tracker page ──
                     #
                     # status_changed: standard order-status updates (pending →
-                    #   preparing → ready → completed).  Also fired when the order
-                    #   is accepted (awaiting_payment → pending), so the tracker
-                    #   already handles it — but we keep order_accepted as a
-                    #   dedicated signal for the payment_waiting page which needs
-                    #   to distinguish between "payment confirmed" and "order
-                    #   accepted" as separate UI transitions.
+                    #   preparing → ready → completed).  The payment_waiting page
+                    #   JS uses this as a fallback to detect when the order has
+                    #   been accepted (status moved past pending).
                     #
                     # payment_confirmed: fired by process_payment when the cashier
-                    #   marks an awaiting_payment order as paid.  Lets the waiting
-                    #   page transition from "Awaiting Payment" to "Payment
-                    #   Confirmed — waiting for staff acceptance".
+                    #   marks a PENDING customer order as paid (is_paid→True, status
+                    #   stays PENDING).  Lets the waiting page transition from
+                    #   "Payment Required" to "Payment Confirmed — waiting for staff
+                    #   acceptance".
                     #
                     # order_accepted: fired by accept_order when the cashier moves
-                    #   the paid order from awaiting_payment → pending.  Tells the
-                    #   waiting page to redirect to the order tracker / success page.
+                    #   a paid PENDING order → PREPARING.  Tells the waiting page to
+                    #   show the "Order Received" overlay and redirect to the tracker.
                     #
                     # All other event types (new_order, inventory_changed,
                     # inventory_low) are irrelevant to the customer tracker
@@ -143,8 +141,8 @@ def customer_order_stream(request):
                     elif evt == 'order_accepted' and data.get('order_number') == order_number:
                         payload = {
                             'order_number':       data['order_number'],
-                            'new_status':         data.get('new_status', 'pending'),
-                            'new_status_display': data.get('new_status_display', 'Pending'),
+                            'new_status':         data.get('new_status', 'preparing'),
+                            'new_status_display': data.get('new_status_display', 'Preparing'),
                         }
                         yield format_sse('order_accepted', payload)
 

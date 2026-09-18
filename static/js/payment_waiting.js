@@ -3,9 +3,9 @@
    Handles real-time updates from SSE + HTTP polling fallback.
 
    States:
-     awaiting_payment  → show "Payment Required" / cashier banner
-     is_paid=true but still awaiting_payment → "Payment Confirmed"
-     order_accepted (status moves to pending/etc.) → show overlay → redirect
+     PENDING + is_paid=false  → "Payment Required" / cashier banner visible
+     PENDING + is_paid=true   → "Payment Confirmed" / waiting for acceptance
+     Order accepted (status → preparing/ready/completed) → show overlay → redirect
 
    The server is authoritative.  The page never relies only on
    client-side state — every SSE event triggers an API poll to
@@ -122,12 +122,12 @@
       return;
     }
 
-    // Payment confirmed
+    // Payment confirmed (is_paid became true, order still pending)
     if (data.is_paid && !isPaid) {
       applyPaymentConfirmed();
     }
 
-    // Order accepted (moved past awaiting_payment)
+    // Order accepted — cashier moved order past pending (to preparing or beyond)
     if (data.order_accepted && !redirecting) {
       applyOrderAccepted(data.tracker_url || config.trackerUrl);
     }
@@ -199,7 +199,7 @@
       setHint('🔄 Reconnecting…');
     };
 
-    // Payment confirmed by cashier (is_paid=true, still awaiting acceptance)
+    // Payment confirmed by cashier (is_paid=true, order still PENDING)
     sseSource.addEventListener('payment_confirmed', function (e) {
       try {
         const data = JSON.parse(e.data);
@@ -210,7 +210,7 @@
       } catch (err) { /* ignore parse errors */ }
     });
 
-    // Order accepted by cashier (awaiting_payment → pending)
+    // Order accepted by cashier (PENDING → PREPARING)
     sseSource.addEventListener('order_accepted', function (e) {
       try {
         const data = JSON.parse(e.data);
@@ -219,21 +219,22 @@
       } catch (err) { /* ignore parse errors */ }
     });
 
-    // status_changed also covers the awaiting_payment → pending transition
-    // (emitted by the post_save signal).  Use it as a fallback in case the
-    // dedicated order_accepted event was missed.
+    // status_changed covers the PENDING → PREPARING transition emitted by
+    // the post_save signal.  Use it as a fallback in case the dedicated
+    // order_accepted event was missed.
     sseSource.addEventListener('status_changed', function (e) {
       try {
         const data = JSON.parse(e.data);
         if (data.order_number !== config.orderNumber) return;
-        // If status moved past awaiting_payment, the order was accepted.
-        if (data.new_status !== 'awaiting_payment' && data.new_status !== 'cancelled') {
-          applyOrderAccepted(config.trackerUrl);
-        } else if (data.new_status === 'cancelled') {
+        const newStatus = data.new_status;
+        if (newStatus === 'cancelled') {
           applyOrderCancelled();
-        } else {
-          // Still awaiting_payment — just poll for full data (e.g. is_paid changed)
+        } else if (newStatus === 'pending') {
+          // Still pending — poll for full data (e.g. is_paid may have changed)
           poll();
+        } else {
+          // Status moved past pending (preparing/ready/completed) → order accepted
+          applyOrderAccepted(config.trackerUrl);
         }
       } catch (err) { /* ignore parse errors */ }
     });
@@ -245,10 +246,10 @@
 
   // ── Bootstrap ─────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', function () {
-    // If the order is already past awaiting_payment on page load (e.g. the
-    // customer refreshed after the order was already accepted), redirect to
-    // the tracker immediately.
-    if (currentStatus !== 'awaiting_payment' && currentStatus !== 'cancelled') {
+    // If the order is already past pending on page load (e.g. the customer
+    // refreshed after the order was already accepted into preparing), redirect
+    // to the tracker immediately.
+    if (currentStatus !== 'pending' && currentStatus !== 'cancelled') {
       applyOrderAccepted(config.trackerUrl);
       return;
     }

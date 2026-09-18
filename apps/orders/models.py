@@ -15,12 +15,11 @@ from apps.menu.models import Product
 
 class Order(models.Model):
     STATUS_CHOICES = [
-        ('awaiting_payment', 'Awaiting Payment'),
-        ('pending',          'Pending'),
-        ('preparing',        'Preparing'),
-        ('ready',            'Ready'),
-        ('completed',        'Completed'),
-        ('cancelled',        'Cancelled'),
+        ('pending',   'Pending'),
+        ('preparing', 'Preparing'),
+        ('ready',     'Ready'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
     ]
 
     ORDER_TYPE_CHOICES = [
@@ -160,19 +159,16 @@ class Order(models.Model):
             'preparing': 'ready',
             'ready':     'completed',
         }
-        # awaiting_payment has no automatic next_status via quick-advance;
-        # it transitions via the explicit accept_order action.
         return flow.get(self.status)
 
     @property
     def status_emoji(self):
         return {
-            'awaiting_payment': '\U0001f4b3',   # 💳
-            'pending':          '\U0001f550',   # 🕐
-            'preparing':        '\U0001f373',   # 🍳
-            'ready':            '\u2705',       # ✅
-            'completed':        '\U0001f389',   # 🎉
-            'cancelled':        '\u274c',       # ❌
+            'pending':   '\U0001f550',   # 🕐
+            'preparing': '\U0001f373',   # 🍳
+            'ready':     '\u2705',       # ✅
+            'completed': '\U0001f389',   # 🎉
+            'cancelled': '\u274c',       # ❌
         }.get(self.status, '\U0001f550')
 
     @property

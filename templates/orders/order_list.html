@@ -307,10 +307,9 @@
 <!-- Status tabs -->
 <div class="status-filter-bar">
   <a href="{% url 'orders:order_list' %}" class="btn btn-sm {% if not status_filter %}btn-primary{% else %}btn-outline{% endif %}">All Orders</a>
-  <a href="?status=awaiting_payment" class="btn btn-sm {% if status_filter == 'awaiting_payment' %}btn-primary{% else %}btn-outline{% endif %}">💳 Awaiting Payment</a>
-  {% for value, label in status_choices %}{% if value != 'awaiting_payment' %}
+  {% for value, label in status_choices %}
   <a href="?status={{ value }}" class="btn btn-sm {% if status_filter == value %}btn-primary{% else %}btn-outline{% endif %}">{{ label }}</a>
-  {% endif %}{% endfor %}
+  {% endfor %}
 </div>
 
 <!-- Search -->
@@ -365,10 +364,7 @@
           <td>
             <form class="status-update-form" data-order-id="{{ order.pk }}" data-url="{% url 'orders:update_status' order.pk %}" style="display:flex;flex-direction:column;gap:4px">
               {% csrf_token %}
-              {% if order.status == 'awaiting_payment' %}
-              {# Payment-first: show badge, not a status dropdown #}
-              <span class="badge" style="background:#fff3cd;color:#856404;font-size:0.8rem;padding:5px 10px">💳 Awaiting Payment</span>
-              {% elif order.status == 'completed' or order.status == 'cancelled' %}
+              {% if order.status == 'completed' or order.status == 'cancelled' %}
               <span class="badge {% if order.status == 'completed' %}badge-ready{% else %}badge-cancelled{% endif %}" style="font-size:0.8rem;padding:5px 10px">{{ order.get_status_display }}</span>
               {% else %}
               <div style="display:flex;gap:6px;align-items:center">
@@ -386,13 +382,13 @@
             </form>
           </td>
           <td>
-            {% if order.status == 'awaiting_payment' %}
-              {% if order.is_paid %}
-                <span class="badge badge-paid" style="display:block;margin-bottom:4px;font-size:0.75rem">✓ Paid</span>
-                <button onclick="acceptOrderList({{ order.pk }}, '{% url 'orders:accept_order' order.pk %}')" class="btn btn-sm btn-primary">✓ Accept</button>
-              {% else %}
-                <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}')" class="btn btn-sm btn-caramel">💳 Pay</button>
-              {% endif %}
+            {% if order.status == 'pending' and not order.cashier and not order.is_paid %}
+              {# Customer order awaiting payment — show Pay button #}
+              <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}')" class="btn btn-sm btn-caramel">💳 Pay</button>
+            {% elif order.status == 'pending' and not order.cashier and order.is_paid %}
+              {# Customer order paid, awaiting acceptance #}
+              <span class="badge badge-paid" style="display:block;margin-bottom:4px;font-size:0.75rem">✓ Paid</span>
+              <button onclick="acceptOrderList({{ order.pk }}, '{% url 'orders:accept_order' order.pk %}')" class="btn btn-sm btn-primary">✓ Accept</button>
             {% elif order.is_paid %}
               <span class="badge badge-paid">Paid</span>
             {% elif order.status != 'cancelled' %}
@@ -542,34 +538,32 @@ RealtimeConnection.on('new_order', function(order) {
 
     const csrfInput = `<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">`;
 
-    // ── Determine if this is a customer awaiting_payment order or a POS pending order ──
-    const isAwaitingPayment = order.status === 'awaiting_payment';
+    // ── Determine if this is a customer (pending+unpaid) order or a POS order ──
+    // New customer orders always start as pending with is_paid=false and no cashier.
+    const isCustomerPendingUnpaid = order.status === 'pending' && !order.is_paid && !order.cashier_id;
 
     let statusCellHtml, paymentCellHtml, actionCellHtml;
 
-    if (isAwaitingPayment) {
-      statusCellHtml = `<span class="badge" style="background:#fff3cd;color:#856404;font-size:0.8rem;padding:5px 10px">💳 Awaiting Payment</span>`;
+    // Customer pending+unpaid orders show a Pay button; status select still works.
+    statusCellHtml = `
+      <form class="status-update-form" data-order-id="${order.order_id}" data-url="${statusFormUrl}" style="display:flex;gap:6px;align-items:center">
+        ${csrfInput}
+        ${selectHtml}
+        <button type="submit" class="btn btn-sm btn-primary">✓</button>
+      </form>`;
+
+    if (isCustomerPendingUnpaid) {
       paymentCellHtml = `<button onclick="openPaymentModal(${order.order_id}, ${Number(order.total).toFixed(2)}, '${payUrl}')" class="btn btn-sm btn-caramel">💳 Pay</button>`;
-      actionCellHtml = `
-        <div style="display:flex;gap:4px;flex-wrap:wrap">
-          <a href="${detailUrl}" class="btn btn-sm btn-outline">View</a>
-          <a href="${receiptUrl}" class="btn btn-sm btn-outline" target="_blank">🖨️</a>
-        </div>`;
     } else {
-      statusCellHtml = `
-        <form class="status-update-form" data-order-id="${order.order_id}" data-url="${statusFormUrl}" style="display:flex;gap:6px;align-items:center">
-          ${csrfInput}
-          ${selectHtml}
-          <button type="submit" class="btn btn-sm btn-primary">✓</button>
-        </form>`;
       paymentCellHtml = `<button onclick="openPaymentModal(${order.order_id}, ${Number(order.total).toFixed(2)}, '${payUrl}')" class="btn btn-sm btn-caramel">Pay</button>`;
-      actionCellHtml = `
-        <div style="display:flex;gap:4px;flex-wrap:wrap">
-          <a href="${detailUrl}" class="btn btn-sm btn-outline">View</a>
-          <a href="${receiptUrl}" class="btn btn-sm btn-outline" target="_blank">🖨️</a>
-          <button onclick="quickAdvance('${advanceUrl}')" class="btn btn-sm btn-caramel" title="Advance to Preparing">▶ Preparing</button>
-        </div>`;
     }
+
+    actionCellHtml = `
+      <div style="display:flex;gap:4px;flex-wrap:wrap">
+        <a href="${detailUrl}" class="btn btn-sm btn-outline">View</a>
+        <a href="${receiptUrl}" class="btn btn-sm btn-outline" target="_blank">🖨️</a>
+        <button onclick="quickAdvance('${advanceUrl}')" class="btn btn-sm btn-caramel" title="Advance to Preparing">▶ Preparing</button>
+      </div>`;
 
     row.innerHTML = `
       <td><a href="${detailUrl}" style="font-weight:700;color:var(--caramel)">${escHtml(order.order_number)}</a></td>
@@ -602,7 +596,7 @@ RealtimeConnection.on('new_order', function(order) {
 // 2. Rebuild the status select to show only transitions valid from the NEW
 //    status, or replace it with a read-only badge for terminal states.
 // 3. Show/hide the submit button and quick-advance button accordingly.
-// 4. For awaiting_payment orders: update pay/accept buttons in payment column.
+// 4. Update pay/accept buttons in the payment column based on new state.
 RealtimeConnection.on('status_changed', function(data) {
   const row = document.querySelector(`tr[data-order-id="${data.order_id}"]`);
   if (!row) return;
@@ -611,17 +605,11 @@ RealtimeConnection.on('status_changed', function(data) {
   const isPaid      = data.is_paid;
   const allowedNext = VALID_TRANSITIONS[newStatus] || [];
   const isTerminal  = allowedNext.length === 0;
-  const isAwaitingPayment = newStatus === 'awaiting_payment';
 
   // ── 1. Status column ──────────────────────────────────────────────────
   const form = row.querySelector('.status-update-form');
 
-  if (isAwaitingPayment) {
-    // Show payment-first badge in the status column
-    if (form) {
-      form.innerHTML = `<span class="badge" style="background:#fff3cd;color:#856404;font-size:0.8rem;padding:5px 10px">💳 Awaiting Payment</span>`;
-    }
-  } else if (form) {
+  if (form) {
     if (isTerminal) {
       const badgeClass = newStatus === 'completed' ? 'badge-ready' : 'badge-cancelled';
       form.innerHTML = `<span class="badge ${badgeClass}" style="font-size:0.8rem;padding:5px 10px">${escHtml(data.new_status_display)}</span>`;
@@ -657,14 +645,16 @@ RealtimeConnection.on('status_changed', function(data) {
     const acceptUrl = row.dataset.acceptUrl || '';
     const orderId   = row.dataset.orderId   || '';
     const totalRaw  = row.dataset.totalRaw  || '0';
+    // Customer orders have no cashier assigned until accepted
+    const isCustomerOrder = !row.dataset.cashierId || row.dataset.cashierId === '';
 
-    if (isAwaitingPayment) {
-      if (isPaid) {
-        payCell.innerHTML = `<span class="badge badge-paid" style="display:block;margin-bottom:4px;font-size:0.75rem">✓ Paid</span>
-          <button onclick="acceptOrderList(${orderId}, '${acceptUrl}')" class="btn btn-sm btn-primary">✓ Accept</button>`;
-      } else {
-        payCell.innerHTML = `<button onclick="openPaymentModal(${orderId}, ${parseFloat(totalRaw).toFixed(2)}, '${payUrl}')" class="btn btn-sm btn-caramel">💳 Pay</button>`;
-      }
+    if (newStatus === 'pending' && isCustomerOrder && isPaid) {
+      // Paid customer order waiting for acceptance
+      payCell.innerHTML = `<span class="badge badge-paid" style="display:block;margin-bottom:4px;font-size:0.75rem">✓ Paid</span>
+        <button onclick="acceptOrderList(${orderId}, '${acceptUrl}')" class="btn btn-sm btn-primary">✓ Accept</button>`;
+    } else if (newStatus === 'pending' && isCustomerOrder && !isPaid) {
+      // Unpaid customer order — show Pay button
+      payCell.innerHTML = `<button onclick="openPaymentModal(${orderId}, ${parseFloat(totalRaw).toFixed(2)}, '${payUrl}')" class="btn btn-sm btn-caramel">💳 Pay</button>`;
     } else if (newStatus === 'cancelled') {
       payCell.innerHTML = '';
     } else if (isPaid) {
@@ -677,7 +667,7 @@ RealtimeConnection.on('status_changed', function(data) {
   const nextStatus  = forwardFlow[newStatus];
   const advanceBtn  = row.querySelector('.btn-caramel[onclick*="quickAdvance"]');
   if (advanceBtn) {
-    if (nextStatus && !isAwaitingPayment) {
+    if (nextStatus) {
       advanceBtn.style.display = '';
       advanceBtn.title = `Advance to ${STATUS_LABELS[nextStatus] || nextStatus}`;
       advanceBtn.textContent = `▶ ${STATUS_LABELS[nextStatus] || nextStatus}`;
@@ -750,12 +740,13 @@ RealtimeConnection.on('status_changed', function(data) {
 
     // ── Payment section ──
     let payHtml;
-    if (isPaid && status === 'awaiting_payment') {
-      // Paid but not yet accepted — show Accept button
+    if (isPaid && status === 'pending' && !row.dataset.cashierId) {
+      // Paid customer order waiting for acceptance — show Accept button
       payHtml = `<span class="badge badge-paid" style="font-size:0.72rem;display:block;margin-bottom:4px">● Paid</span>
         <button onclick="acceptOrderList(${escHtml(d.orderId)}, '${escHtml(d.acceptUrl || '')}')"
                 class="btn btn-sm btn-primary" style="font-size:0.72rem">✓ Accept</button>`;
-    } else if (!isPaid && status === 'awaiting_payment') {
+    } else if (!isPaid && status === 'pending' && !row.dataset.cashierId) {
+      // Unpaid customer order — show Pay button
       payHtml = `<button onclick="openPaymentModal(${escHtml(d.orderId)}, ${escHtml(d.totalRaw || '0')}, '${escHtml(d.payUrl || '')}')"
                          class="btn btn-sm btn-caramel">💳 Pay</button>`;
     } else if (isPaid) {
@@ -769,9 +760,7 @@ RealtimeConnection.on('status_changed', function(data) {
 
     // ── Status section ──
     let statusHtml;
-    if (status === 'awaiting_payment') {
-      statusHtml = `<span class="badge" style="background:#fff3cd;color:#856404;font-size:0.72rem;padding:4px 8px">💳 Awaiting Payment</span>`;
-    } else if (isTerminal) {
+    if (isTerminal) {
       const badgeClass = status === 'completed' ? 'badge-ready' : 'badge-cancelled';
       statusHtml = `<span class="badge ${badgeClass}">${dot(status)}${escHtml(d.statusDisplay || '')}</span>`;
     } else {

@@ -304,10 +304,14 @@ def checkout_view(request):
         duplicate = Order.objects.filter(request_token=posted_token).first()
         if duplicate:
             request.session['last_order_id'] = duplicate.pk
-            # Route to payment-waiting for customer orders still awaiting
-            # payment; otherwise fall through to the normal success page.
-            if duplicate.status == 'awaiting_payment':
+            # Route to payment-waiting for customer orders that are still in
+            # the pending (payment required / payment confirmed) stage.
+            # Once the order has moved to preparing or beyond, send to the
+            # tracker instead.
+            if duplicate.cashier_id is None and duplicate.status == 'pending':
                 return redirect('orders:payment_waiting', tracking_token=duplicate.tracking_token)
+            if duplicate.cashier_id is None and duplicate.status not in ('pending', 'cancelled'):
+                return redirect('orders:order_tracker', tracking_token=duplicate.tracking_token)
             return redirect('orders:order_success', pk=duplicate.pk)
 
     items = cart.cart_items.select_related('product__category').all()
@@ -412,11 +416,12 @@ def checkout_view(request):
                         order_type=form.cleaned_data['order_type'],
                         notes=form.cleaned_data.get('notes', ''),
                         request_token=request_token,
-                        # Payment-first flow: customer orders start in
-                        # awaiting_payment. They only move to pending
-                        # (Order Received) after staff confirms payment
-                        # AND accepts the order.
-                        status='awaiting_payment',
+                        # Payment-first flow: customer orders start as PENDING
+                        # with is_paid=False (the model default).  The cashier
+                        # confirms payment (sets is_paid=True, status stays
+                        # PENDING) and then accepts the order (PENDING →
+                        # PREPARING) as two separate steps.
+                        status='pending',
                     )
 
                     # Add items — all prices and quantities are validated
@@ -532,8 +537,10 @@ def checkout_view(request):
                 )
                 if duplicate:
                     request.session['last_order_id'] = duplicate.pk
-                    if duplicate.status == 'awaiting_payment':
+                    if duplicate.cashier_id is None and duplicate.status == 'pending':
                         return redirect('orders:payment_waiting', tracking_token=duplicate.tracking_token)
+                    if duplicate.cashier_id is None and duplicate.status not in ('pending', 'cancelled'):
+                        return redirect('orders:order_tracker', tracking_token=duplicate.tracking_token)
                     return redirect('orders:order_success', pk=duplicate.pk)
                 messages.error(
                     request, 'Order could not be created. Please try again.',
@@ -611,14 +618,14 @@ def order_success(request, pk):
 def payment_waiting(request, tracking_token):
     """Customer-facing payment-waiting page.
 
-    Shown immediately after checkout, before staff confirms payment and
-    accepts the order.  Access is gated by the cryptographically random
-    tracking_token (same mechanism as order_tracker), so one customer
-    cannot view another's waiting page.
+    Shown immediately after checkout.  The page covers two states:
+      PENDING + is_paid=False  → "Payment Required — go to the cashier"
+      PENDING + is_paid=True   → "Payment Confirmed — waiting for staff acceptance"
 
-    States handled client-side (driven by SSE + polling):
-      awaiting_payment  → "Payment Required — please go to the cashier"
-      pending/preparing/ready/completed → order accepted; redirect to tracker
+    Once the cashier accepts the order it moves to PREPARING and the JS
+    redirects the customer to the order tracker.  Access is gated by the
+    cryptographically random tracking_token so one customer cannot view
+    another's waiting page.
     """
     order = get_object_or_404(
         Order.objects.only(
@@ -659,8 +666,10 @@ def api_payment_waiting_status(request, tracking_token):
         'status':            order.status,
         'status_display':    order.get_status_display(),
         'is_paid':           order.is_paid,
-        # True once the customer should be shown the Order Received page.
-        'order_accepted':    order.status not in ('awaiting_payment', 'cancelled'),
+        # True once the cashier has accepted the order (moved to preparing or
+        # beyond).  The waiting page uses this to show the "Order Received"
+        # overlay and redirect to the tracker.
+        'order_accepted':    order.status not in ('pending', 'cancelled'),
         'is_cancelled':      order.status == 'cancelled',
         'tracker_url':       f'/orders/track/{order.tracking_token}/',
     })
@@ -702,7 +711,7 @@ def order_list(request):
     page = request.GET.get('page', 1)
     orders_page = paginator.get_page(page)
 
-    pending_count = Order.objects.filter(status__in=['awaiting_payment', 'pending']).count()
+    pending_count = Order.objects.filter(status='pending').count()
 
     # Serialize VALID_TRANSITIONS and STATUS_LABELS as JSON for the template's
     # real-time JS handlers.  Injecting from Python keeps the JS literals in
@@ -874,23 +883,19 @@ def process_payment(request, pk):
         # Decimal subtraction — exact peso/centavo arithmetic, no float rounding.
         order.change_amount = amount_paid - order.total
 
-        # ── Payment-first flow vs legacy POS flow ────────────────────────
-        # Customer orders (placed anonymously via checkout) start with
-        # status='awaiting_payment'.  Confirming payment marks them paid but
-        # does NOT complete them — staff must still explicitly accept the
-        # order (accept_order view) to move it to 'pending' so preparation
-        # can begin.  This is the payment-first two-step.
+        # ── Customer order vs POS order ──────────────────────────────────────
+        # Customer orders (placed anonymously via checkout, cashier is None)
+        # use the payment-first two-step: confirming payment keeps the order
+        # in PENDING so staff can explicitly accept it (PENDING → PREPARING).
         #
-        # POS orders (placed by staff via cashier_pos) start with
-        # status='pending'.  Confirming payment on a POS order completes it
-        # immediately — the legacy single-step POS workflow is unchanged.
-        if order.status == 'awaiting_payment':
-            # Payment confirmed; order waits for staff acceptance.
-            # Do not change status here — accept_order does that.
+        # POS orders (placed by staff, cashier is set) complete immediately
+        # on payment — the legacy single-step POS workflow is unchanged.
+        if order.cashier_id is None:
+            # Customer order: payment confirmed; order stays PENDING and waits
+            # for staff acceptance.  Do not change status here.
             order.save()
         else:
-            # Legacy POS / any order already past awaiting_payment:
-            # completing on payment is the old behaviour.
+            # POS order: completing on payment is the legacy behaviour.
             order.status = 'completed'
             order.completed_at = timezone.now()
             order.cashier = request.user
@@ -923,20 +928,21 @@ def process_payment(request, pk):
         'success': True,
         'change': float(order.change_amount),
         'order_number': order.order_number,
-        # Tell the client whether the order is now awaiting acceptance or
-        # already completed (POS legacy path), so the UI can update correctly.
-        'awaiting_acceptance': order.status == 'awaiting_payment',
+        # Tell the client whether the order is a customer order waiting for
+        # cashier acceptance (PENDING + PAID) or a POS order already completed.
+        'awaiting_acceptance': order.cashier_id is None,
     })
 
 
 @login_required
 @cashier_or_admin_required
 def accept_order(request, pk):
-    """Accept a paid customer order, moving it from awaiting_payment → pending.
+    """Accept a paid customer order, moving it from PENDING → PREPARING.
 
-    This is the staff-side "Confirm Order" action in the payment-first flow.
-    It enforces server-side:
-      - The order must be in awaiting_payment status.
+    This is the staff-side "Accept Order" action in the payment-first flow.
+    Server-side enforcement:
+      - The order must be PENDING (the only valid pre-preparation status).
+      - The order must be a customer order (cashier is None).
       - The order must already be marked is_paid=True.
       - Only authenticated cashier/admin staff can call this endpoint.
     Attempting to accept an unpaid order returns a 400 JSON error regardless
@@ -948,13 +954,22 @@ def accept_order(request, pk):
     with transaction.atomic():
         order = get_object_or_404(Order.objects.select_for_update(), pk=pk)
 
-        # ── Guard: must be in awaiting_payment ───────────────────────────
-        if order.status != 'awaiting_payment':
+        # ── Guard: must be a pending customer order ──────────────────────
+        if order.status != 'pending':
             return JsonResponse({
                 'success': False,
                 'error': (
                     f'Cannot accept order: current status is '
-                    f'"{order.get_status_display()}", not Awaiting Payment.'
+                    f'"{order.get_status_display()}", not Pending.'
+                ),
+            }, status=400)
+
+        if order.cashier_id is not None:
+            return JsonResponse({
+                'success': False,
+                'error': (
+                    'Cannot accept order: this is a POS order and does not '
+                    'require staff acceptance.'
                 ),
             }, status=400)
 
@@ -970,30 +985,32 @@ def accept_order(request, pk):
                 ),
             }, status=400)
 
-        # All checks pass — transition to pending (kitchen queue).
-        order.status = 'pending'
+        # All checks pass — accept the order and move it into the prep queue.
+        order.status = 'preparing'
         order.cashier = request.user
+        order.queued_at = timezone.now()
         order.save()
 
         log_action(
             request.user, 'order.accepted', order,
-            detail='Order accepted after payment confirmation — moved to Pending.',
+            detail='Order accepted after payment confirmation — moved to Preparing.',
         )
 
         # Broadcast a dedicated order_accepted event.  The customer's waiting
-        # page listens for this to transition to the "Order Received" state.
+        # page listens for this to show the "Order Received" overlay and
+        # redirect to the tracker.
         from apps.realtime.broker import publish as rt_publish
         rt_publish('order_accepted', {
-            'order_id':          order.pk,
-            'order_number':      order.order_number,
-            'new_status':        order.status,
+            'order_id':           order.pk,
+            'order_number':       order.order_number,
+            'new_status':         order.status,
             'new_status_display': order.get_status_display(),
         })
 
     return JsonResponse({
-        'success':           True,
-        'order_number':      order.order_number,
-        'new_status':        order.status,
+        'success':            True,
+        'order_number':       order.order_number,
+        'new_status':         order.status,
         'new_status_display': order.get_status_display(),
     })
 

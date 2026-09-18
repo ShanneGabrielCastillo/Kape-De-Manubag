@@ -47,13 +47,9 @@ def create_order_item(order, product, size, quantity):
 # This map is the single authoritative definition of every allowed status
 # transition in the business workflow.
 #
-# Payment-first customer flow (new):
-#   awaiting_payment → cancelled           (staff or timeout cancels unpaid order)
-#   awaiting_payment → pending             (staff accepts the order after payment —
-#                                           via the dedicated accept_order endpoint)
-#
-# Standard preparation flow (unchanged):
-#   pending   → preparing  (kitchen accepts the order)
+# Standard preparation flow:
+#   pending   → preparing  (cashier accepts the paid customer order, or kitchen
+#                           starts a POS order)
 #   pending   → cancelled  (cancelled before prep starts)
 #   preparing → ready      (kitchen finishes preparation)
 #   preparing → cancelled  (cancelled mid-prep)
@@ -64,13 +60,17 @@ def create_order_item(order, product, size, quantity):
 #
 # Any transition not listed above is explicitly forbidden.  All views that
 # change order status must call validate_status_transition() before writing.
+#
+# Payment is tracked separately via Order.is_paid (BooleanField).  An order
+# starts as PENDING + is_paid=False.  When the cashier confirms payment the
+# is_paid flag is set to True while the order remains PENDING.  The cashier
+# then accepts the order, which moves it from PENDING → PREPARING.
 VALID_TRANSITIONS: dict[str, set[str]] = {
-    'awaiting_payment': {'pending',    'cancelled'},
-    'pending':          {'preparing',  'cancelled'},
-    'preparing':        {'ready',      'cancelled'},
-    'ready':            {'completed',  'cancelled'},
-    'completed':        set(),   # terminal state — no further transitions
-    'cancelled':        set(),   # terminal state — no further transitions
+    'pending':   {'preparing', 'cancelled'},
+    'preparing': {'ready',     'cancelled'},
+    'ready':     {'completed', 'cancelled'},
+    'completed': set(),   # terminal state — no further transitions
+    'cancelled': set(),   # terminal state — no further transitions
 }
 
 
@@ -106,12 +106,13 @@ def validate_status_transition(current_status: str, new_status: str, order=None)
             f"to \"{new_label}\"."
         )
 
-    # ── Business-rule: awaiting_payment → pending requires the order to be
-    # paid first.  This is the accept_order gate: the cashier can only accept
-    # (move to pending) after confirming payment.  Server-side enforcement
-    # means this cannot be bypassed by hiding a UI button.
-    if new_status == 'pending' and current_status == 'awaiting_payment':
-        if order is not None and not order.is_paid:
+    # ── Business-rule: pending → preparing requires payment for customer orders.
+    # Customer orders (cashier is None) start as PENDING + UNPAID.  The cashier
+    # must confirm payment (is_paid=True) before accepting the order into the
+    # preparation queue.  This gate is enforced server-side so it cannot be
+    # bypassed by hiding a UI button.
+    if new_status == 'preparing' and current_status == 'pending':
+        if order is not None and order.cashier_id is None and not order.is_paid:
             raise ValueError(
                 "Cannot accept order: payment has not been confirmed yet. "
                 "Please process the payment first."

@@ -55,8 +55,8 @@ class CheckoutAtomicityTests(TestCase):
             response,
             reverse('orders:payment_waiting', kwargs={'tracking_token': order.tracking_token}),
         )
-        # Order starts in awaiting_payment status
-        self.assertEqual(order.status, 'awaiting_payment')
+        # Order starts in pending status with is_paid=False
+        self.assertEqual(order.status, 'pending')
         self.assertFalse(order.is_paid)
         self.assertTrue(order.stock_deducted)
         self.product.refresh_from_db()
@@ -353,7 +353,7 @@ class DuplicateOrderProtectionTests(TestCase):
             reverse('orders:payment_waiting', kwargs={'tracking_token': order.tracking_token}),
         )
         self.assertEqual(Order.objects.count(), 1)
-        self.assertEqual(order.status, 'awaiting_payment')
+        self.assertEqual(order.status, 'pending')
 
 
 class CancellationAtomicityTests(TestCase):
@@ -838,37 +838,65 @@ class PosDraftStatusTests(TestCase):
 class NewOrderRealtimePayloadTests(TestCase):
     """The new_order broadcast carries the idempotency token so the ordering
     terminal can ignore the echo of its own order before the HTTP response
-    arrives (see RealtimeConnection.ignoreToken in main.js)."""
+    arrives (see RealtimeConnection.ignoreToken in main.js).
+
+    The broadcast fires via transaction.on_commit() inside create_pos_order.
+    We patch on_commit to call the callback immediately so this test works
+    with both SQLite (test DB) and PostgreSQL without relying on actual
+    transaction commit semantics in the test runner.
+    """
+
+    def setUp(self):
+        self.cashier = CustomUser.objects.create_user(
+            username='rt-payload-cashier', password=PASSWORD,
+            role='cashier', is_active=True,
+        )
+        self.client.force_login(self.cashier)
+        self.category = Category.objects.create(name='Coffee', slug='coffee-rt')
+        self.product = Product.objects.create(
+            category=self.category, name='Espresso', price='60.00',
+            stock_quantity=50,
+        )
 
     def _drain(self, q):
-        import queue
+        import queue as queue_module
         events = []
         while True:
             try:
                 events.append(q.get_nowait())
-            except queue.Empty:
+            except queue_module.Empty:
                 return events
 
     def test_new_order_payload_includes_request_token(self):
-        import queue
+        """POS create_pos_order broadcasts new_order with the request_token."""
         from apps.realtime.broker import subscribe, unsubscribe
+        from django.db import transaction as db_transaction
+        import json
 
-        user = CustomUser.objects.create_user(
-            username='rt-payload-cashier', password=PASSWORD,
-            role='cashier', is_active=True,
-        )
-        q = subscribe()
-        try:
-            Order.objects.create(
-                customer_name='RT Customer',
-                order_type='take_out',
-                cashier=user,
-                request_token='rt-token-abc-123',
-                total=100,
-            )
-            events = self._drain(q)
-        finally:
-            unsubscribe(q)
+        # Patch transaction.on_commit to call the callback immediately so
+        # the broadcast fires synchronously during the test request.
+        # This is necessary because Django's TestCase wraps each test in a
+        # transaction that never commits, so on_commit hooks would never fire.
+        with mock.patch.object(db_transaction, 'on_commit', side_effect=lambda fn: fn()):
+            q = subscribe()
+            try:
+                response = self.client.post(
+                    reverse('orders:create_pos_order'),
+                    data=json.dumps({
+                        'customer_name': 'RT Customer',
+                        'order_type': 'dine_in',
+                        'request_token': 'rt-token-abc-123',
+                        'items': [
+                            {'product_id': self.product.pk, 'quantity': 1, 'size': 'none'},
+                        ],
+                    }),
+                    content_type='application/json',
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(response.json()['success'])
+                events = self._drain(q)
+            finally:
+                unsubscribe(q)
 
         created = [e for e in events if e['event'] == 'new_order']
         self.assertEqual(len(created), 1)
@@ -880,11 +908,12 @@ class NewOrderRealtimePayloadTests(TestCase):
 class PaymentFirstFlowTests(TestCase):
     """End-to-end tests for the payment-first customer ordering workflow.
 
-    Verifies:
-    - Customer orders start in awaiting_payment
-    - Unpaid orders cannot be accepted (server-side enforcement)
-    - process_payment marks is_paid but does not complete the order
-    - accept_order moves awaiting_payment → pending only when paid
+    Verifies the simplified model where PENDING is the single initial status
+    and payment_status (is_paid) is tracked independently:
+    - Customer orders start as PENDING + is_paid=False
+    - Unpaid customer orders cannot be accepted (server-side enforcement)
+    - process_payment sets is_paid=True but keeps status=PENDING
+    - accept_order moves PENDING+PAID → PREPARING
     - Finance is not affected by unpaid orders
     """
 
@@ -899,11 +928,11 @@ class PaymentFirstFlowTests(TestCase):
         )
 
     def _customer_order(self, quantity=1):
-        """Create an order that went through the customer checkout flow."""
+        """Create a customer order (no cashier, PENDING, unpaid by default)."""
         order = Order.objects.create(
             customer_name='Customer A',
-            status='awaiting_payment',
-            cashier=None,   # customer order — no cashier
+            status='pending',
+            cashier=None,   # customer order — no cashier assigned yet
         )
         OrderItem.objects.create(
             order=order, product=self.product,
@@ -921,8 +950,8 @@ class PaymentFirstFlowTests(TestCase):
 
     # ── Checkout redirect ──────────────────────────────────────────────────
 
-    def test_checkout_creates_awaiting_payment_order(self):
-        """Customer checkout must create an order in awaiting_payment status."""
+    def test_checkout_creates_pending_unpaid_order(self):
+        """Customer checkout must create an order in PENDING status with is_paid=False."""
         session = self.client.session
         session['_seed'] = 'x'
         cart = Cart.objects.create(session_key=session.session_key)
@@ -935,7 +964,8 @@ class PaymentFirstFlowTests(TestCase):
             'order_type': 'dine_in',
         })
         order = Order.objects.get()
-        self.assertEqual(order.status, 'awaiting_payment')
+        # Order is PENDING + UNPAID — not a separate awaiting_payment status
+        self.assertEqual(order.status, 'pending')
         self.assertFalse(order.is_paid)
         # Redirect goes to payment_waiting, not order_success
         self.assertRedirects(
@@ -946,7 +976,7 @@ class PaymentFirstFlowTests(TestCase):
     # ── Server-side accept gate ────────────────────────────────────────────
 
     def test_accept_order_rejects_unpaid_order(self):
-        """Accepting an unpaid order must return 400 regardless of UI state."""
+        """Accepting an unpaid customer order must return 400 regardless of UI state."""
         self.client.force_login(self.cashier)
         order = self._customer_order()
         self.assertFalse(order.is_paid)
@@ -959,8 +989,9 @@ class PaymentFirstFlowTests(TestCase):
         self.assertFalse(data['success'])
         self.assertIn('payment', data['error'].lower())
 
+        # Status must remain PENDING — not moved to PREPARING
         order.refresh_from_db()
-        self.assertEqual(order.status, 'awaiting_payment')
+        self.assertEqual(order.status, 'pending')
 
     def test_accept_order_requires_login(self):
         """Unauthenticated attempt to accept order must be rejected."""
@@ -971,15 +1002,15 @@ class PaymentFirstFlowTests(TestCase):
         # Redirects to login (302) — not a 200 JSON success
         self.assertNotEqual(response.status_code, 200)
         order.refresh_from_db()
-        self.assertEqual(order.status, 'awaiting_payment')
+        self.assertEqual(order.status, 'pending')
 
-    def test_accept_order_rejects_wrong_status(self):
-        """accept_order on an already-pending order must return error."""
+    def test_accept_order_rejects_already_preparing(self):
+        """accept_order on an order already in preparing must return error."""
         self.client.force_login(self.cashier)
         order = self._customer_order()
-        # Manually advance past awaiting_payment to pending
+        # Manually advance to preparing (simulating a prior accept)
         order.is_paid = True
-        order.status = 'pending'
+        order.status = 'preparing'
         order.save(update_fields=['is_paid', 'status'])
 
         response = self.client.post(
@@ -989,8 +1020,24 @@ class PaymentFirstFlowTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(data['success'])
 
-    def test_process_payment_marks_paid_but_not_completed(self):
-        """For awaiting_payment orders, process_payment must NOT complete them."""
+    def test_accept_order_rejects_pos_order(self):
+        """accept_order must reject POS orders (cashier set) — not customer flow."""
+        self.client.force_login(self.cashier)
+        order = self._customer_order()
+        # Make it look like a POS order by assigning a cashier
+        order.is_paid = True
+        order.cashier = self.cashier
+        order.save(update_fields=['is_paid', 'cashier'])
+
+        response = self.client.post(
+            reverse('orders:accept_order', args=[order.pk]),
+        )
+        data = response.json()
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(data['success'])
+
+    def test_process_payment_marks_paid_keeps_pending(self):
+        """For customer orders, process_payment must set is_paid=True but NOT complete."""
         self.client.force_login(self.cashier)
         order = self._customer_order()
 
@@ -1004,35 +1051,36 @@ class PaymentFirstFlowTests(TestCase):
 
         order.refresh_from_db()
         self.assertTrue(order.is_paid)
-        # Status must still be awaiting_payment — NOT completed
-        self.assertEqual(order.status, 'awaiting_payment')
+        # Status must stay PENDING — NOT completed or changed
+        self.assertEqual(order.status, 'pending')
         self.assertEqual(order.payment_method, 'cash')
         from decimal import Decimal
         self.assertEqual(order.change_amount, Decimal('25.00'))  # 100 - 75
 
-    def test_process_then_accept_moves_to_pending(self):
-        """Full flow: process payment then accept moves to pending."""
+    def test_process_then_accept_moves_to_preparing(self):
+        """Full flow: confirm payment then accept moves PENDING → PREPARING."""
         self.client.force_login(self.cashier)
         order = self._customer_order()
 
-        # Step 1: Process payment
+        # Step 1: Process payment — status stays PENDING, is_paid becomes True
         self.client.post(
             reverse('orders:process_payment', args=[order.pk]),
             {'payment_method': 'gcash', 'amount_paid': '75.00'},
         )
         order.refresh_from_db()
         self.assertTrue(order.is_paid)
-        self.assertEqual(order.status, 'awaiting_payment')
+        self.assertEqual(order.status, 'pending')   # still PENDING after payment
 
-        # Step 2: Accept
+        # Step 2: Accept — PENDING+PAID → PREPARING
         response = self.client.post(
             reverse('orders:accept_order', args=[order.pk]),
         )
         data = response.json()
         self.assertTrue(data['success'])
+        self.assertEqual(data['new_status'], 'preparing')
 
         order.refresh_from_db()
-        self.assertEqual(order.status, 'pending')
+        self.assertEqual(order.status, 'preparing')
 
     def test_duplicate_payment_rejected(self):
         """A second payment attempt on an already-paid order must be rejected."""
@@ -1058,43 +1106,80 @@ class PaymentFirstFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, order.order_number)
 
-    def test_api_payment_waiting_status_returns_correct_fields(self):
-        """api_payment_waiting_status returns correct awaiting_payment data."""
+    def test_api_payment_waiting_status_pending_unpaid(self):
+        """api_payment_waiting_status returns correct data for PENDING + UNPAID."""
         order = self._customer_order()
         response = self.client.get(
             reverse('orders:api_payment_waiting_status', kwargs={'tracking_token': order.tracking_token}),
         )
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data['status'], 'awaiting_payment')
+        self.assertEqual(data['status'], 'pending')
         self.assertFalse(data['is_paid'])
+        # order_accepted is False — order has not moved to preparing yet
+        self.assertFalse(data['order_accepted'])
+
+    def test_api_payment_waiting_status_pending_paid(self):
+        """api_payment_waiting_status: PENDING + PAID is not yet order_accepted."""
+        order = self._customer_order()
+        order.is_paid = True
+        order.save(update_fields=['is_paid'])
+        response = self.client.get(
+            reverse('orders:api_payment_waiting_status', kwargs={'tracking_token': order.tracking_token}),
+        )
+        data = response.json()
+        self.assertEqual(data['status'], 'pending')
+        self.assertTrue(data['is_paid'])
+        # Still PENDING — cashier has not accepted yet → order_accepted is False
         self.assertFalse(data['order_accepted'])
 
     def test_api_payment_waiting_status_after_accept(self):
-        """api_payment_waiting_status reflects order_accepted=True after acceptance."""
+        """api_payment_waiting_status reflects order_accepted=True after PREPARING."""
         order = self._customer_order()
         order.is_paid = True
-        order.status = 'pending'
+        order.status = 'preparing'
         order.save(update_fields=['is_paid', 'status'])
         response = self.client.get(
             reverse('orders:api_payment_waiting_status', kwargs={'tracking_token': order.tracking_token}),
         )
         data = response.json()
+        self.assertEqual(data['status'], 'preparing')
         self.assertTrue(data['order_accepted'])
 
-    def test_validate_status_transition_blocks_accept_unpaid(self):
-        """validate_status_transition rejects awaiting_payment→pending if unpaid."""
+    def test_validate_status_transition_blocks_accept_unpaid_customer(self):
+        """validate_status_transition rejects pending→preparing for unpaid customer order."""
         from apps.orders.services import validate_status_transition
-        order = self._customer_order()  # is_paid=False
+        order = self._customer_order()  # cashier=None, is_paid=False
         with self.assertRaises(ValueError) as ctx:
-            validate_status_transition('awaiting_payment', 'pending', order=order)
+            validate_status_transition('pending', 'preparing', order=order)
         self.assertIn('payment', str(ctx.exception).lower())
 
     def test_validate_status_transition_allows_accept_when_paid(self):
-        """validate_status_transition allows awaiting_payment→pending when paid."""
+        """validate_status_transition allows pending→preparing for paid customer order."""
         from apps.orders.services import validate_status_transition
         order = self._customer_order()
         order.is_paid = True
         order.save(update_fields=['is_paid'])
         # Should not raise
-        validate_status_transition('awaiting_payment', 'pending', order=order)
+        validate_status_transition('pending', 'preparing', order=order)
+
+    def test_validate_status_transition_allows_pos_accept_unpaid(self):
+        """POS orders (cashier set) can advance to preparing even if not yet paid."""
+        from apps.orders.services import validate_status_transition
+        order = self._customer_order()
+        order.cashier = self.cashier   # make it a POS order
+        order.save(update_fields=['cashier'])
+        # POS orders use the legacy path — no payment gate on pending→preparing
+        validate_status_transition('pending', 'preparing', order=order)
+
+    def test_pending_is_not_implicitly_paid(self):
+        """PENDING status alone does not imply payment — is_paid must be checked."""
+        order = self._customer_order()
+        self.assertEqual(order.status, 'pending')
+        self.assertFalse(order.is_paid)
+        # These are logically independent: status and payment
+        order.is_paid = True
+        order.save(update_fields=['is_paid'])
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'pending')  # status unchanged
+        self.assertTrue(order.is_paid)             # payment is separate
