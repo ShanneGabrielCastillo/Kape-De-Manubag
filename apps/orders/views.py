@@ -416,12 +416,10 @@ def checkout_view(request):
                         order_type=form.cleaned_data['order_type'],
                         notes=form.cleaned_data.get('notes', ''),
                         request_token=request_token,
-                        # Payment-first flow: customer orders start as PENDING
-                        # with is_paid=False (the model default).  The cashier
-                        # confirms payment (sets is_paid=True, status stays
-                        # PENDING) and then accepts the order (PENDING →
-                        # PREPARING) as two separate steps.
-                        status='pending',
+                        # Payment-first flow: customer orders start in
+                        # awaiting_payment. Confirming payment moves them
+                        # straight to preparing in one step.
+                        status='awaiting_payment',
                     )
 
                     # Add items — all prices and quantities are validated
