@@ -16,8 +16,8 @@
           <div style="font-size:0.75rem;color:#aaa;font-weight:700;text-transform:uppercase;letter-spacing:0.08em">Order Number</div>
           <div style="font-size:2rem;font-family:'Playfair Display',serif;font-weight:700;color:var(--caramel)">{{ order.order_number }}</div>
           <div style="margin-top:6px">
-            <span class="badge badge-pending" style="font-size:0.78rem;padding:5px 12px">
-              🕐 {{ order.get_status_display }} — Queue #{{ order.queue_number }}
+            <span class="badge badge-preparing" style="font-size:0.78rem;padding:5px 12px">
+              🍳 {{ order.get_status_display }} — Queue #{{ order.queue_number }}
             </span>
           </div>
         </div>

@@ -707,7 +707,7 @@ def order_list(request):
     page = request.GET.get('page', 1)
     orders_page = paginator.get_page(page)
 
-    pending_count = Order.objects.filter(status='pending').count()
+    pending_count = Order.objects.filter(status='awaiting_payment').count()
 
     # Serialize VALID_TRANSITIONS and STATUS_LABELS as JSON for the template's
     # real-time JS handlers.  Injecting from Python keeps the JS literals in
@@ -959,13 +959,13 @@ def accept_order(request, pk):
     with transaction.atomic():
         order = get_object_or_404(Order.objects.select_for_update(), pk=pk)
 
-        # ── Guard: must be a pending customer order ──────────────────────
-        if order.status != 'pending':
+        # ── Guard: must be in awaiting_payment ───────────────────────────
+        if order.status != 'awaiting_payment':
             return JsonResponse({
                 'success': False,
                 'error': (
                     f'Cannot accept order: current status is '
-                    f'"{order.get_status_display()}", not Pending.'
+                    f'"{order.get_status_display()}", not Awaiting Payment.'
                 ),
             }, status=400)
 
@@ -1347,7 +1347,7 @@ def api_track_order(request, tracking_token):
 
     queue_position = order.get_queue_position()
 
-    if order.status == 'pending':
+    if order.status == 'awaiting_payment':
         estimated_minutes = max(1, (queue_position - 1) * 3)
     elif order.status == 'preparing':
         estimated_minutes = 3
@@ -1389,7 +1389,7 @@ def api_queue_board(request):
         .values('order_number', 'queue_number', 'customer_name', 'order_type', 'ready_at')[:20]
     )
     queued_count = Order.objects.filter(
-        status__in=['pending', 'preparing'], created_at__date=today
+        status__in=['awaiting_payment', 'preparing'], created_at__date=today
     ).count()
 
     # Serialize datetime fields

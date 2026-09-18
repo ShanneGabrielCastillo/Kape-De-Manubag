@@ -122,12 +122,12 @@
       return;
     }
 
-    // Payment confirmed (is_paid became true, order still pending)
+    // Payment confirmed (is_paid became true, order still awaiting_payment)
     if (data.is_paid && !isPaid) {
       applyPaymentConfirmed();
     }
 
-    // Order accepted — cashier moved order past pending (to preparing or beyond)
+    // Order accepted — cashier moved order past awaiting_payment (to preparing or beyond)
     if (data.order_accepted && !redirecting) {
       applyOrderAccepted(data.tracker_url || config.trackerUrl);
     }

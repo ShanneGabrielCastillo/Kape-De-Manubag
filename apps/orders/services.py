@@ -66,8 +66,7 @@ def create_order_item(order, product, size, quantity):
 # is_paid flag is set to True while the order remains PENDING.  The cashier
 # then accepts the order, which moves it from PENDING → PREPARING.
 VALID_TRANSITIONS: dict[str, set[str]] = {
-    'awaiting_payment': {'preparing', 'cancelled'},   # payment confirms → auto-preparing
-    'pending':          {'preparing', 'cancelled'},
+    'awaiting_payment': {'preparing', 'cancelled'},   # payment confirmed → preparing
     'preparing':        {'ready',     'cancelled'},
     'ready':            {'completed', 'cancelled'},
     'completed': set(),   # terminal state — no further transitions

@@ -37,7 +37,7 @@
 
   // ── Hero class helper ────────────────────────────────────────────────────
   function updateHeroClass(status) {
-    const classes = ['hero-pending','hero-preparing','hero-ready','hero-completed','hero-cancelled'];
+    const classes = ['hero-awaiting_payment','hero-preparing','hero-ready','hero-completed','hero-cancelled','hero-pending'];
     classes.forEach(c => heroEl && heroEl.classList.remove(c));
     if (heroEl) heroEl.classList.add('hero-' + status);
   }

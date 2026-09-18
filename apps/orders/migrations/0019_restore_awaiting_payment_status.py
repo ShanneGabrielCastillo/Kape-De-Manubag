@@ -1,13 +1,8 @@
-# Restores 'awaiting_payment' to Order.status choices.
+# Restores 'awaiting_payment' and removes 'pending' from Order.status choices.
 #
-# Migration 0019 previously removed this status by mistake.
-# The django_migrations table already has a 0019 entry, so we
-# fake-apply this replacement to make Django treat it as applied.
-#
-# IMPORTANT: run with --fake if 0019 is already in django_migrations:
-#   python manage.py migrate orders 0019 --fake
-# Then the app code will correctly set status='awaiting_payment' for
-# new customer checkout orders.
+# The django_migrations table already has a 0019 entry so this migration
+# was fake-applied via the _fix_migration.py script. Its schema operation
+# reflects the final desired state of the field.
 
 from django.db import migrations, models
 
@@ -25,13 +20,12 @@ class Migration(migrations.Migration):
             field=models.CharField(
                 choices=[
                     ('awaiting_payment', 'Awaiting Payment'),
-                    ('pending',          'Pending'),
                     ('preparing',        'Preparing'),
                     ('ready',            'Ready'),
                     ('completed',        'Completed'),
                     ('cancelled',        'Cancelled'),
                 ],
-                default='pending',
+                default='awaiting_payment',
                 max_length=20,
             ),
         ),

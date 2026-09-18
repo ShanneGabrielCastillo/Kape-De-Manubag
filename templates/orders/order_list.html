@@ -518,9 +518,9 @@ RealtimeConnection.on('new_order', function(order) {
     row.dataset.orderId = order.order_id;
     row.className = 'new-order-highlight';
 
-    // The status select for a brand-new (pending) order offers preparing and
-    // cancelled. Build it the same way the inline status select in the table does.
-    const allowedNext = VALID_TRANSITIONS['pending'] || [];
+    // The status select for a brand-new (awaiting_payment) order — no
+    // status dropdown needed since payment confirmation handles the transition.
+    const allowedNext = VALID_TRANSITIONS[order.status] || [];
     let selectHtml = `<select name="status" class="form-control form-select" style="font-size:0.8rem;padding:5px 8px">
       <option value="pending" selected>Pending</option>
       ${allowedNext.map(v => `<option value="${v}">${STATUS_LABELS[v]}</option>`).join('')}
@@ -653,7 +653,7 @@ RealtimeConnection.on('status_changed', function(data) {
   }
 
   // ── 3. Quick-advance button ───────────────────────────────────────────
-  const forwardFlow = { pending: 'preparing', preparing: 'ready', ready: 'completed' };
+  const forwardFlow = { preparing: 'ready', ready: 'completed' };
   const nextStatus  = forwardFlow[newStatus];
   const advanceBtn  = row.querySelector('.btn-caramel[onclick*="quickAdvance"]');
   if (advanceBtn) {
@@ -682,11 +682,12 @@ RealtimeConnection.on('status_changed', function(data) {
 
   // Status dot colours (matches CSS badge colours)
   const STATUS_DOT = {
-    pending:   '#ffc107',
+    awaiting_payment: '#ffc107',
     preparing: '#0d6efd',
     ready:     '#198754',
     completed: '#198754',
     cancelled: '#dc3545',
+    pending:   '#ffc107',  // fallback for historical orders
   };
 
   function dot(status) {

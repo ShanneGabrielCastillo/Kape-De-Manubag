@@ -278,7 +278,8 @@ tbody tr:last-child { border-bottom: none; }
   letter-spacing: 0.05em;
   white-space: nowrap;
 }
-.badge-pending { background: #fff3cd; color: #856404; }
+.badge-awaiting-payment { background: #fff3cd; color: #856404; }
+.badge-pending { background: #fff3cd; color: #856404; } /* legacy: historical orders */
 .badge-preparing { background: #cfe2ff; color: #084298; }
 .badge-ready { background: #d1e7dd; color: #0a3622; }
 .badge-completed { background: #d1e7dd; color: #0a3622; }
@@ -1263,7 +1264,8 @@ tbody tr:last-child { border-bottom: none; }
 
 /* ── Queue / Tracker Status Variables ── */
 :root {
-  --status-pending:   #6c757d;
+  --status-awaiting-payment: #ffc107;
+  --status-pending:   #6c757d;  /* kept for historical order display */
   --status-queued:    #0d6efd;
   --status-preparing: #fd7e14;
   --status-ready:     #198754;

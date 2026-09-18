@@ -126,8 +126,8 @@ function showNewOrderNotification(order) {
     );
   }
   playNotificationSound();
-  // Pulse the pending badge in the sidebar if present
-  const badge = document.querySelector('.sidebar-link .badge-pending');
+  // Pulse the awaiting-payment badge in the sidebar if present
+  const badge = document.querySelector('.sidebar-link .badge-pending, .sidebar-link .badge-awaiting-payment');
   if (badge) {
     badge.classList.add('badge-pulse');
     setTimeout(() => badge.classList.remove('badge-pulse'), 1000);

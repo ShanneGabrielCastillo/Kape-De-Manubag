@@ -9,7 +9,8 @@
 .period-btn { padding:6px 14px; border-radius:20px; border:2px solid var(--cream); background:transparent; cursor:pointer; font-size:0.8rem; font-weight:600; color:var(--brown-mid); transition:all .2s; font-family:inherit; }
 .period-btn.active, .period-btn:hover { background:var(--brown-mid); color:var(--cream); border-color:var(--brown-mid); }
 .order-status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; }
-.dot-pending { background:#ffc107; }
+.dot-awaiting-payment { background:#ffc107; }
+.dot-pending { background:#ffc107; } /* legacy fallback */
 .dot-preparing { background:#0d6efd; }
 .dot-ready { background:#198754; }
 .dot-completed { background:#198754; }
@@ -315,7 +316,7 @@
     📋 Orders
     {% if pending_count %}
     {# Desktop: existing pill badge — unchanged #}
-    <span class="badge badge-pending dash-orders-pill" id="pending-count-value" style="margin-left:4px">{{ pending_count }} pending</span>
+    <span class="badge badge-awaiting-payment dash-orders-pill" id="pending-count-value" style="margin-left:4px">{{ pending_count }} awaiting payment</span>
     {# Mobile only: small circular counter badge top-right of the button #}
     <span class="dash-orders-dot" aria-label="{{ pending_count }} pending orders">{{ pending_count }}</span>
     {% endif %}
@@ -806,12 +807,12 @@
     if (count > 0) {
       if (!badge && btn) {
         badge = document.createElement('span');
-        badge.className = 'badge badge-pending dash-orders-pill';
+        badge.className = 'badge badge-awaiting-payment dash-orders-pill';
         badge.id = 'pending-count-value';
         badge.style.marginLeft = '4px';
         btn.appendChild(badge);
       }
-      if (badge) badge.textContent = count + ' pending';
+      if (badge) badge.textContent = count + ' awaiting payment';
     } else if (badge) {
       badge.remove();
     }
@@ -825,7 +826,7 @@
       }
       if (dot) {
         dot.textContent = count;
-        dot.setAttribute('aria-label', count + ' pending orders');
+        dot.setAttribute('aria-label', count + ' orders awaiting payment');
       }
     } else if (dot) {
       dot.remove();
@@ -900,8 +901,8 @@
           <td>${escHtml(order.customer_name)}</td>
           <td><span class="badge badge-preparing">${escHtml(order.order_type)}</span></td>
           <td style="font-weight:700">₱${Number(order.total).toFixed(2)}</td>
-          <td><span class="badge badge-pending">
-            <span class="order-status-dot dot-pending"></span>Pending
+          <td><span class="badge badge-awaiting-payment">
+            <span class="order-status-dot dot-awaiting-payment"></span>Awaiting Payment
           </span></td>
           <td style="color:#aaa;font-size:0.8rem">Just now</td>
         `;

@@ -16,7 +16,6 @@ from apps.menu.models import Product
 class Order(models.Model):
     STATUS_CHOICES = [
         ('awaiting_payment', 'Awaiting Payment'),
-        ('pending',          'Pending'),
         ('preparing',        'Preparing'),
         ('ready',            'Ready'),
         ('completed',        'Completed'),
@@ -144,7 +143,7 @@ class Order(models.Model):
         self.save(update_fields=['subtotal', 'packaging_fee', 'total'])
 
     def get_queue_position(self):
-        active = ['pending', 'preparing']
+        active = ['awaiting_payment', 'preparing']
         if self.status not in active:
             return 0
         ahead = Order.objects.filter(
@@ -156,7 +155,6 @@ class Order(models.Model):
     @property
     def next_status(self):
         flow = {
-            'pending':   'preparing',
             'preparing': 'ready',
             'ready':     'completed',
         }
@@ -165,12 +163,12 @@ class Order(models.Model):
     @property
     def status_emoji(self):
         return {
-            'pending':   '\U0001f550',   # 🕐
-            'preparing': '\U0001f373',   # 🍳
-            'ready':     '\u2705',       # ✅
-            'completed': '\U0001f389',   # 🎉
-            'cancelled': '\u274c',       # ❌
-        }.get(self.status, '\U0001f550')
+            'awaiting_payment': '\U0001f4b3',  # 💳
+            'preparing':        '\U0001f373',  # 🍳
+            'ready':            '\u2705',      # ✅
+            'completed':        '\U0001f389',  # 🎉
+            'cancelled':        '\u274c',      # ❌
+        }.get(self.status, '\U0001f4b3')
 
     @property
     def is_customer_order(self):

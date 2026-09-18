@@ -106,9 +106,9 @@ def _sales_stats():
 
 
 def _status_counts():
-    """Pending/preparing order counts — one aggregate query."""
+    """Awaiting-payment/preparing order counts — one aggregate query."""
     counts = Order.objects.aggregate(
-        pending=Count('id', filter=Q(status='pending')),
+        pending=Count('id', filter=Q(status='awaiting_payment')),
         preparing=Count('id', filter=Q(status='preparing')),
     )
     return counts['pending'] or 0, counts['preparing'] or 0
