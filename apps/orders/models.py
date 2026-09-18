@@ -15,11 +15,12 @@ from apps.menu.models import Product
 
 class Order(models.Model):
     STATUS_CHOICES = [
-        ('pending',   'Pending'),
-        ('preparing', 'Preparing'),
-        ('ready',     'Ready'),
-        ('completed', 'Completed'),
-        ('cancelled', 'Cancelled'),
+        ('awaiting_payment', 'Awaiting Payment'),
+        ('pending',          'Pending'),
+        ('preparing',        'Preparing'),
+        ('ready',            'Ready'),
+        ('completed',        'Completed'),
+        ('cancelled',        'Cancelled'),
     ]
 
     ORDER_TYPE_CHOICES = [

@@ -892,8 +892,9 @@ def process_payment(request, pk):
         # POS orders (placed by staff, cashier is set) complete immediately
         # on payment — the legacy single-step POS workflow is unchanged.
         if order.status == 'awaiting_payment':
-            # Customer order: payment confirmed + auto-accepted in one step.
-            order.status = 'pending'
+            # Customer order: payment confirmed → automatically move to
+            # preparing so the kitchen starts immediately.
+            order.status = 'preparing'
             order.cashier = request.user
             order.save()
         else:
@@ -911,15 +912,15 @@ def process_payment(request, pk):
                 f'₱{order.amount_paid} — Change ₱{order.change_amount}'
             ),
         )
-        if order.status == 'pending':
-            # Auto-accepted — log the acceptance too so the audit trail is clear.
+        if order.status == 'preparing':
+            # Auto-accepted and moved to preparing.
             log_action(
                 request.user, 'order.accepted', order,
-                detail='Auto-accepted on payment confirmation.',
+                detail='Payment confirmed — order auto-accepted and moved to Preparing.',
             )
 
-        # Broadcast payment_confirmed + order_accepted together so the
-        # customer's waiting page transitions straight to "Order Received".
+        # Broadcast payment_confirmed + order_accepted so the customer's
+        # waiting page transitions straight to "Order Received".
         from apps.realtime.broker import publish as rt_publish
         rt_publish('payment_confirmed', {
             'order_id':     order.pk,
@@ -927,7 +928,7 @@ def process_payment(request, pk):
             'is_paid':      True,
             'status':       order.status,
         })
-        if order.status == 'pending':
+        if order.status == 'preparing':
             rt_publish('order_accepted', {
                 'order_id':           order.pk,
                 'order_number':       order.order_number,

@@ -66,9 +66,10 @@ def create_order_item(order, product, size, quantity):
 # is_paid flag is set to True while the order remains PENDING.  The cashier
 # then accepts the order, which moves it from PENDING → PREPARING.
 VALID_TRANSITIONS: dict[str, set[str]] = {
-    'pending':   {'preparing', 'cancelled'},
-    'preparing': {'ready',     'cancelled'},
-    'ready':     {'completed', 'cancelled'},
+    'awaiting_payment': {'preparing', 'cancelled'},   # payment confirms → auto-preparing
+    'pending':          {'preparing', 'cancelled'},
+    'preparing':        {'ready',     'cancelled'},
+    'ready':            {'completed', 'cancelled'},
     'completed': set(),   # terminal state — no further transitions
     'cancelled': set(),   # terminal state — no further transitions
 }
@@ -107,14 +108,14 @@ def validate_status_transition(current_status: str, new_status: str, order=None)
         )
 
     # ── Business-rule: pending → preparing requires payment for customer orders.
-    # Customer orders (cashier is None) start as PENDING + UNPAID.  The cashier
-    # must confirm payment (is_paid=True) before accepting the order into the
-    # preparation queue.  This gate is enforced server-side so it cannot be
-    # bypassed by hiding a UI button.
-    if new_status == 'preparing' and current_status == 'pending':
-        if order is not None and order.cashier_id is None and not order.is_paid:
+    # ── Business-rule: awaiting_payment → preparing requires is_paid=True.
+    # process_payment sets is_paid=True and transitions to preparing in one
+    # atomic step, so this gate only fires if something tries to manually
+    # advance an unpaid awaiting_payment order to preparing.
+    if new_status == 'preparing' and current_status == 'awaiting_payment':
+        if order is not None and not order.is_paid:
             raise ValueError(
-                "Cannot accept order: payment has not been confirmed yet. "
+                "Cannot start preparation: payment has not been confirmed yet. "
                 "Please process the payment first."
             )
 
