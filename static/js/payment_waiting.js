@@ -219,9 +219,9 @@
       } catch (err) { /* ignore parse errors */ }
     });
 
-    // status_changed covers the PENDING → PREPARING transition emitted by
-    // the post_save signal.  Use it as a fallback in case the dedicated
-    // order_accepted event was missed.
+    // status_changed covers the awaiting_payment → preparing transition
+    // emitted by the post_save signal. Use it as a fallback in case the
+    // dedicated order_accepted event was missed.
     sseSource.addEventListener('status_changed', function (e) {
       try {
         const data = JSON.parse(e.data);
@@ -229,11 +229,11 @@
         const newStatus = data.new_status;
         if (newStatus === 'cancelled') {
           applyOrderCancelled();
-        } else if (newStatus === 'pending') {
-          // Still pending — poll for full data (e.g. is_paid may have changed)
+        } else if (newStatus === 'awaiting_payment') {
+          // Still awaiting payment — poll for full data (is_paid may have changed)
           poll();
         } else {
-          // Status moved past pending (preparing/ready/completed) → order accepted
+          // Status moved past awaiting_payment → order accepted, go to tracker
           applyOrderAccepted(config.trackerUrl);
         }
       } catch (err) { /* ignore parse errors */ }
@@ -246,15 +246,15 @@
 
   // ── Bootstrap ─────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', function () {
-    // If the order is already past pending on page load (e.g. the customer
-    // refreshed after the order was already accepted into preparing), redirect
-    // to the tracker immediately.
-    if (currentStatus !== 'pending' && currentStatus !== 'cancelled') {
-      applyOrderAccepted(config.trackerUrl);
-      return;
-    }
+    // If the order is no longer awaiting_payment on page load
+    // (customer refreshed after payment was already confirmed), go
+    // straight to the tracker.
     if (currentStatus === 'cancelled') {
       applyOrderCancelled();
+      return;
+    }
+    if (currentStatus !== 'awaiting_payment') {
+      applyOrderAccepted(config.trackerUrl);
       return;
     }
 

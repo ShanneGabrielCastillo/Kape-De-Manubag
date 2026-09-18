@@ -304,13 +304,11 @@ def checkout_view(request):
         duplicate = Order.objects.filter(request_token=posted_token).first()
         if duplicate:
             request.session['last_order_id'] = duplicate.pk
-            # Route to payment-waiting for customer orders that are still in
-            # the pending (payment required / payment confirmed) stage.
-            # Once the order has moved to preparing or beyond, send to the
-            # tracker instead.
-            if duplicate.cashier_id is None and duplicate.status == 'pending':
+            # Payment-first: awaiting_payment orders → payment waiting page.
+            if duplicate.status == 'awaiting_payment':
                 return redirect('orders:payment_waiting', tracking_token=duplicate.tracking_token)
-            if duplicate.cashier_id is None and duplicate.status not in ('pending', 'cancelled'):
+            # Already past payment → tracker.
+            if duplicate.status not in ('cancelled',):
                 return redirect('orders:order_tracker', tracking_token=duplicate.tracking_token)
             return redirect('orders:order_success', pk=duplicate.pk)
 
@@ -535,9 +533,9 @@ def checkout_view(request):
                 )
                 if duplicate:
                     request.session['last_order_id'] = duplicate.pk
-                    if duplicate.cashier_id is None and duplicate.status == 'pending':
+                    if duplicate.status == 'awaiting_payment':
                         return redirect('orders:payment_waiting', tracking_token=duplicate.tracking_token)
-                    if duplicate.cashier_id is None and duplicate.status not in ('pending', 'cancelled'):
+                    if duplicate.status not in ('cancelled',):
                         return redirect('orders:order_tracker', tracking_token=duplicate.tracking_token)
                     return redirect('orders:order_success', pk=duplicate.pk)
                 messages.error(
@@ -664,10 +662,10 @@ def api_payment_waiting_status(request, tracking_token):
         'status':            order.status,
         'status_display':    order.get_status_display(),
         'is_paid':           order.is_paid,
-        # True once the cashier has accepted the order (moved to preparing or
-        # beyond).  The waiting page uses this to show the "Order Received"
-        # overlay and redirect to the tracker.
-        'order_accepted':    order.status not in ('pending', 'cancelled'),
+        # True once the cashier has confirmed payment (order moved to
+        # preparing or beyond). The waiting page uses this to show the
+        # "Order Received" overlay and redirect to the tracker.
+        'order_accepted':    order.status not in ('awaiting_payment', 'cancelled'),
         'is_cancelled':      order.status == 'cancelled',
         'tracker_url':       f'/orders/track/{order.tracking_token}/',
     })
