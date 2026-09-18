@@ -9,7 +9,8 @@
   const config = window.TRACKER_CONFIG;
   if (!config) return;
 
-  const STATUS_ORDER = ['pending', 'preparing', 'ready'];
+  // Steps: Preparing (index 0) → Ready (index 1) → Complete (index 2)
+  const STATUS_ORDER = ['preparing', 'ready', 'completed'];
 
   let previousStatus  = config.initialStatus;
   let pollTimer       = null;
@@ -50,9 +51,6 @@
       if (i < idx)        step.classList.add('step-done');
       else if (i === idx) step.classList.add('step-active');
     });
-    if (status === 'completed' || status === 'ready') {
-      steps[2] && steps[2].classList.add('step-active');
-    }
   }
 
   // ── Ready transition (fires only once) ───────────────────────────────────

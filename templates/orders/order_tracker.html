@@ -201,19 +201,19 @@
   <!-- Progress Steps -->
   <div class="tracker-steps">
     {% with current=order.status %}
-    <div class="tracker-step {% if current in 'preparing,ready,completed' %}step-done{% endif %} {% if current == 'pending' %}step-active{% endif %}">
-      <div class="step-dot">🕐</div>
-      <div class="step-label">Received</div>
-    </div>
-    <div class="tracker-step-line"></div>
     <div class="tracker-step {% if current in 'ready,completed' %}step-done{% endif %} {% if current == 'preparing' %}step-active{% endif %}">
       <div class="step-dot">🍳</div>
       <div class="step-label">Preparing</div>
     </div>
     <div class="tracker-step-line"></div>
-    <div class="tracker-step {% if current in 'ready,completed' %}step-done{% endif %} {% if current == 'ready' %}step-active{% endif %}">
+    <div class="tracker-step {% if current == 'completed' %}step-done{% endif %} {% if current == 'ready' %}step-active{% endif %}">
       <div class="step-dot">✅</div>
       <div class="step-label">Ready!</div>
+    </div>
+    <div class="tracker-step-line"></div>
+    <div class="tracker-step {% if current == 'completed' %}step-active{% endif %}">
+      <div class="step-dot">🎉</div>
+      <div class="step-label">Complete</div>
     </div>
     {% endwith %}
   </div>
