@@ -162,13 +162,6 @@
       </div>
     </div>
     {% endif %}
-    <div class="card">
-      <div class="card-body">
-        <span class="badge badge-paid" style="font-size:0.9rem;padding:6px 14px">✓ Paid via {{ order.get_payment_method_display }}</span>
-        <p style="margin-top:8px;font-size:0.85rem;color:#aaa">Change given: ₱{{ order.change_amount|floatformat:2 }}</p>
-      </div>
-    </div>
-    {% endif %}
   </div>
 </div>
 
