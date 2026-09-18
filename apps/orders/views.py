@@ -885,14 +885,16 @@ def process_payment(request, pk):
 
         # ── Customer order vs POS order ──────────────────────────────────────
         # Customer orders (placed anonymously via checkout, cashier is None)
-        # use the payment-first two-step: confirming payment keeps the order
-        # in PENDING so staff can explicitly accept it (PENDING → PREPARING).
+        # now auto-accept on payment: confirming payment moves the order
+        # straight from awaiting_payment → pending so the kitchen can start
+        # immediately.  No separate "Accept Order" step is needed.
         #
         # POS orders (placed by staff, cashier is set) complete immediately
         # on payment — the legacy single-step POS workflow is unchanged.
-        if order.cashier_id is None:
-            # Customer order: payment confirmed; order stays PENDING and waits
-            # for staff acceptance.  Do not change status here.
+        if order.status == 'awaiting_payment':
+            # Customer order: payment confirmed + auto-accepted in one step.
+            order.status = 'pending'
+            order.cashier = request.user
             order.save()
         else:
             # POS order: completing on payment is the legacy behaviour.
@@ -902,9 +904,6 @@ def process_payment(request, pk):
             order.save()
 
         # ── Audit log ────────────────────────────────────────────────────────
-        # Placed inside the transaction so the audit entry is automatically
-        # rolled back if the payment save fails for any reason.
-        # No sensitive data is recorded — amounts are business data, not credentials.
         log_action(
             request.user, 'order.payment', order,
             detail=(
@@ -912,10 +911,15 @@ def process_payment(request, pk):
                 f'₱{order.amount_paid} — Change ₱{order.change_amount}'
             ),
         )
+        if order.status == 'pending':
+            # Auto-accepted — log the acceptance too so the audit trail is clear.
+            log_action(
+                request.user, 'order.accepted', order,
+                detail='Auto-accepted on payment confirmation.',
+            )
 
-        # Broadcast a dedicated payment_confirmed event so the customer's
-        # waiting page can transition from "Awaiting Payment" to
-        # "Payment Confirmed" in real time without polling.
+        # Broadcast payment_confirmed + order_accepted together so the
+        # customer's waiting page transitions straight to "Order Received".
         from apps.realtime.broker import publish as rt_publish
         rt_publish('payment_confirmed', {
             'order_id':     order.pk,
@@ -923,14 +927,18 @@ def process_payment(request, pk):
             'is_paid':      True,
             'status':       order.status,
         })
+        if order.status == 'pending':
+            rt_publish('order_accepted', {
+                'order_id':           order.pk,
+                'order_number':       order.order_number,
+                'new_status':         order.status,
+                'new_status_display': order.get_status_display(),
+            })
 
     return JsonResponse({
         'success': True,
         'change': float(order.change_amount),
         'order_number': order.order_number,
-        # Tell the client whether the order is a customer order waiting for
-        # cashier acceptance (PENDING + PAID) or a POS order already completed.
-        'awaiting_acceptance': order.cashier_id is None,
     })
 
 
