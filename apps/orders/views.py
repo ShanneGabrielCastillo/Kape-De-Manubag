@@ -506,15 +506,18 @@ def checkout_view(request):
                     def _broadcast_new_order():
                         from apps.realtime.broker import publish as rt_publish
                         rt_publish('new_order', {
-                            'order_id':      order.pk,
-                            'order_number':  order.order_number,
-                            'queue_number':  order.queue_number,
-                            'customer_name': order.customer_name,
-                            'order_type':    order.get_order_type_display(),
-                            'total':         float(order.total),
-                            'status':        order.status,
-                            'created_at':    order.created_at.isoformat(),
-                            'request_token': order.request_token,
+                            'order_id':       order.pk,
+                            'order_number':   order.order_number,
+                            'queue_number':   order.queue_number,
+                            'customer_name':  order.customer_name,
+                            'order_type':     order.get_order_type_display(),
+                            'total':          float(order.total),
+                            'item_count':     order.items.count(),
+                            'status':         order.status,
+                            'status_display': order.get_status_display(),
+                            'is_paid':        order.is_paid,
+                            'created_at':     order.created_at.isoformat(),
+                            'request_token':  order.request_token,
                         })
                     transaction.on_commit(_broadcast_new_order)
             except ValueError as e:
@@ -1158,15 +1161,18 @@ def create_pos_order(request):
             def _broadcast_pos_order():
                 from apps.realtime.broker import publish as rt_publish
                 rt_publish('new_order', {
-                    'order_id':      order.pk,
-                    'order_number':  order.order_number,
-                    'queue_number':  order.queue_number,
-                    'customer_name': order.customer_name,
-                    'order_type':    order.get_order_type_display(),
-                    'total':         float(order.total),
-                    'status':        order.status,
-                    'created_at':    order.created_at.isoformat(),
-                    'request_token': order.request_token,
+                    'order_id':       order.pk,
+                    'order_number':   order.order_number,
+                    'queue_number':   order.queue_number,
+                    'customer_name':  order.customer_name,
+                    'order_type':     order.get_order_type_display(),
+                    'total':          float(order.total),
+                    'item_count':     order.items.count(),
+                    'status':         order.status,
+                    'status_display': order.get_status_display(),
+                    'is_paid':        order.is_paid,
+                    'created_at':     order.created_at.isoformat(),
+                    'request_token':  order.request_token,
                 })
             transaction.on_commit(_broadcast_pos_order)
     except ValueError as e:

@@ -515,7 +515,24 @@ RealtimeConnection.on('new_order', function(order) {
     if (tbody.querySelector(`tr[data-order-id="${order.order_id}"]`)) return;
 
     const row = document.createElement('tr');
-    row.dataset.orderId = order.order_id;
+    row.dataset.orderId      = order.order_id;
+    row.dataset.orderNumber  = order.order_number  || '';
+    row.dataset.customer     = order.customer_name || '';
+    row.dataset.orderType    = order.order_type    || '';
+    row.dataset.itemCount    = order.item_count    != null ? order.item_count : '—';
+    row.dataset.total        = order.total != null ? `₱${Number(order.total).toFixed(2)}` : '—';
+    row.dataset.totalRaw     = order.total         || '0';
+    row.dataset.status       = order.status        || 'awaiting_payment';
+    row.dataset.statusDisplay= order.status_display || (STATUS_LABELS[order.status] || order.status);
+    row.dataset.nextStatus   = '';
+    row.dataset.date         = 'Just now';
+    row.dataset.detailUrl    = detailUrl;
+    row.dataset.receiptUrl   = receiptUrl;
+    row.dataset.advanceUrl   = advanceUrl;
+    row.dataset.payUrl       = payUrl;
+    row.dataset.acceptUrl    = acceptUrl;
+    row.dataset.statusUrl    = statusFormUrl;
+    row.dataset.isPaid       = order.is_paid ? 'true' : 'false';
     row.className = 'new-order-highlight';
 
     // The status select for a brand-new (awaiting_payment) order — no
@@ -563,11 +580,15 @@ RealtimeConnection.on('new_order', function(order) {
         </div>`;
     }
 
+    const itemCountDisplay = order.item_count != null
+      ? `${order.item_count} item${order.item_count === 1 ? '' : 's'}`
+      : '—';
+
     row.innerHTML = `
       <td><a href="${detailUrl}" style="font-weight:700;color:var(--caramel)">${escHtml(order.order_number)}</a></td>
       <td>${escHtml(order.customer_name)}</td>
       <td><div>${escHtml(order.order_type)}</div></td>
-      <td>—</td>
+      <td>${itemCountDisplay}</td>
       <td style="font-weight:700">₱${Number(order.total).toFixed(2)}</td>
       <td>${statusCellHtml}</td>
       <td>${paymentCellHtml}</td>
