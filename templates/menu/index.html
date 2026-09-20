@@ -134,9 +134,19 @@
         <div class="kdm-chat-header-sub">Ask me anything about our menu!</div>
       </div>
     </div>
-    <button id="kdm-chat-close"
-            class="kdm-chat-close"
-            aria-label="Close chat assistant">×</button>
+    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+      <select id="kdm-lang-select"
+              class="kdm-lang-select"
+              aria-label="Select response language"
+              title="Select language">
+        <option value="en">English</option>
+        <option value="tl">Tagalog</option>
+        <option value="ceb">Bisaya</option>
+      </select>
+      <button id="kdm-chat-close"
+              class="kdm-chat-close"
+              aria-label="Close chat assistant">×</button>
+    </div>
   </div>
 
   {# Messages #}

@@ -21,7 +21,29 @@
   // ── State ─────────────────────────────────────────────────────────────────
   let isOpen     = false;
   let isSending  = false;
-  let hasOpened  = false;   // whether the user has ever opened the chat
+  let hasOpened  = false;
+
+  // Language preference — persisted in localStorage, default 'en'
+  const LS_LANG_KEY    = 'kdm_chat_lang';
+  const LANG_NAMES     = { en: 'English', tl: 'Tagalog', ceb: 'Bisaya' };
+  const ALLOWED_LANGS  = new Set(['en', 'tl', 'ceb']);
+
+  function getSavedLang() {
+    const v = localStorage.getItem(LS_LANG_KEY);
+    return ALLOWED_LANGS.has(v) ? v : 'en';
+  }
+  function saveLang(code) {
+    if (ALLOWED_LANGS.has(code)) localStorage.setItem(LS_LANG_KEY, code);
+  }
+
+  let currentLang = getSavedLang();
+
+  // Language-change confirmation messages
+  const LANG_CONFIRM = {
+    en:  'Language changed to English. How can I help you?',
+    tl:  'Napalitan na ang wika sa Tagalog. Paano kita matutulungan?',
+    ceb: 'Nabag-o na ang pinulongan ngadto sa Bisaya. Unsa akong ikatabang nimo?',
+  };
 
   const CSRF_TOKEN = (function () {
     // Read the CSRF token from the cookie — same approach as main.js
@@ -184,7 +206,7 @@
         'Content-Type': 'application/json',
         'X-CSRFToken': CSRF_TOKEN,
       },
-      body: JSON.stringify({ message: text }),
+      body: JSON.stringify({ message: text, language: currentLang }),
     })
       .then(function (res) {
         // Handle rate limit, server errors etc.
@@ -242,6 +264,27 @@
   if (sendBtn) {
     sendBtn.addEventListener('click', function () {
       sendMessage(inputEl ? inputEl.value : '');
+    });
+  }
+
+  // ── Language selector ─────────────────────────────────────────────────────
+  const langSelect = document.getElementById('kdm-lang-select');
+
+  if (langSelect) {
+    // Set the saved value on page load
+    langSelect.value = currentLang;
+
+    langSelect.addEventListener('change', function () {
+      const newLang = langSelect.value;
+      if (!ALLOWED_LANGS.has(newLang) || newLang === currentLang) return;
+
+      currentLang = newLang;
+      saveLang(newLang);
+
+      // Show confirmation in the new language (does NOT reset conversation)
+      const confirmMsg = LANG_CONFIRM[newLang] || LANG_CONFIRM.en;
+      appendBotMessage(confirmMsg);
+      scrollToBottom();
     });
   }
 

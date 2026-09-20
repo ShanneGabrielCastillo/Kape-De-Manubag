@@ -17,7 +17,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_POST
 
-from .service import get_chatbot_response, MAX_MESSAGE_LENGTH, MAX_HISTORY_TURNS
+from .service import get_chatbot_response, MAX_MESSAGE_LENGTH, MAX_HISTORY_TURNS, ALLOWED_LANGUAGES, DEFAULT_LANGUAGE
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,8 @@ RATE_LIMIT_WINDOW_SECONDS = 60
 RATE_LIMIT_MAX = 15   # max messages per minute per session
 
 SESSION_CHAT_HISTORY_KEY = 'chatbot_history'
-SESSION_RATE_KEY = 'chatbot_rate'
+SESSION_RATE_KEY         = 'chatbot_rate'
+SESSION_LANGUAGE_KEY     = 'chatbot_language'
 
 
 def _check_rate_limit(request) -> bool:
@@ -80,6 +81,19 @@ def chatbot_message(request):
     message = str(body.get('message', '')).strip()
     reset = bool(body.get('reset', False))
 
+    # Language: validate against allowlist — never trust raw client value
+    raw_lang = str(body.get('language', '')).strip().lower()
+    language = raw_lang if raw_lang in ALLOWED_LANGUAGES else None
+
+    # If not supplied or invalid, use session value; fall back to default
+    if not language:
+        language = request.session.get(SESSION_LANGUAGE_KEY, DEFAULT_LANGUAGE)
+    if language not in ALLOWED_LANGUAGES:
+        language = DEFAULT_LANGUAGE
+
+    # Persist validated language in session
+    request.session[SESSION_LANGUAGE_KEY] = language
+
     # Manage history
     if reset:
         request.session[SESSION_CHAT_HISTORY_KEY] = []
@@ -104,7 +118,7 @@ def chatbot_message(request):
 
     # Get response
     try:
-        response_text, intent = get_chatbot_response(message, history)
+        response_text, intent = get_chatbot_response(message, history, language)
     except Exception:
         logger.exception('Unexpected chatbot error')
         return JsonResponse({
