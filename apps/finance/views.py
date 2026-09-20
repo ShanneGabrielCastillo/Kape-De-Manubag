@@ -449,7 +449,7 @@ def finance_history(request):
     if q:
         records = records.filter(date__icontains=q)
 
-    paginator = Paginator(records, 31)
+    paginator = Paginator(records, 10)
     page = request.GET.get('page', 1)
     records_page = paginator.get_page(page)
 

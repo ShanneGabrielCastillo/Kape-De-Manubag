@@ -83,7 +83,7 @@ def activity_log(request):
     - Category filter (maps to sets of action strings)
     - User filter (by staff user pk)
     - Date range filter (date_from / date_to)
-    - Pagination: 50 entries per page, newest first
+    - Pagination: 10 entries per page, newest first
 
     Access is enforced server-side by @admin_required. A cashier who
     navigates directly to /audit/ is redirected to the dashboard with
@@ -117,7 +117,7 @@ def activity_log(request):
     if date_to:
         qs = qs.filter(created_at__date__lte=date_to)
 
-    paginator = Paginator(qs, 50)
+    paginator = Paginator(qs, 10)
     page_number = request.GET.get('page', 1)
     logs_page = paginator.get_page(page_number)
 

@@ -362,29 +362,20 @@
           <td>{{ order.item_count }} items</td>
           <td style="font-weight:700">₱{{ order.total|floatformat:2 }}</td>
           <td>
-            <form class="status-update-form" data-order-id="{{ order.pk }}" data-url="{% url 'orders:update_status' order.pk %}" style="display:flex;flex-direction:column;gap:4px">
-              {% csrf_token %}
-              {% if order.status == 'completed' or order.status == 'cancelled' %}
-              <span class="badge {% if order.status == 'completed' %}badge-ready{% else %}badge-cancelled{% endif %}" style="font-size:0.8rem;padding:5px 10px">{{ order.get_status_display }}</span>
-              {% else %}
-              <div style="display:flex;gap:6px;align-items:center">
-                <select name="status" class="form-control form-select" style="font-size:0.8rem;padding:5px 8px">
-                  <option value="{{ order.status }}" selected>{{ order.get_status_display }}</option>
-                  {% for value, label in status_choices %}{% if value != order.status %}<option value="{{ value }}">{{ label }}</option>{% endif %}{% endfor %}
-                </select>
-                {% if order.next_status %}<button type="submit" class="btn btn-sm btn-primary">✓</button>{% endif %}
-              </div>
-              {# Inline hint shown by JS when Completed is selected but order is unpaid #}
-              <div class="complete-unpaid-hint" style="display:none;font-size:0.75rem;color:var(--red-accent);background:#fff5f5;border:1px solid #fcc;border-radius:6px;padding:5px 8px;line-height:1.4">
-                ⚠️ Cannot mark as Completed — this order is not paid yet. Please collect payment first.
-              </div>
-              {% endif %}
-            </form>
+            {% if order.status == 'completed' %}
+              <span class="badge badge-ready" style="font-size:0.8rem;padding:5px 10px">{{ order.get_status_display }}</span>
+            {% elif order.status == 'cancelled' %}
+              <span class="badge badge-cancelled" style="font-size:0.8rem;padding:5px 10px">{{ order.get_status_display }}</span>
+            {% elif order.status == 'awaiting_payment' %}
+              <span class="badge" style="background:#fff3cd;color:#856404;font-size:0.8rem;padding:5px 10px">{{ order.get_status_display }}</span>
+            {% else %}
+              <span class="badge badge-{{ order.status }}" style="font-size:0.8rem;padding:5px 10px">{{ order.get_status_display }}</span>
+            {% endif %}
           </td>
           <td>
             {% if order.status == 'awaiting_payment' %}
               {# One button: confirming payment auto-accepts #}
-              <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}')" class="btn btn-sm btn-caramel">💳 Pay &amp; Accept</button>
+              <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}')" class="btn btn-sm btn-caramel">💳 Pay</button>
             {% elif order.is_paid %}
               <span class="badge badge-paid">Paid</span>
             {% elif order.status != 'cancelled' %}
@@ -398,6 +389,9 @@
               <a href="{% url 'orders:print_receipt' order.pk %}" class="btn btn-sm btn-outline" target="_blank">🖨️</a>
               {% if order.next_status %}
               <button onclick="quickAdvance('{% url 'orders:quick_status_advance' order.pk %}', this)" class="btn btn-sm btn-caramel" title="Advance to {{ order.next_status }}" data-next-status="{{ order.next_status }}" data-is-paid="{{ order.is_paid|yesno:'true,false' }}">▶ {{ order.next_status|title }}</button>
+              {% endif %}
+              {% if order.status not in 'completed,cancelled' %}
+              <button onclick="cancelOrder({{ order.pk }}, '{% url 'orders:update_status' order.pk %}')" class="btn btn-sm" style="background:#fff0f0;color:var(--red-accent);border:1px solid #fcc" title="Cancel order">✕ Cancel</button>
               {% endif %}
             </div>
           </td>
@@ -413,12 +407,12 @@
 <!-- Pagination -->
 {% if orders.has_other_pages %}
 <div class="pagination">
-  {% if orders.has_previous %}<a href="?page={{ orders.previous_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="page-link">‹ Prev</a>{% endif %}
+  {% if orders.has_previous %}<a href="?page={{ orders.previous_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}" class="page-link">‹ Prev</a>{% endif %}
   {% for num in orders.paginator.page_range %}
     {% if orders.number == num %}<span class="page-link active">{{ num }}</span>
-    {% elif num > orders.number|add:'-3' and num < orders.number|add:'3' %}<a href="?page={{ num }}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="page-link">{{ num }}</a>{% endif %}
+    {% elif num > orders.number|add:'-3' and num < orders.number|add:'3' %}<a href="?page={{ num }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}" class="page-link">{{ num }}</a>{% endif %}
   {% endfor %}
-  {% if orders.has_next %}<a href="?page={{ orders.next_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="page-link">Next ›</a>{% endif %}
+  {% if orders.has_next %}<a href="?page={{ orders.next_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}" class="page-link">Next ›</a>{% endif %}
 </div>
 {% endif %}
 
@@ -471,18 +465,23 @@ async function quickAdvance(url, btn) {
   }
 }
 
-// ── Accept paid awaiting_payment order (list-page shortcut) ───────────────
-async function acceptOrderList(orderId, url) {
+// ── Cancel order ──────────────────────────────────────────────────────────
+async function cancelOrder(orderId, url) {
+  if (!confirm('Cancel this order? This cannot be undone.')) return;
   const r = await fetch(url, {
     method: 'POST',
-    headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+    headers: {
+      'X-CSRFToken': '{{ csrf_token }}',
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: 'status=cancelled',
   });
   const d = await r.json();
   if (d.success) {
-    showToast(`Order accepted — now ${d.new_status_display}!`, 'success');
+    showToast('Order cancelled.', 'info');
     setTimeout(() => location.reload(), 800);
   } else {
-    showToast(d.error || 'Could not accept order', 'error');
+    showToast(d.error || 'Could not cancel order', 'error');
   }
 }
 
@@ -558,7 +557,7 @@ RealtimeConnection.on('new_order', function(order) {
 
     if (isAwaitingPayment) {
       statusCellHtml = `<span class="badge" style="background:#fff3cd;color:#856404;font-size:0.8rem;padding:5px 10px">💳 Awaiting Payment</span>`;
-      paymentCellHtml = `<button onclick="openPaymentModal(${order.order_id}, ${Number(order.total).toFixed(2)}, '${payUrl}')" class="btn btn-sm btn-caramel">💳 Pay &amp; Accept</button>`;
+      paymentCellHtml = `<button onclick="openPaymentModal(${order.order_id}, ${Number(order.total).toFixed(2)}, '${payUrl}')" class="btn btn-sm btn-caramel">💳 Pay</button>`;
       actionCellHtml = `
         <div style="display:flex;gap:4px;flex-wrap:wrap">
           <a href="${detailUrl}" class="btn btn-sm btn-outline">View</a>
@@ -612,49 +611,34 @@ RealtimeConnection.on('new_order', function(order) {
 
 // ── Real-time: status changed ──────────────────────────────────────────────
 // 1. Update the status badge in the Status column.
-// 2. Rebuild the status select to show only transitions valid from the NEW
-//    status, or replace it with a read-only badge for terminal states.
-// 3. Show/hide the submit button and quick-advance button accordingly.
-// 4. Update pay/accept buttons in the payment column based on new state.
+// 2. Update the Payment column.
+// 3. Update the quick-advance and cancel buttons in the Actions column.
 RealtimeConnection.on('status_changed', function(data) {
   const row = document.querySelector(`tr[data-order-id="${data.order_id}"]`);
   if (!row) return;
 
   const newStatus   = data.new_status;
   const isPaid      = data.is_paid;
-  const allowedNext = VALID_TRANSITIONS[newStatus] || [];
-  const isTerminal  = allowedNext.length === 0;
+  const isTerminal  = newStatus === 'completed' || newStatus === 'cancelled';
 
-  // ── 1. Status column ──────────────────────────────────────────────────
-  const form = row.querySelector('.status-update-form');
-
-  if (form) {
-    if (isTerminal) {
-      const badgeClass = newStatus === 'completed' ? 'badge-ready' : 'badge-cancelled';
-      form.innerHTML = `<span class="badge ${badgeClass}" style="font-size:0.8rem;padding:5px 10px">${escHtml(data.new_status_display)}</span>`;
+  // ── 1. Status column — plain badge, no dropdown ───────────────────────
+  const statusCell = row.cells[5]; // STATUS column index
+  if (statusCell) {
+    let badgeClass, badgeStyle;
+    if (newStatus === 'completed') {
+      badgeClass = 'badge badge-ready';
+      badgeStyle = 'font-size:0.8rem;padding:5px 10px';
+    } else if (newStatus === 'cancelled') {
+      badgeClass = 'badge badge-cancelled';
+      badgeStyle = 'font-size:0.8rem;padding:5px 10px';
+    } else if (newStatus === 'awaiting_payment') {
+      badgeClass = 'badge';
+      badgeStyle = 'background:#fff3cd;color:#856404;font-size:0.8rem;padding:5px 10px';
     } else {
-      const oldSelect = form.querySelector('select[name="status"]');
-      const submitBtn = form.querySelector('button[type="submit"]');
-      if (oldSelect) {
-        const newSelect = document.createElement('select');
-        newSelect.name = 'status';
-        newSelect.className = oldSelect.className;
-        newSelect.setAttribute('style', oldSelect.getAttribute('style') || '');
-        const currentOpt = document.createElement('option');
-        currentOpt.value = newStatus;
-        currentOpt.textContent = data.new_status_display;
-        currentOpt.selected = true;
-        newSelect.appendChild(currentOpt);
-        allowedNext.forEach(v => {
-          const opt = document.createElement('option');
-          opt.value = v;
-          opt.textContent = STATUS_LABELS[v] || v;
-          newSelect.appendChild(opt);
-        });
-        oldSelect.replaceWith(newSelect);
-        if (submitBtn) submitBtn.style.display = '';
-      }
+      badgeClass = `badge badge-${newStatus}`;
+      badgeStyle = 'font-size:0.8rem;padding:5px 10px';
     }
+    statusCell.innerHTML = `<span class="${badgeClass}" style="${badgeStyle}">${escHtml(data.new_status_display)}</span>`;
   }
 
   // ── 2. Payment column ─────────────────────────────────────────────────
@@ -665,7 +649,7 @@ RealtimeConnection.on('status_changed', function(data) {
     const totalRaw  = row.dataset.totalRaw  || '0';
 
     if (newStatus === 'awaiting_payment' && !isPaid) {
-      payCell.innerHTML = `<button onclick="openPaymentModal(${orderId}, ${parseFloat(totalRaw).toFixed(2)}, '${payUrl}')" class="btn btn-sm btn-caramel">💳 Pay &amp; Accept</button>`;
+      payCell.innerHTML = `<button onclick="openPaymentModal(${orderId}, ${parseFloat(totalRaw).toFixed(2)}, '${payUrl}')" class="btn btn-sm btn-caramel">💳 Pay</button>`;
     } else if (newStatus === 'cancelled') {
       payCell.innerHTML = '';
     } else if (isPaid) {
@@ -673,10 +657,12 @@ RealtimeConnection.on('status_changed', function(data) {
     }
   }
 
-  // ── 3. Quick-advance button ───────────────────────────────────────────
+  // ── 3. Quick-advance and Cancel buttons ──────────────────────────────
   const forwardFlow = { preparing: 'ready', ready: 'completed' };
   const nextStatus  = forwardFlow[newStatus];
   const advanceBtn  = row.querySelector('.btn-caramel[onclick*="quickAdvance"]');
+  const cancelBtn   = row.querySelector('[onclick*="cancelOrder"]');
+
   if (advanceBtn) {
     if (nextStatus) {
       advanceBtn.style.display = '';
@@ -687,6 +673,11 @@ RealtimeConnection.on('status_changed', function(data) {
     } else {
       advanceBtn.style.display = 'none';
     }
+  }
+
+  // Hide cancel button for terminal states
+  if (cancelBtn) {
+    cancelBtn.style.display = isTerminal ? 'none' : '';
   }
 
   // ── 4. Keep row-level data attributes current ─────────────────────────
@@ -755,7 +746,7 @@ RealtimeConnection.on('status_changed', function(data) {
     if (status === 'awaiting_payment' && !isPaid) {
       // Single button: confirming payment auto-accepts
       payHtml = `<button onclick="openPaymentModal(${escHtml(d.orderId)}, ${escHtml(d.totalRaw || '0')}, '${escHtml(d.payUrl || '')}')"
-                         class="btn btn-sm btn-caramel">💳 Pay &amp; Accept</button>`;
+                         class="btn btn-sm btn-caramel">💳 Pay</button>`;
     } else if (isPaid) {
       payHtml = `<span class="badge badge-paid" style="font-size:0.72rem">● Paid</span>`;
     } else if (status !== 'cancelled') {
@@ -765,30 +756,16 @@ RealtimeConnection.on('status_changed', function(data) {
       payHtml = `<span style="font-size:0.75rem;color:#aaa">—</span>`;
     }
 
-    // ── Status section ──
+    // ── Status section — plain badge, no dropdown ────────────────────────
     let statusHtml;
-    if (isTerminal) {
-      const badgeClass = status === 'completed' ? 'badge-ready' : 'badge-cancelled';
-      statusHtml = `<span class="badge ${badgeClass}">${dot(status)}${escHtml(d.statusDisplay || '')}</span>`;
+    if (status === 'completed') {
+      statusHtml = `<span class="badge badge-ready">${dot(status)}${escHtml(d.statusDisplay || '')}</span>`;
+    } else if (status === 'cancelled') {
+      statusHtml = `<span class="badge badge-cancelled">${dot(status)}${escHtml(d.statusDisplay || '')}</span>`;
+    } else if (status === 'awaiting_payment') {
+      statusHtml = `<span class="badge" style="background:#fff3cd;color:#856404">${dot(status)}${escHtml(d.statusDisplay || '')}</span>`;
     } else {
-      // Build select options from VALID_TRANSITIONS (available globally)
-      const allowed  = (window.VALID_TRANSITIONS && window.VALID_TRANSITIONS[status]) || [];
-      const labels   = window.STATUS_LABELS || {};
-      const options  = [`<option value="${escHtml(status)}" selected>${dot(status)} ${escHtml(d.statusDisplay || '')}</option>`];
-      allowed.forEach(v => {
-        options.push(`<option value="${escHtml(v)}">${dot(v)} ${labels[v] || v}</option>`);
-      });
-      const submitBtn = nextStatus
-        ? `<button type="submit" class="btn btn-sm btn-primary">✓</button>`
-        : '';
-      statusHtml = `
-        <div class="om-status-inner">
-          <select name="status" class="form-control form-select">${options.join('')}</select>
-          ${submitBtn}
-        </div>
-        <div class="complete-unpaid-hint" style="display:none;font-size:0.7rem;color:var(--red-accent);background:#fff5f5;border:1px solid #fcc;border-radius:6px;padding:4px 6px;margin-top:4px;line-height:1.3">
-          ⚠️ Cannot complete — not paid yet.
-        </div>`;
+      statusHtml = `<span class="badge badge-${status}">${dot(status)}${escHtml(d.statusDisplay || '')}</span>`;
     }
 
     // ── Payment + Status two-col row ──
@@ -801,13 +778,7 @@ RealtimeConnection.on('status_changed', function(data) {
         </div>
         <div class="om-status-col">
           <div class="om-paysec-label">Status</div>
-          <form class="status-update-form"
-                data-order-id="${escHtml(d.orderId || '')}"
-                data-url="${escHtml(d.statusUrl || '')}"
-                data-is-paid="${isPaid ? 'true' : 'false'}">
-            <input type="hidden" name="csrfmiddlewaretoken" value="${escHtml(csrf)}">
-            ${statusHtml}
-          </form>
+          ${statusHtml}
         </div>
       </div>`;
 
@@ -831,12 +802,21 @@ RealtimeConnection.on('status_changed', function(data) {
                       ▶ ${escHtml(nextLabel)}
                     </button>`;
     }
-    const actionCount = advanceBtn ? 3 : 2;
+    let cancelBtn = '';
+    if (!isTerminal) {
+      cancelBtn = `<button onclick="cancelOrder(${escHtml(d.orderId || '')}, '${escHtml(d.statusUrl || '')}')"
+                           class="btn btn-sm"
+                           style="background:#fff0f0;color:var(--red-accent);border:1px solid #fcc">
+                     ✕ Cancel
+                   </button>`;
+    }
+    const actionCount = [advanceBtn, cancelBtn].filter(Boolean).length + 2; // +2 for view+print
     const actionsHtml = `
       <div class="om-actions${actionCount === 2 ? ' om-actions--2' : ''}">
         ${viewBtn}
         ${printBtn}
         ${advanceBtn}
+        ${cancelBtn}
       </div>`;
 
     card.innerHTML = topHtml + metaHtml + paySecHtml + dateHtml + `<div class="om-divider"></div>` + actionsHtml;

@@ -87,7 +87,7 @@ def inventory_log(request):
             Q(reason__icontains=q) |
             Q(notes__icontains=q)
         )
-    paginator = Paginator(logs, 50)
+    paginator = Paginator(logs, 10)
     page = request.GET.get('page', 1)
     logs_page = paginator.get_page(page)
     return render(request, 'inventory/log.html', {'logs': logs_page, 'q': q})

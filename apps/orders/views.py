@@ -706,7 +706,7 @@ def order_list(request):
             Q(table_number__icontains=search)
         )
 
-    paginator = Paginator(orders, 20)
+    paginator = Paginator(orders, 10)
     page = request.GET.get('page', 1)
     orders_page = paginator.get_page(page)
 
@@ -891,15 +891,15 @@ def process_payment(request, pk):
         # POS orders (placed by staff, cashier is set) complete immediately
         # on payment — the legacy single-step POS workflow is unchanged.
         if order.status == 'awaiting_payment':
-            # Customer order: payment confirmed → automatically move to
-            # preparing so the kitchen starts immediately.
+            # Payment confirmed → automatically move to preparing.
+            # Applies to both customer checkout orders and POS orders.
             order.status = 'preparing'
             order.cashier = request.user
             order.save()
         else:
-            # POS order: completing on payment is the legacy behaviour.
-            order.status = 'completed'
-            order.completed_at = timezone.now()
+            # Order is already past awaiting_payment (e.g. a manual reprocess
+            # attempt on a preparing/ready order). Just record the payment
+            # without changing the status.
             order.cashier = request.user
             order.save()
 
@@ -1090,6 +1090,9 @@ def create_pos_order(request):
                 notes=data.get('notes', ''),
                 cashier=request.user,
                 request_token=request_token,
+                # POS orders use the same payment-first flow as customer
+                # orders: awaiting_payment → preparing on payment confirmation.
+                status='awaiting_payment',
             )
 
             # Fetch every product for the order in one batched query

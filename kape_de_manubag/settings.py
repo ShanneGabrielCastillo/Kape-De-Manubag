@@ -261,6 +261,11 @@ LOGIN_LOCKOUT_MINUTES = 15
 ORDER_RATE_LIMIT = int(os.environ.get('ORDER_RATE_LIMIT', '3'))
 ORDER_RATE_WINDOW = int(os.environ.get('ORDER_RATE_WINDOW', '600'))  # 10 minutes
 
+# ── Pagination ────────────────────────────────────────────────────────────────
+# Standard page size for all user-facing paginated lists in the system.
+# Views should use:  Paginator(queryset, settings.PAGE_SIZE)
+PAGE_SIZE = 10
+
 # ── Session ───────────────────────────────────────────────────────────────────
 # Absolute maximum session lifetime (hard ceiling). The session also expires
 # after SESSION_IDLE_TIMEOUT_MINUTES of inactivity (see the
