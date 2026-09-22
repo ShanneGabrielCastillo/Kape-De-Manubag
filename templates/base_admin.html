@@ -2,7 +2,7 @@
 {% load static %}
 
 {% block body %}
-<div class="app-layout">
+<div class="app-layout" id="app-layout">
   <!-- Sidebar -->
   <aside class="sidebar" id="sidebar">
     <!-- Mobile close button (hidden on desktop via CSS) -->
@@ -13,68 +13,104 @@
 
     <div class="sidebar-brand">
       <span class="brand-name">☕ Kape De Manubag</span>
+      <span class="brand-abbr" aria-hidden="true">KDM</span>
       <span class="brand-sub">Management System</span>
     </div>
 
     <div class="sidebar-nav-wrapper">
     <nav class="sidebar-nav">
       <div class="nav-section-title">Overview</div>
-      <a href="{% url 'dashboard:index' %}" class="sidebar-link {% if request.resolver_match.app_name == 'dashboard' %}active{% endif %}">
+      <a href="{% url 'dashboard:index' %}" class="sidebar-link {% if request.resolver_match.app_name == 'dashboard' %}active{% endif %}"
+         aria-label="Dashboard">
         <span class="nav-icon">📊</span> Dashboard
+        <span class="sidebar-tooltip" aria-hidden="true">Dashboard</span>
       </a>
 
       <div class="nav-section-title">Orders</div>
-      <a href="{% url 'orders:order_list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'orders' and 'pos' not in request.path %}active{% endif %}">
+      <a href="{% url 'orders:order_list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'orders' and 'pos' not in request.path %}active{% endif %}"
+         aria-label="Order Management">
         <span class="nav-icon">📋</span> Order Management
         {% with count=pending_count %}<span id="sidebar-pending-count" class="badge badge-awaiting-payment" style="margin-left:auto;{% if not count %}display:none{% endif %}">{% if count %}{{ count }}{% endif %}</span>{% endwith %}
+        <span class="sidebar-tooltip" aria-hidden="true">Order Management</span>
       </a>
-      <a href="{% url 'orders:pos' %}" class="sidebar-link {% if 'pos' in request.path %}active{% endif %}">
+      <a href="{% url 'orders:pos' %}" class="sidebar-link {% if 'pos' in request.path %}active{% endif %}"
+         aria-label="POS Terminal">
         <span class="nav-icon">🖥️</span> POS Terminal
+        <span class="sidebar-tooltip" aria-hidden="true">POS Terminal</span>
       </a>
 
       {% if user.is_admin_user %}
       <div class="nav-section-title">Menu</div>
-      <a href="{% url 'menu:product_list' %}" class="sidebar-link">
+      <a href="{% url 'menu:product_list' %}" class="sidebar-link"
+         aria-label="Products">
         <span class="nav-icon">🍽️</span> Products
+        <span class="sidebar-tooltip" aria-hidden="true">Products</span>
       </a>
-      <a href="{% url 'menu:category_list' %}" class="sidebar-link">
+      <a href="{% url 'menu:category_list' %}" class="sidebar-link"
+         aria-label="Categories">
         <span class="nav-icon">🏷️</span> Categories
+        <span class="sidebar-tooltip" aria-hidden="true">Categories</span>
       </a>
 
-      <div class="nav-section-title">Stock & Reports</div>
-      <a href="{% url 'inventory:list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'inventory' %}active{% endif %}">
+      <div class="nav-section-title">Stock &amp; Reports</div>
+      <a href="{% url 'inventory:list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'inventory' %}active{% endif %}"
+         aria-label="Inventory">
         <span class="nav-icon">📦</span> Inventory
+        <span class="sidebar-tooltip" aria-hidden="true">Inventory</span>
       </a>
-      <a href="{% url 'reports:index' %}" class="sidebar-link {% if request.resolver_match.app_name == 'reports' %}active{% endif %}">
+      <a href="{% url 'reports:index' %}" class="sidebar-link {% if request.resolver_match.app_name == 'reports' %}active{% endif %}"
+         aria-label="Sales Reports">
         <span class="nav-icon">📈</span> Sales Reports
+        <span class="sidebar-tooltip" aria-hidden="true">Sales Reports</span>
       </a>
-      <a href="{% url 'accounts:staff_list' %}" class="sidebar-link {% if 'staff' in request.path %}active{% endif %}">
+      <a href="{% url 'accounts:staff_list' %}" class="sidebar-link {% if 'staff' in request.path %}active{% endif %}"
+         aria-label="Staff Accounts">
         <span class="nav-icon">👥</span> Staff Accounts
+        <span class="sidebar-tooltip" aria-hidden="true">Staff Accounts</span>
       </a>
 
       <div class="nav-section-title">System</div>
-      <a href="{% url 'dashboard:system_settings' %}" class="sidebar-link {% if 'settings' in request.path %}active{% endif %}">
+      <a href="{% url 'dashboard:system_settings' %}" class="sidebar-link {% if 'settings' in request.path %}active{% endif %}"
+         aria-label="Settings">
         <span class="nav-icon">⚙️</span> Settings
+        <span class="sidebar-tooltip" aria-hidden="true">Settings</span>
       </a>
-      <a href="{% url 'audit:activity_log' %}" class="sidebar-link {% if request.resolver_match.app_name == 'audit' %}active{% endif %}">
+      <a href="{% url 'audit:activity_log' %}" class="sidebar-link {% if request.resolver_match.app_name == 'audit' %}active{% endif %}"
+         aria-label="Activity Log">
         <span class="nav-icon">📜</span> Activity Log
+        <span class="sidebar-tooltip" aria-hidden="true">Activity Log</span>
       </a>
       {% endif %}
 
       <div class="nav-section-title">Finance</div>
-      <a href="{% url 'finance:index' %}" class="sidebar-link {% if request.resolver_match.app_name == 'finance' %}active{% endif %}">
+      <a href="{% url 'finance:index' %}" class="sidebar-link {% if request.resolver_match.app_name == 'finance' %}active{% endif %}"
+         aria-label="Finance">
         <span class="nav-icon">💰</span> Finance
+        <span class="sidebar-tooltip" aria-hidden="true">Finance</span>
       </a>
 
       <div class="nav-section-title">Store</div>
-      <a href="{% url 'menu:index' %}" class="sidebar-link" target="_blank">
+      <a href="{% url 'menu:index' %}" class="sidebar-link" target="_blank"
+         aria-label="Customer Menu (opens in new tab)">
         <span class="nav-icon">🛒</span> Customer Menu
+        <span class="sidebar-tooltip" aria-hidden="true">Customer Menu ↗</span>
       </a>
-      <a href="{% url 'orders:queue_board' %}" class="sidebar-link" target="_blank">
+      <a href="{% url 'orders:queue_board' %}" class="sidebar-link" target="_blank"
+         aria-label="Queue Board (opens in new tab)">
         <span class="nav-icon">📺</span> Queue Board
+        <span class="sidebar-tooltip" aria-hidden="true">Queue Board ↗</span>
       </a>
     </nav>
     </div><!-- /.sidebar-nav-wrapper -->
+
+    <button class="sidebar-collapse-btn"
+            id="sidebar-collapse-btn"
+            aria-label="Collapse sidebar"
+            aria-expanded="true"
+            aria-controls="sidebar">
+      <span class="collapse-icon" aria-hidden="true">◀</span>
+      <span class="collapse-label">Collapse</span>
+    </button>
 
     <div class="sidebar-user">
       <div class="user-avatar">

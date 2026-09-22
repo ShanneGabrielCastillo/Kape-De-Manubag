@@ -1275,3 +1275,123 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.stat-card').forEach(el => el.style.opacity = '1');
   }, 100);
 });
+
+
+// ── Desktop Sidebar Collapse ──────────────────────────────────────────────────
+// DESKTOP ONLY: applies exclusively when viewport width >= 768px.
+// Mobile hamburger/drawer behaviour is completely separate and unaffected.
+//
+// State is persisted in localStorage under 'kdm_sidebar_collapsed' so the
+// preference survives page navigation and browser refresh.
+//
+// No database call, no server round-trip, no authentication change.
+// This is purely presentational UI behaviour.
+
+(function () {
+  const STORAGE_KEY    = 'kdm_sidebar_collapsed';
+  const DESKTOP_MIN_PX = 768;
+
+  const appLayout  = document.getElementById('app-layout');
+  const collapseBtn = document.getElementById('sidebar-collapse-btn');
+
+  // Guard: only runs on pages that have the admin layout (base_admin.html).
+  if (!appLayout || !collapseBtn) return;
+
+  // ── Helpers ──
+
+  function isDesktop() {
+    return window.innerWidth >= DESKTOP_MIN_PX;
+  }
+
+  function isCollapsed() {
+    return appLayout.classList.contains('sidebar-collapsed');
+  }
+
+  function saveState(collapsed) {
+    try {
+      localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0');
+    } catch (e) {
+      // localStorage blocked (private browsing, storage full) — no-op
+    }
+  }
+
+  function loadState() {
+    try {
+      return localStorage.getItem(STORAGE_KEY) === '1';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Update the button's aria attributes and label to reflect current state.
+  function syncButton(collapsed) {
+    if (collapsed) {
+      collapseBtn.setAttribute('aria-label', 'Expand sidebar');
+      collapseBtn.setAttribute('aria-expanded', 'false');
+    } else {
+      collapseBtn.setAttribute('aria-label', 'Collapse sidebar');
+      collapseBtn.setAttribute('aria-expanded', 'true');
+    }
+  }
+
+  // Apply or remove the collapsed class — ONLY on desktop.
+  // On mobile the class must never be present (it would interfere with
+  // the off-canvas translateX layout).
+  function applyCollapsed(collapsed) {
+    if (!isDesktop()) {
+      // If we somehow got here on mobile, ensure class is stripped.
+      appLayout.classList.remove('sidebar-collapsed');
+      return;
+    }
+    appLayout.classList.toggle('sidebar-collapsed', collapsed);
+    syncButton(collapsed);
+  }
+
+  // Toggle and persist.
+  function toggle() {
+    if (!isDesktop()) return; // safety guard — button is CSS-hidden on mobile anyway
+    const next = !isCollapsed();
+    applyCollapsed(next);
+    saveState(next);
+  }
+
+  // ── Initialise on page load ──
+  // Apply the saved preference immediately (before first paint where possible).
+  // We guard isDesktop() so a user who set the preference on a wide screen
+  // and then loads the page on a phone doesn't see the desktop class applied.
+  if (isDesktop()) {
+    applyCollapsed(loadState());
+  }
+
+  // ── Collapse/expand button click ──
+  collapseBtn.addEventListener('click', toggle);
+
+  // ── Keyboard: Space and Enter both toggle (button already handles Enter,
+  //    but Space needs explicit handling for <button> elements in some cases).
+  collapseBtn.addEventListener('keydown', function (e) {
+    if (e.key === ' ') {
+      e.preventDefault();
+      toggle();
+    }
+  });
+
+  // ── Viewport resize guard ──
+  // When the user resizes the browser window from desktop to mobile width,
+  // strip the desktop collapsed class immediately so it cannot leak into
+  // the mobile layout. When resizing back to desktop, reapply the saved pref.
+  let resizeTimer;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      if (!isDesktop()) {
+        // Mobile: always ensure desktop class is absent.
+        appLayout.classList.remove('sidebar-collapsed');
+      } else {
+        // Back to desktop: restore saved preference.
+        applyCollapsed(loadState());
+      }
+    }, 100); // debounce — avoid thrashing during drag-resize
+  });
+
+})();
+// END Desktop Sidebar Collapse ─────────────────────────────────────────────────
