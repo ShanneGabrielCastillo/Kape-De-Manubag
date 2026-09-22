@@ -12,9 +12,20 @@
     </div>
 
     <div class="sidebar-brand">
-      <span class="brand-name">☕ Kape De Manubag</span>
-      <span class="brand-abbr" aria-hidden="true">KDM</span>
-      <span class="brand-sub">Management System</span>
+      <div class="brand-text">
+        <span class="brand-name">☕ Kape De Manubag</span>
+        <span class="brand-sub">Management System</span>
+      </div>
+      <!-- Collapsed state: show only the coffee cup icon -->
+      <span class="brand-icon-only" aria-hidden="true">☕</span>
+      <!-- Collapse/expand toggle — desktop only, lives in the brand row -->
+      <button class="sidebar-collapse-btn"
+              id="sidebar-collapse-btn"
+              aria-label="Collapse sidebar"
+              aria-expanded="true"
+              aria-controls="sidebar">
+        <span class="collapse-icon" aria-hidden="true">◀</span>
+      </button>
     </div>
 
     <div class="sidebar-nav-wrapper">
@@ -103,14 +114,6 @@
     </nav>
     </div><!-- /.sidebar-nav-wrapper -->
 
-    <button class="sidebar-collapse-btn"
-            id="sidebar-collapse-btn"
-            aria-label="Collapse sidebar"
-            aria-expanded="true"
-            aria-controls="sidebar">
-      <span class="collapse-icon" aria-hidden="true">◀</span>
-      <span class="collapse-label">Collapse</span>
-    </button>
 
     <div class="sidebar-user">
       <div class="user-avatar">

@@ -322,9 +322,13 @@ tbody tr:last-child { border-bottom: none; }
 }
 
 .sidebar-brand {
-  padding: 24px 20px;
+  padding: 20px 16px 20px 20px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
   flex-shrink: 0;     /* always visible — never squashed by nav growth */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 .sidebar-brand .brand-name {
   font-family: 'Playfair Display', serif;
@@ -1547,7 +1551,7 @@ tbody tr:last-child { border-bottom: none; }
 
 /* =====================================================
    DESKTOP COLLAPSIBLE SIDEBAR
-   Desktop-only (>768px). Mobile layout is NEVER touched.
+   Desktop-only (>=768px). Mobile layout is NEVER touched.
    ===================================================== */
 
 /* Collapsed sidebar width — icon-only strip */
@@ -1555,135 +1559,128 @@ tbody tr:last-child { border-bottom: none; }
   --sidebar-collapsed-w: 64px;
 }
 
-/* ── Collapse/Expand toggle button ── */
+/* ── Brand row layout: brand text + collapse button side by side ── */
+
+/* Wrap brand name + sub in a column so they stack vertically */
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+/* Coffee-cup icon shown ONLY when collapsed (hidden by default) */
+.brand-icon-only {
+  display: none;
+  font-size: 1.4rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* ── Collapse/Expand toggle button — lives in the brand header row ── */
 .sidebar-collapse-btn {
-  display: none; /* hidden on mobile — shown only on desktop via media query below */
+  display: none; /* hidden on mobile — shown only on desktop via media query */
   align-items: center;
   justify-content: center;
-  width: 100%;
-  padding: 12px 0;
-  background: none;
-  border: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 0.85rem;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.6);
   cursor: pointer;
   transition: var(--transition);
-  gap: 8px;
-  flex-shrink: 0;
-  text-decoration: none;
-  font-family: 'DM Sans', sans-serif;
-  font-weight: 500;
+  padding: 0;
 }
 .sidebar-collapse-btn:hover,
 .sidebar-collapse-btn:focus-visible {
+  background: rgba(212, 168, 83, 0.18);
   color: var(--gold);
-  background: rgba(212, 168, 83, 0.08);
+  border-color: rgba(212, 168, 83, 0.4);
   outline: none;
 }
 .sidebar-collapse-btn:focus-visible {
   outline: 2px solid var(--gold);
-  outline-offset: -2px;
+  outline-offset: 2px;
 }
 .sidebar-collapse-btn .collapse-icon {
-  font-size: 1rem;
+  font-size: 0.7rem;
   line-height: 1;
-  flex-shrink: 0;
-  /* smooth icon flip */
   transition: transform 0.25s ease;
-}
-.sidebar-collapse-btn .collapse-label {
-  font-size: 0.78rem;
-  white-space: nowrap;
-  overflow: hidden;
-  transition: opacity 0.2s ease, max-width 0.25s ease;
-  max-width: 140px;
-  opacity: 1;
+  display: block;
 }
 
-/* ── Collapsed state ── */
+/* ── Desktop-only rules ── */
 @media (min-width: 768px) {
+
   /* Show the collapse button only on desktop */
   .sidebar-collapse-btn {
     display: flex;
   }
 
-  /* Smooth sidebar width transition */
+  /* Smooth sidebar width + main content margin transitions */
   .sidebar {
     transition: width 0.25s ease;
     width: var(--sidebar-w);
-    overflow: hidden; /* already set; repeated for explicitness */
   }
-
-  /* Main content margin transitions in sync */
   .main-content {
     transition: margin-left 0.25s ease;
   }
 
-  /* ── COLLAPSED STATE ── */
+  /* ════════════════════════════════════════
+     COLLAPSED STATE
+     ════════════════════════════════════════ */
   .sidebar-collapsed .sidebar {
     width: var(--sidebar-collapsed-w);
   }
-
   .sidebar-collapsed .main-content {
     margin-left: var(--sidebar-collapsed-w);
   }
 
-  /* Brand: show abbreviated initials only */
-  .sidebar-collapsed .sidebar .brand-name {
-    /* hide the full name, show abbreviated via CSS pseudo — but since we
-       can't replace text content with pure CSS, we hide it and the abbr
-       span we added in the HTML will show */
+  /* Brand: hide text block, show coffee-cup icon only */
+  .sidebar-collapsed .sidebar .brand-text {
     display: none;
   }
-  .sidebar-collapsed .sidebar .brand-abbr {
+  .sidebar-collapsed .sidebar .brand-icon-only {
     display: block;
   }
-  /* brand-abbr hidden by default (expanded state) */
-  .sidebar .brand-abbr {
-    display: none;
-    font-family: 'Playfair Display', serif;
-    font-size: 0.95rem;
-    font-weight: 700;
-    color: var(--gold);
-    letter-spacing: 0.05em;
-    white-space: nowrap;
+
+  /* Brand row: center icon + toggle button */
+  .sidebar-collapsed .sidebar .sidebar-brand {
+    justify-content: space-between;
+    padding: 20px 12px;
   }
 
-  .sidebar-collapsed .sidebar .brand-sub {
-    display: none;
+  /* Rotate the ◀ arrow to ▶ when collapsed */
+  .sidebar-collapsed .sidebar .collapse-icon {
+    transform: rotate(180deg);
   }
 
-  /* Nav section titles: hide in collapsed state */
+  /* Nav section titles → thin separator lines */
   .sidebar-collapsed .sidebar .nav-section-title {
-    /* Make it a separator line instead of text */
     font-size: 0;
     padding: 4px 0;
     margin: 2px 10px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     display: block;
+    letter-spacing: 0;
   }
 
-  /* Nav links: icon-only, centered */
+  /* Nav links: center the icon, hide text label */
   .sidebar-collapsed .sidebar .sidebar-link {
     justify-content: center;
     padding: 13px 0;
     gap: 0;
-    border-left: 3px solid transparent;
-    position: relative; /* for tooltip positioning */
+    position: relative;
   }
-  .sidebar-collapsed .sidebar .sidebar-link.active {
-    border-left-color: var(--gold);
-  }
-
-  /* Hide the text label next to each icon */
   .sidebar-collapsed .sidebar .sidebar-link > *:not(.nav-icon):not(.sidebar-tooltip) {
     display: none;
   }
 
-  /* Keep pending badge visible in collapsed state — position it over the icon */
+  /* Pending badge: overlay top-right of the icon */
   .sidebar-collapsed .sidebar #sidebar-pending-count {
-    display: flex !important; /* override inline style */
+    display: flex !important;
     position: absolute;
     top: 6px;
     right: 6px;
@@ -1694,7 +1691,7 @@ tbody tr:last-child { border-bottom: none; }
     padding: 0 4px;
   }
 
-  /* User section: center avatar, hide text */
+  /* User footer: center just the avatar */
   .sidebar-collapsed .sidebar .sidebar-user {
     justify-content: center;
     padding: 14px 0;
@@ -1704,22 +1701,9 @@ tbody tr:last-child { border-bottom: none; }
     display: none;
   }
 
-  /* Collapse button: icon only when collapsed */
-  .sidebar-collapsed .sidebar .collapse-label {
-    max-width: 0;
-    opacity: 0;
-    overflow: hidden;
-  }
-  .sidebar-collapsed .sidebar .collapse-icon {
-    transform: rotate(180deg);
-  }
-
-  /* ── Tooltip for icon-only nav items ── */
-  /* The tooltip is a sibling <span class="sidebar-tooltip"> inside each
-     sidebar-link. It appears on hover/focus of the parent link. */
+  /* ── Tooltips for icon-only nav items ── */
   .sidebar-tooltip {
-    /* always exists in DOM; hidden until collapsed */
-    display: none;
+    display: none;          /* hidden in expanded state */
     position: absolute;
     left: calc(var(--sidebar-collapsed-w) + 8px);
     top: 50%;
@@ -1735,11 +1719,10 @@ tbody tr:last-child { border-bottom: none; }
     box-shadow: var(--shadow);
     pointer-events: none;
     z-index: 9999;
-    /* subtle entrance */
     opacity: 0;
     transition: opacity 0.15s ease;
   }
-  /* Small left arrow on the tooltip */
+  /* Left arrow */
   .sidebar-tooltip::before {
     content: '';
     position: absolute;
@@ -1759,8 +1742,7 @@ tbody tr:last-child { border-bottom: none; }
     border: 5px solid transparent;
     border-right-color: var(--brown-dark);
   }
-
-  /* Show tooltips only when sidebar is collapsed */
+  /* Make tooltip visible in collapsed state */
   .sidebar-collapsed .sidebar .sidebar-link .sidebar-tooltip {
     display: block;
   }
@@ -1769,12 +1751,5 @@ tbody tr:last-child { border-bottom: none; }
     opacity: 1;
   }
 
-  /* Sidebar brand area: center in collapsed state */
-  .sidebar-collapsed .sidebar .sidebar-brand {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px 0;
-  }
 }
 /* END DESKTOP COLLAPSIBLE SIDEBAR */
