@@ -322,13 +322,13 @@ tbody tr:last-child { border-bottom: none; }
 }
 
 .sidebar-brand {
-  padding: 20px 16px 20px 20px;
+  padding: 16px 12px 16px 16px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
   flex-shrink: 0;     /* always visible — never squashed by nav growth */
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
 }
 .sidebar-brand .brand-name {
   font-family: 'Playfair Display', serif;
@@ -1554,50 +1554,55 @@ tbody tr:last-child { border-bottom: none; }
    Desktop-only (>=768px). Mobile layout is NEVER touched.
    ===================================================== */
 
-/* Collapsed sidebar width — icon-only strip */
+/* ── Collapsed sidebar width ── */
 :root {
   --sidebar-collapsed-w: 64px;
 }
 
-/* ── Brand row layout: brand text + collapse button side by side ── */
+/* ── Brand logo badge (circular, always visible) ── */
+.brand-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--brown-warm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  line-height: 1;
+}
 
-/* Wrap brand name + sub in a column so they stack vertically */
+/* ── Brand text column (name + subtitle) ── */
 .brand-text {
   display: flex;
   flex-direction: column;
   min-width: 0;
   flex: 1;
+  overflow: hidden;
 }
 
-/* Coffee-cup icon shown ONLY when collapsed (hidden by default) */
-.brand-icon-only {
-  display: none;
-  font-size: 1.4rem;
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-/* ── Collapse/Expand toggle button — lives in the brand header row ── */
+/* ── Collapse/Expand toggle button (in brand row) ── */
 .sidebar-collapse-btn {
-  display: none; /* hidden on mobile — shown only on desktop via media query */
+  display: none; /* hidden on mobile — shown on desktop only */
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   flex-shrink: 0;
   background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 6px;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.55);
   cursor: pointer;
   transition: var(--transition);
   padding: 0;
 }
 .sidebar-collapse-btn:hover,
 .sidebar-collapse-btn:focus-visible {
-  background: rgba(212, 168, 83, 0.18);
+  background: rgba(212, 168, 83, 0.2);
   color: var(--gold);
-  border-color: rgba(212, 168, 83, 0.4);
+  border-color: rgba(212, 168, 83, 0.45);
   outline: none;
 }
 .sidebar-collapse-btn:focus-visible {
@@ -1605,21 +1610,23 @@ tbody tr:last-child { border-bottom: none; }
   outline-offset: 2px;
 }
 .sidebar-collapse-btn .collapse-icon {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   line-height: 1;
   transition: transform 0.25s ease;
   display: block;
 }
 
-/* ── Desktop-only rules ── */
+/* ════════════════════════════════════════════
+   DESKTOP-ONLY RULES  (min-width: 768px)
+   ════════════════════════════════════════════ */
 @media (min-width: 768px) {
 
-  /* Show the collapse button only on desktop */
+  /* Show collapse button */
   .sidebar-collapse-btn {
     display: flex;
   }
 
-  /* Smooth sidebar width + main content margin transitions */
+  /* Animate sidebar width and main-content margin together */
   .sidebar {
     transition: width 0.25s ease;
     width: var(--sidebar-w);
@@ -1628,62 +1635,61 @@ tbody tr:last-child { border-bottom: none; }
     transition: margin-left 0.25s ease;
   }
 
-  /* ════════════════════════════════════════
-     COLLAPSED STATE
-     ════════════════════════════════════════ */
+  /* ── COLLAPSED STATE ── */
+
+  /* Shrink sidebar */
   .sidebar-collapsed .sidebar {
     width: var(--sidebar-collapsed-w);
   }
+  /* Shift main content to match */
   .sidebar-collapsed .main-content {
     margin-left: var(--sidebar-collapsed-w);
   }
 
-  /* Brand: hide text block, show coffee-cup icon only */
+  /* Brand row: logo stays, text hides, button stays */
   .sidebar-collapsed .sidebar .brand-text {
     display: none;
   }
-  .sidebar-collapsed .sidebar .brand-icon-only {
-    display: block;
-  }
-
-  /* Brand row: center icon + toggle button */
+  /* Keep brand row compact and centred around the logo */
   .sidebar-collapsed .sidebar .sidebar-brand {
+    padding: 16px 8px;
     justify-content: space-between;
-    padding: 20px 12px;
+    gap: 4px;
   }
 
-  /* Rotate the ◀ arrow to ▶ when collapsed */
+  /* Rotate ◀ to ▶ */
   .sidebar-collapsed .sidebar .collapse-icon {
     transform: rotate(180deg);
   }
 
-  /* Nav section titles → thin separator lines */
+  /* Nav section titles → thin divider lines */
   .sidebar-collapsed .sidebar .nav-section-title {
     font-size: 0;
-    padding: 4px 0;
+    letter-spacing: 0;
+    padding: 3px 0;
     margin: 2px 10px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     display: block;
-    letter-spacing: 0;
   }
 
-  /* Nav links: center the icon, hide text label */
+  /* Nav links: icon centred, text hidden */
   .sidebar-collapsed .sidebar .sidebar-link {
     justify-content: center;
-    padding: 13px 0;
+    padding: 12px 0;
     gap: 0;
     position: relative;
   }
+  /* Hide everything except the nav-icon and the tooltip */
   .sidebar-collapsed .sidebar .sidebar-link > *:not(.nav-icon):not(.sidebar-tooltip) {
     display: none;
   }
 
-  /* Pending badge: overlay top-right of the icon */
+  /* Pending badge: float over the icon */
   .sidebar-collapsed .sidebar #sidebar-pending-count {
     display: flex !important;
     position: absolute;
-    top: 6px;
-    right: 6px;
+    top: 5px;
+    right: 5px;
     margin: 0;
     min-width: 18px;
     height: 18px;
@@ -1691,19 +1697,20 @@ tbody tr:last-child { border-bottom: none; }
     padding: 0 4px;
   }
 
-  /* User footer: center just the avatar */
+  /* User footer: show only the avatar circle */
   .sidebar-collapsed .sidebar .sidebar-user {
     justify-content: center;
-    padding: 14px 0;
+    padding: 12px 0;
   }
   .sidebar-collapsed .sidebar .user-info,
   .sidebar-collapsed .sidebar .sidebar-user > a[href*="logout"] {
     display: none;
   }
 
-  /* ── Tooltips for icon-only nav items ── */
+  /* ── Tooltips (icon-only nav labels) ── */
+  /* Hidden by default; shown only inside collapsed sidebar */
   .sidebar-tooltip {
-    display: none;          /* hidden in expanded state */
+    display: none;
     position: absolute;
     left: calc(var(--sidebar-collapsed-w) + 8px);
     top: 50%;
@@ -1722,7 +1729,7 @@ tbody tr:last-child { border-bottom: none; }
     opacity: 0;
     transition: opacity 0.15s ease;
   }
-  /* Left arrow */
+  /* Arrow pointing left toward the icon */
   .sidebar-tooltip::before {
     content: '';
     position: absolute;
@@ -1742,7 +1749,7 @@ tbody tr:last-child { border-bottom: none; }
     border: 5px solid transparent;
     border-right-color: var(--brown-dark);
   }
-  /* Make tooltip visible in collapsed state */
+  /* Activate tooltips in collapsed state */
   .sidebar-collapsed .sidebar .sidebar-link .sidebar-tooltip {
     display: block;
   }
