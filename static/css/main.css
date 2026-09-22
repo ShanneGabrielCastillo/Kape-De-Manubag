@@ -1550,8 +1550,10 @@ tbody tr:last-child { border-bottom: none; }
 }
 
 /* =====================================================
-   DESKTOP COLLAPSIBLE SIDEBAR
+   DESKTOP COLLAPSIBLE SIDEBAR — v3 (nav-label fix)
    Desktop-only (>=768px). Mobile layout is NEVER touched.
+   Root-cause fix: labels are now span.nav-label so they
+   can be hidden with display:none in collapsed state.
    ===================================================== */
 
 /* ── Collapsed sidebar width ── */
@@ -1630,6 +1632,7 @@ tbody tr:last-child { border-bottom: none; }
   .sidebar {
     transition: width 0.25s ease;
     width: var(--sidebar-w);
+    overflow: hidden;
   }
   .main-content {
     transition: margin-left 0.25s ease;
@@ -1637,22 +1640,19 @@ tbody tr:last-child { border-bottom: none; }
 
   /* ── COLLAPSED STATE ── */
 
-  /* Shrink sidebar */
   .sidebar-collapsed .sidebar {
     width: var(--sidebar-collapsed-w);
   }
-  /* Shift main content to match */
   .sidebar-collapsed .main-content {
     margin-left: var(--sidebar-collapsed-w);
   }
 
-  /* Brand row: logo stays, text hides, button stays */
+  /* Brand: logo circle stays, text column hides */
   .sidebar-collapsed .sidebar .brand-text {
     display: none;
   }
-  /* Keep brand row compact and centred around the logo */
   .sidebar-collapsed .sidebar .sidebar-brand {
-    padding: 16px 8px;
+    padding: 14px 8px;
     justify-content: space-between;
     gap: 4px;
   }
@@ -1662,39 +1662,52 @@ tbody tr:last-child { border-bottom: none; }
     transform: rotate(180deg);
   }
 
-  /* Nav section titles → thin divider lines */
+  /* Nav section titles: collapse to thin divider, no visible text */
   .sidebar-collapsed .sidebar .nav-section-title {
     font-size: 0;
     letter-spacing: 0;
+    overflow: hidden;
+    white-space: nowrap;
     padding: 3px 0;
-    margin: 2px 10px;
+    margin: 2px 8px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     display: block;
   }
 
-  /* Nav links: icon centred, text hidden */
+  /* Nav links: centre the icon */
   .sidebar-collapsed .sidebar .sidebar-link {
     justify-content: center;
-    padding: 12px 0;
+    padding: 11px 0;
     gap: 0;
     position: relative;
   }
-  /* Hide everything except the nav-icon and the tooltip */
-  .sidebar-collapsed .sidebar .sidebar-link > *:not(.nav-icon):not(.sidebar-tooltip) {
+
+  /* ── THE ACTUAL FIX ──
+     Labels are now span.nav-label (previously bare text nodes that
+     CSS :not() selectors cannot reach). display:none now works. */
+  .sidebar-collapsed .sidebar .sidebar-link .nav-label {
     display: none;
   }
 
-  /* Pending badge: float over the icon */
+  /* Pending badge: reposition over the icon */
   .sidebar-collapsed .sidebar #sidebar-pending-count {
     display: flex !important;
     position: absolute;
-    top: 5px;
-    right: 5px;
+    top: 4px;
+    right: 4px;
     margin: 0;
     min-width: 18px;
     height: 18px;
     font-size: 0.6rem;
     padding: 0 4px;
+  }
+
+  /* Nav icon: ensure it stays visible and is the right size */
+  .sidebar-collapsed .sidebar .sidebar-link .nav-icon {
+    font-size: 1.2rem;
+    width: auto;
+    text-align: center;
+    flex-shrink: 0;
   }
 
   /* User footer: show only the avatar circle */
@@ -1707,8 +1720,7 @@ tbody tr:last-child { border-bottom: none; }
     display: none;
   }
 
-  /* ── Tooltips (icon-only nav labels) ── */
-  /* Hidden by default; shown only inside collapsed sidebar */
+  /* ── Tooltips: appear outside the narrow rail on hover/focus ── */
   .sidebar-tooltip {
     display: none;
     position: absolute;
@@ -1729,7 +1741,6 @@ tbody tr:last-child { border-bottom: none; }
     opacity: 0;
     transition: opacity 0.15s ease;
   }
-  /* Arrow pointing left toward the icon */
   .sidebar-tooltip::before {
     content: '';
     position: absolute;
@@ -1749,7 +1760,6 @@ tbody tr:last-child { border-bottom: none; }
     border: 5px solid transparent;
     border-right-color: var(--brown-dark);
   }
-  /* Activate tooltips in collapsed state */
   .sidebar-collapsed .sidebar .sidebar-link .sidebar-tooltip {
     display: block;
   }
