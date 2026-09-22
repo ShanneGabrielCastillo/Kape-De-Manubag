@@ -452,6 +452,11 @@ async function quickAdvance(url, btn) {
       return;
     }
   }
+
+  // Optimistically disable the button immediately so double-taps don't fire
+  // twice while the request is in flight.
+  if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+
   const r = await fetch(url, {
     method: 'POST',
     headers: { 'X-CSRFToken': '{{ csrf_token }}' }
@@ -459,8 +464,12 @@ async function quickAdvance(url, btn) {
   const d = await r.json();
   if (d.success) {
     showToast(`→ ${d.new_status_display}`, 'success');
-    setTimeout(() => location.reload(), 800);
+    // No reload needed — the SSE status_changed event already updates the
+    // row badge and buttons in place. Reloading was causing the visible
+    // delay, especially on preparing → ready transitions.
   } else {
+    // Re-enable on failure so the cashier can try again.
+    if (btn) { btn.disabled = false; btn.textContent = `▶ ${btn.dataset.nextStatus || ''}`; }
     showToast(d.error || 'Error', 'error');
   }
 }
@@ -666,6 +675,7 @@ RealtimeConnection.on('status_changed', function(data) {
   if (advanceBtn) {
     if (nextStatus) {
       advanceBtn.style.display = '';
+      advanceBtn.disabled = false;
       advanceBtn.title = `Advance to ${STATUS_LABELS[nextStatus] || nextStatus}`;
       advanceBtn.textContent = `▶ ${STATUS_LABELS[nextStatus] || nextStatus}`;
       advanceBtn.dataset.nextStatus = nextStatus;
