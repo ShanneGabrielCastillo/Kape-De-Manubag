@@ -348,6 +348,7 @@ tbody tr:last-child { border-bottom: none; }
 .sidebar-nav-wrapper {
   flex: 1;            /* takes all space between brand header and user footer */
   overflow-y: auto;   /* only this middle section scrolls */
+  overflow-x: hidden; /* never allow horizontal scroll inside the nav rail */
   min-height: 0;      /* critical: allows flex child to shrink below content height */
   -webkit-overflow-scrolling: touch;
 }
@@ -1618,6 +1619,13 @@ tbody tr:last-child { border-bottom: none; }
   display: block;
 }
 
+/* ── Sidebar tooltip: hidden globally at all viewport sizes.
+   Only made visible inside the collapsed desktop sidebar (≥768px).
+   Must be outside the media query so mobile never shows these spans. */
+.sidebar-tooltip {
+  display: none;
+}
+
 /* ════════════════════════════════════════════
    DESKTOP-ONLY RULES  (min-width: 768px)
    ════════════════════════════════════════════ */
@@ -1655,6 +1663,7 @@ tbody tr:last-child { border-bottom: none; }
     padding: 14px 8px;
     justify-content: space-between;
     gap: 4px;
+    overflow: hidden; /* brand-logo (36px) + gap + button (26px) must fit in 64px */
   }
 
   /* Rotate ◀ to ▶ */
@@ -1680,6 +1689,8 @@ tbody tr:last-child { border-bottom: none; }
     padding: 11px 0;
     gap: 0;
     position: relative;
+    width: 100%;      /* constrain to sidebar width — prevents overflow during transition */
+    box-sizing: border-box;
   }
 
   /* ── THE ACTUAL FIX ──
@@ -1721,8 +1732,8 @@ tbody tr:last-child { border-bottom: none; }
   }
 
   /* ── Tooltips: appear outside the narrow rail on hover/focus ── */
+  /* base display:none is set globally above this media query */
   .sidebar-tooltip {
-    display: none;
     position: absolute;
     left: calc(var(--sidebar-collapsed-w) + 8px);
     top: 50%;
@@ -1770,3 +1781,41 @@ tbody tr:last-child { border-bottom: none; }
 
 }
 /* END DESKTOP COLLAPSIBLE SIDEBAR */
+
+/* =====================================================
+   SIDEBAR SCROLLBAR STYLING — desktop only
+   Targets .sidebar-nav-wrapper, the only scrollable
+   zone of the sidebar. Scoped to >=768px so mobile
+   is completely unaffected.
+   ===================================================== */
+@media (min-width: 768px) {
+
+  /* Firefox */
+  .sidebar-nav-wrapper {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(193, 122, 59, 0.35) transparent;
+  }
+
+  /* WebKit: Chrome, Edge, Safari */
+  .sidebar-nav-wrapper::-webkit-scrollbar {
+    width: 5px;
+  }
+  .sidebar-nav-wrapper::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .sidebar-nav-wrapper::-webkit-scrollbar-thumb {
+    background: rgba(193, 122, 59, 0.35); /* --caramel at low opacity */
+    border-radius: 999px;
+  }
+  .sidebar-nav-wrapper::-webkit-scrollbar-thumb:hover {
+    background: rgba(193, 122, 59, 0.65); /* more visible on hover */
+  }
+  /* Remove scrollbar arrow buttons */
+  .sidebar-nav-wrapper::-webkit-scrollbar-button {
+    display: none;
+    height: 0;
+    width: 0;
+  }
+
+}
+/* END SIDEBAR SCROLLBAR STYLING */
