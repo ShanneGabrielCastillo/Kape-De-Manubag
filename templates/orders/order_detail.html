@@ -147,12 +147,12 @@
               <div style="font-size:0.85rem;color:#555;margin-bottom:12px">
                 ⚠️ <strong>Check your GCash account</strong> to verify this reference number before confirming.
               </div>
-              <div style="display:flex;gap:8px">
-                <button onclick="verifyGcash({{ order.pk }}, '{% url 'orders:verify_gcash_payment' order.pk %}')" class="btn btn-primary" style="flex:1">
+              <div style="display:flex;flex-direction:column;gap:8px;width:100%;box-sizing:border-box">
+                <button onclick="verifyGcash({{ order.pk }}, '{% url 'orders:verify_gcash_payment' order.pk %}')" class="btn btn-primary btn-block">
                   ✅ Verify Payment
                 </button>
-                <button onclick="rejectGcash({{ order.pk }}, '{% url 'orders:reject_gcash_payment' order.pk %}')" class="btn btn-outline" style="flex:1;color:var(--red-accent);border-color:var(--red-accent)">
-                  ❌ Reject
+                <button onclick="rejectGcash({{ order.pk }}, '{% url 'orders:reject_gcash_payment' order.pk %}')" class="btn btn-outline btn-block" style="color:var(--red-accent);border-color:var(--red-accent)">
+                  ✕ Reject Payment
                 </button>
               </div>
             </div>
@@ -267,11 +267,11 @@ async function rejectGcash(orderId, url) {
       setTimeout(() => location.reload(), 1000);
     } else {
       showToast(data.error || 'Could not reject payment', 'error');
-      if (btn) { btn.disabled = false; btn.textContent = '❌ Reject'; }
+      if (btn) { btn.disabled = false; btn.textContent = '✕ Reject Payment'; }
     }
   } catch (err) {
     showToast('Network error — please try again', 'error');
-    if (btn) { btn.disabled = false; btn.textContent = '❌ Reject'; }
+    if (btn) { btn.disabled = false; btn.textContent = '✕ Reject Payment'; }
   }
 }
 async function quickAdvanceDetail(orderId, url, nextLabel) {

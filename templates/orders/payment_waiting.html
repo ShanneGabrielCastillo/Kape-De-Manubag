@@ -281,20 +281,7 @@
   </div>
   {% endif %}
 
-  {# ── Cash payment instruction banner ── #}
-  {% if order.payment_method == 'cash' and not order.is_paid %}
-  <div class="cashier-banner" id="cashier-banner">
-    <div class="cashier-banner-icon">🏪</div>
-    <div class="cashier-banner-text">
-      <div class="cashier-banner-title">Go to the cashier</div>
-      <div class="cashier-banner-sub">
-        Show your order number <strong>{{ order.order_number }}</strong> to the cashier and pay
-        <strong style="color:var(--caramel)">₱{{ order.total|floatformat:2 }}</strong>.
-        <br>Payment methods: Cash or GCash (at counter).
-      </div>
-    </div>
-  </div>
-  {% endif %}
+
 
   {# ── Cash payment status pill (when awaiting staff pay) ── #}
   {% if order.payment_method == 'cash' and not order.is_paid %}
