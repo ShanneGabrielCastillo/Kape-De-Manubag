@@ -1,8 +1,14 @@
 {% comment %}
 Shared payment modal — included by order_list.html and order_detail.html.
 The modal is wired to main.js:
-  - openPaymentModal(orderId, orderTotal, paymentUrl)  populates it before display.
+  - openPaymentModal(orderId, orderTotal, paymentUrl, paymentMethod, gcashRef)
   - The #payment-form submit listener handles the AJAX POST.
+
+paymentMethod (optional, default 'cash'):
+  'cash'  → shows Amount Paid + Change fields
+  'gcash' → shows GCash verification instruction; no change calculation
+
+gcashRef (optional): submitted GCash reference number to display for reference.
 {% endcomment %}
 <div id="payment-modal" class="modal-backdrop" style="display:none">
   <div class="modal">
@@ -14,26 +20,51 @@ The modal is wired to main.js:
       <form id="payment-form">
         {% csrf_token %}
         <input type="hidden" id="payment-order-id" name="order_id">
+        {# payment_method is sent as a hidden field — value set by JS from the actual order #}
+        <input type="hidden" id="payment-method-hidden" name="payment_method" value="cash">
+
         <div class="form-group">
           <label class="form-label">Order Total</label>
           <div style="font-size:1.5rem;font-weight:700;color:var(--caramel)" id="payment-total">₱0.00</div>
         </div>
+
         <div class="form-group">
           <label class="form-label">Payment Method</label>
-          <select name="payment_method" class="form-control form-select">
-            <option value="cash">💵 Cash</option>
-            <option value="gcash">📱 GCash</option>
-          </select>
+          <div id="payment-method-display" style="font-weight:600;font-size:0.95rem;color:var(--brown-dark)">Cash</div>
         </div>
-        <div class="form-group">
-          <label class="form-label">Amount Paid (₱)</label>
-          <input type="number" id="amount-paid" name="amount_paid" class="form-control"
-                 step="0.01" placeholder="0.00" inputmode="decimal" required>
+
+        {# ── Cash fields (shown for Cash payments) ── #}
+        <div id="cash-fields">
+          <div class="form-group">
+            <label class="form-label">Amount Received (₱)</label>
+            <input type="number" id="amount-paid" name="amount_paid" class="form-control"
+                   step="0.01" placeholder="0.00" inputmode="decimal">
+          </div>
+          <div style="background:var(--cream);border-radius:8px;padding:14px;text-align:center">
+            <div style="font-size:0.75rem;color:#aaa;font-weight:700;text-transform:uppercase">Change</div>
+            <div style="font-size:1.5rem;font-weight:700;color:var(--green-success)" id="change-display">₱0.00</div>
+          </div>
         </div>
-        <div style="background:var(--cream);border-radius:8px;padding:14px;text-align:center">
-          <div style="font-size:0.75rem;color:#aaa;font-weight:700;text-transform:uppercase">Change</div>
-          <div style="font-size:1.5rem;font-weight:700;color:var(--green-success)" id="change-display">₱0.00</div>
+
+        {# ── GCash fields (shown for GCash payments) ── #}
+        <div id="gcash-fields" style="display:none">
+          {# Hidden amount_paid = order.total for GCash (no cash change) #}
+          <input type="hidden" id="gcash-amount-paid" name="amount_paid" value="0" disabled>
+
+          <div id="gcash-ref-row" style="display:none;margin-bottom:12px">
+            <div style="font-size:0.78rem;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:4px">Submitted Reference #</div>
+            <code id="gcash-ref-display"
+                  style="background:#dbeafe;color:#1e40af;padding:4px 12px;border-radius:6px;font-size:0.9rem;display:inline-block;word-break:break-all;overflow-wrap:anywhere;max-width:100%"></code>
+          </div>
+
+          <div style="background:#fffbeb;border:1.5px solid #fbbf24;border-radius:8px;padding:12px 16px;display:flex;align-items:flex-start;gap:8px">
+            <span style="font-size:1rem;flex-shrink:0;margin-top:1px">⚠️</span>
+            <p style="margin:0;font-size:0.85rem;color:#92400e;line-height:1.55">
+              Confirm that you have verified this GCash payment in the business GCash account before confirming.
+            </p>
+          </div>
         </div>
+
       </form>
     </div>
     <div class="modal-footer">

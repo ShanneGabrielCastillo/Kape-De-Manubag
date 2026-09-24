@@ -981,7 +981,6 @@ def process_payment(request, pk):
             'success': False,
             'error': 'Invalid payment method. Only Cash and GCash are accepted.',
         })
-
     # Wrap the entire read-check-write in a transaction with a row-level lock
     # so two concurrent payment submissions for the same order (two cashier
     # windows, a double-tap, a network retry) cannot both pass the is_paid
@@ -1018,30 +1017,45 @@ def process_payment(request, pk):
             return JsonResponse({'success': False, 'error': 'Insufficient payment amount'})
 
         order.is_paid = True
-        order.payment_method = payment_method
-        order.amount_paid = amount_paid
-        # Decimal subtraction — exact peso/centavo arithmetic, no float rounding.
-        order.change_amount = amount_paid - order.total
+        # Always use the order's stored payment_method — never trust the
+        # browser-submitted value.  The browser sends it for UI purposes
+        # but the DB record is authoritative.
+        order.payment_method = order.payment_method or payment_method
 
-        # ── GCash orders must use the manual verification flow ───────────────
-        # A customer-placed GCash order (awaiting_payment + payment_method='gcash')
-        # should NOT be confirmed via this endpoint — the customer submits their
-        # reference number via submit_gcash_payment and staff verifies via
-        # verify_gcash_payment.  This guard prevents staff from accidentally
-        # bypassing the verification step by using the Cash "Pay" modal on a
-        # GCash order.
+        # For GCash onsite (no customer-submitted reference), amount_paid is
+        # the order total and change is zero.  For Cash, the cashier enters
+        # the actual amount received.
+        if order.payment_method == 'gcash' and order.gcash_status in ('none', 'rejected'):
+            order.amount_paid  = order.total
+            order.change_amount = Decimal('0.00')
+        else:
+            order.amount_paid  = amount_paid
+            order.change_amount = amount_paid - order.total
+
+        # ── GCash routing: onsite vs remote ─────────────────────────────────
+        # Customer GCash orders without a submitted reference (gcash_status='none'
+        # or 'rejected') are ONSITE orders — the customer is physically present
+        # and shows the cashier their GCash transaction.  Staff can confirm
+        # these directly via this endpoint, just like Cash.
         #
-        # POS staff may still use this endpoint for any order they create
-        # directly (cashier is set) regardless of payment method, since POS
-        # is an in-person transaction that doesn't need remote verification.
+        # Customer GCash orders WITH a submitted reference (gcash_status='pending')
+        # are REMOTE orders — the customer submitted a reference number for
+        # remote verification.  These must go through verify_gcash_payment so
+        # the reference/proof data is properly recorded and the gcash_status
+        # field is updated correctly.
+        #
+        # POS orders (cashier is already set) always go through this endpoint
+        # regardless of payment method — unchanged behaviour.
         if (order.status == 'awaiting_payment'
                 and order.payment_method == 'gcash'
-                and order.cashier_id is None):
+                and order.cashier_id is None
+                and order.gcash_status == 'pending'):
             return JsonResponse({
                 'success': False,
                 'error': (
-                    'This is a GCash order. Please use the GCash Verify button '
-                    'to confirm the customer\'s payment after checking your GCash account.'
+                    'This GCash order has a submitted reference awaiting verification. '
+                    'Please use the "Verify Payment" button to confirm after '
+                    'checking your GCash account.'
                 ),
             })
 
@@ -1071,7 +1085,8 @@ def process_payment(request, pk):
             request.user, 'order.payment', order,
             detail=(
                 f'{order.get_payment_method_display()} '
-                f'₱{order.amount_paid} — Change ₱{order.change_amount}'
+                f'₱{order.amount_paid}'
+                + (f' — Change ₱{order.change_amount}' if order.change_amount else '')
             ),
         )
         if order.status == 'preparing':
@@ -1228,12 +1243,12 @@ def verify_gcash_payment(request, pk):
                 'error': 'This order has already been marked as paid.',
             }, status=400)
 
-        if order.gcash_status != 'pending':
+        if order.gcash_status not in ('pending', 'none', 'rejected'):
             return JsonResponse({
                 'success': False,
                 'error': (
-                    'Cannot verify: the customer has not submitted a GCash '
-                    'reference number yet, or the payment was already processed.'
+                    'Cannot verify: payment has already been processed '
+                    'or is in an unexpected state.'
                 ),
             }, status=400)
 

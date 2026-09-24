@@ -169,14 +169,14 @@
 
             {% if order.gcash_status != 'pending' %}
             {# Only show Cash Pay button if GCash not pending — fallback if customer switches to cash in person #}
-            <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}')" class="btn btn-caramel btn-block" style="margin-bottom:8px">
+            <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}', 'gcash', '{{ order.gcash_reference|escapejs }}')" class="btn btn-caramel btn-block" style="margin-bottom:8px">
               ✓ Confirm Payment
             </button>
             {% endif %}
 
           {% else %}
             {# ── Cash payment ── #}
-            <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}')" class="btn btn-caramel btn-block" style="margin-bottom:8px">
+            <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}', 'cash', '')" class="btn btn-caramel btn-block" style="margin-bottom:8px">
               ✓ Confirm Payment
             </button>
           {% endif %}
@@ -208,7 +208,7 @@
       <div class="card-header"><h3>Payment</h3></div>
       <div class="card-body">
         <p style="color:#aaa;font-size:0.85rem;margin-bottom:12px">Total: <strong style="color:var(--caramel)">₱{{ order.total|floatformat:2 }}</strong></p>
-        <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}')" class="btn btn-caramel btn-block">✓ Confirm Payment</button>
+        <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}', '{{ order.payment_method }}', '{{ order.gcash_reference|escapejs }}')" class="btn btn-caramel btn-block">✓ Confirm Payment</button>
       </div>
     </div>
     {% elif order.is_paid %}

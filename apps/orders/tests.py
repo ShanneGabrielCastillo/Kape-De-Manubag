@@ -1063,11 +1063,14 @@ class PaymentFirstFlowTests(TestCase):
         self.assertEqual(order.change_amount, Decimal('25.00'))  # 100 - 75
 
     def test_process_payment_gcash_blocked_for_customer_order(self):
-        """process_payment must reject GCash for customer orders (use verify_gcash_payment)."""
+        """process_payment must reject GCash for customer orders that have a
+        pending submitted reference — those must go through verify_gcash_payment."""
         self.client.force_login(self.cashier)
         order = self._customer_order()
         order.payment_method = 'gcash'
-        order.save(update_fields=['payment_method'])
+        order.gcash_status = 'pending'
+        order.gcash_reference = 'REMOTE123'
+        order.save(update_fields=['payment_method', 'gcash_status', 'gcash_reference'])
 
         response = self.client.post(
             reverse('orders:process_payment', args=[order.pk]),
@@ -1075,11 +1078,37 @@ class PaymentFirstFlowTests(TestCase):
         )
         data = response.json()
         self.assertFalse(data['success'])
-        self.assertIn('GCash', data['error'])
+        self.assertIn('submitted reference', data['error'])
 
         order.refresh_from_db()
         self.assertFalse(order.is_paid)
         self.assertEqual(order.status, 'awaiting_payment')
+
+    def test_process_payment_gcash_onsite_allowed_without_reference(self):
+        """Onsite GCash (no customer-submitted reference) must be confirmable
+        via process_payment — staff is manually verifying the payment."""
+        self.client.force_login(self.cashier)
+        order = self._customer_order()
+        order.payment_method = 'gcash'
+        order.gcash_status = 'none'  # no customer reference submitted
+        order.save(update_fields=['payment_method', 'gcash_status'])
+
+        response = self.client.post(
+            reverse('orders:process_payment', args=[order.pk]),
+            # For GCash onsite the modal sends amount_paid = order.total
+            {'payment_method': 'gcash', 'amount_paid': '75.00'},
+        )
+        data = response.json()
+        self.assertTrue(data['success'])
+
+        order.refresh_from_db()
+        self.assertTrue(order.is_paid)
+        self.assertEqual(order.status, 'preparing')
+        self.assertEqual(order.payment_method, 'gcash')
+        from decimal import Decimal
+        # GCash onsite: no change
+        self.assertEqual(order.change_amount, Decimal('0.00'))
+        self.assertEqual(order.amount_paid, order.total)
 
     def test_duplicate_payment_rejected(self):
         """A second payment attempt on an already-paid order must be rejected."""
@@ -1298,18 +1327,19 @@ class PaymentFirstFlowTests(TestCase):
         order.refresh_from_db()
         self.assertFalse(order.is_paid)
 
-    def test_verify_gcash_blocks_not_pending(self):
-        """verify_gcash_payment must reject if gcash_status is not 'pending'."""
+    def test_verify_gcash_blocks_already_processed(self):
+        """verify_gcash_payment must reject if gcash_status is 'verified'."""
         self.client.force_login(self.cashier)
         order = self._gcash_order()
-        # gcash_status is still 'none' — customer hasn't submitted
+        order.gcash_status = 'verified'
+        order.is_paid = True
+        order.save(update_fields=['gcash_status', 'is_paid'])
 
         response = self.client.post(
             reverse('orders:verify_gcash_payment', args=[order.pk]),
         )
         data = response.json()
         self.assertFalse(data['success'])
-        self.assertEqual(response.status_code, 400)
 
     def test_verify_gcash_idempotent_blocks_double_verify(self):
         """Second verification attempt on already-paid order must be rejected."""

@@ -478,18 +478,70 @@ if (menuSearchInput && menuCatBtns.length) {
 }
 
 // ── Payment Modal ──
-window.openPaymentModal = function(orderId, orderTotal, paymentUrl) {
+window.openPaymentModal = function(orderId, orderTotal, paymentUrl, paymentMethod, gcashRef) {
+  const method = (paymentMethod || 'cash').toLowerCase();
+
   document.getElementById('payment-order-id').value = orderId;
   document.getElementById('payment-form').dataset.url = paymentUrl || '';
   document.getElementById('payment-total').textContent = `₱${parseFloat(orderTotal).toFixed(2)}`;
-  document.getElementById('amount-paid').value = '';
-  document.getElementById('change-display').textContent = '₱0.00';
+  document.getElementById('payment-method-hidden').value = method;
+
+  // ── Method display label ──
+  const methodDisplay = document.getElementById('payment-method-display');
+  if (methodDisplay) {
+    methodDisplay.textContent = method === 'gcash' ? '📱 GCash' : '💵 Cash';
+  }
+
+  // ── Show/hide Cash vs GCash fields ──
+  const cashFields  = document.getElementById('cash-fields');
+  const gcashFields = document.getElementById('gcash-fields');
+
+  if (method === 'gcash') {
+    if (cashFields)  cashFields.style.display  = 'none';
+    if (gcashFields) gcashFields.style.display = 'block';
+
+    // For GCash: amount_paid = order total (no change), sent as hidden field
+    const gcashAmt = document.getElementById('gcash-amount-paid');
+    if (gcashAmt) {
+      gcashAmt.value    = orderTotal;
+      gcashAmt.disabled = false;
+    }
+    // Disable the cash amount-paid field so it is not submitted
+    const cashAmt = document.getElementById('amount-paid');
+    if (cashAmt) { cashAmt.value = ''; cashAmt.disabled = true; }
+
+    // Show submitted reference if one exists
+    const refRow     = document.getElementById('gcash-ref-row');
+    const refDisplay = document.getElementById('gcash-ref-display');
+    if (gcashRef && gcashRef.trim()) {
+      if (refDisplay) refDisplay.textContent = gcashRef.trim();
+      if (refRow)     refRow.style.display   = 'block';
+    } else {
+      if (refRow)     refRow.style.display   = 'none';
+    }
+
+  } else {
+    // Cash
+    if (cashFields)  cashFields.style.display  = 'block';
+    if (gcashFields) gcashFields.style.display = 'none';
+
+    const cashAmt  = document.getElementById('amount-paid');
+    const gcashAmt = document.getElementById('gcash-amount-paid');
+    if (cashAmt)  { cashAmt.value = '';  cashAmt.disabled  = false; }
+    if (gcashAmt) gcashAmt.disabled = true;
+
+    document.getElementById('change-display').textContent = '₱0.00';
+  }
+
   document.getElementById('payment-modal').style.display = 'flex';
 };
 
 const amountInput = document.getElementById('amount-paid');
 if (amountInput) {
   amountInput.addEventListener('input', function() {
+    // Only calculate change when the Cash fields are visible (not GCash)
+    const cashFields = document.getElementById('cash-fields');
+    if (cashFields && cashFields.style.display === 'none') return;
     const total = parseFloat(document.getElementById('payment-total').textContent.replace('₱', '')) || 0;
     const paid = parseFloat(this.value) || 0;
     const change = paid - total;
@@ -514,7 +566,16 @@ if (paymentForm) {
       const data = await response.json();
       if (data.success) {
         document.getElementById('payment-modal').style.display = 'none';
-        showToast(`Payment confirmed! Change: ₱${data.change.toFixed(2)}`, 'success');
+        // Re-enable any disabled fields so they don't stay broken on reload
+        const cashAmt  = document.getElementById('amount-paid');
+        const gcashAmt = document.getElementById('gcash-amount-paid');
+        if (cashAmt)  cashAmt.disabled  = false;
+        if (gcashAmt) gcashAmt.disabled = false;
+        const change = parseFloat(data.change) || 0;
+        const msg = change > 0
+          ? `Payment confirmed! Change: ₱${change.toFixed(2)}`
+          : 'Payment confirmed!';
+        showToast(msg, 'success');
         setTimeout(() => location.reload(), 1500);
       } else {
         showToast(data.error || 'Payment failed', 'error');
