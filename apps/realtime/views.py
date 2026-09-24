@@ -146,6 +146,15 @@ def customer_order_stream(request):
                         }
                         yield format_sse('order_accepted', payload)
 
+                    elif evt == 'gcash_rejected' and data.get('order_number') == order_number:
+                        # Tell the customer their submission was rejected so the
+                        # page can transition back to the reference submission form.
+                        payload = {
+                            'order_number':   data['order_number'],
+                            'rejection_note': data.get('rejection_note', ''),
+                        }
+                        yield format_sse('gcash_rejected', payload)
+
                 except queue.Empty:
                     pass
                 # Keep the TCP connection alive.

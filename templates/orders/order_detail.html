@@ -117,9 +117,66 @@
             <strong>💳 Awaiting Payment</strong> — confirming payment will automatically move this order to Preparing.
           </div>
           <p style="color:#aaa;font-size:0.85rem;margin-bottom:12px">Total: <strong style="color:var(--caramel)">₱{{ order.total|floatformat:2 }}</strong></p>
-          <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}')" class="btn btn-caramel btn-block" style="margin-bottom:8px">
-            💳 Pay
-          </button>
+
+          {% if order.payment_method == 'gcash' %}
+            {# ── GCash: show submission details and verify/reject actions ── #}
+            {% if order.gcash_status == 'none' %}
+            <div style="background:#e8f4ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:0.85rem;color:#1e40af">
+              📱 <strong>GCash Order</strong> — customer has not yet submitted their reference number.
+            </div>
+            {% elif order.gcash_status == 'pending' %}
+            <div style="background:#e8f4ff;border:1px solid #93c5fd;border-radius:8px;padding:12px 16px;margin-bottom:12px">
+              <div style="font-weight:700;color:#1e40af;margin-bottom:8px;font-size:0.92rem">📋 GCash Reference Submitted — Awaiting Verification</div>
+              <div style="font-size:0.85rem;color:#333;margin-bottom:4px">
+                <strong>Reference #:</strong>
+                <code style="background:#dbeafe;padding:2px 8px;border-radius:4px;font-size:0.92rem;letter-spacing:0.05em">{{ order.gcash_reference }}</code>
+              </div>
+              {% if order.gcash_submitted_at %}
+              <div style="font-size:0.78rem;color:#888;margin-bottom:8px">Submitted: {{ order.gcash_submitted_at|date:"M d, Y g:i A" }}</div>
+              {% endif %}
+              {% if order.gcash_proof %}
+              <div style="margin-bottom:10px">
+                <div style="font-size:0.78rem;color:#888;margin-bottom:4px">Payment Screenshot:</div>
+                <a href="{{ order.gcash_proof.url }}" target="_blank" rel="noopener" style="display:inline-block">
+                  <img src="{{ order.gcash_proof.url }}" alt="GCash proof" style="max-width:100%;max-height:180px;border-radius:8px;border:1px solid #93c5fd;object-fit:contain">
+                </a>
+              </div>
+              {% else %}
+              <div style="font-size:0.78rem;color:#aaa;margin-bottom:8px">No screenshot uploaded.</div>
+              {% endif %}
+              <div style="font-size:0.85rem;color:#555;margin-bottom:12px">
+                ⚠️ <strong>Check your GCash account</strong> to verify this reference number before confirming.
+              </div>
+              <div style="display:flex;gap:8px">
+                <button onclick="verifyGcash({{ order.pk }}, '{% url 'orders:verify_gcash_payment' order.pk %}')" class="btn btn-primary" style="flex:1">
+                  ✅ Verify Payment
+                </button>
+                <button onclick="rejectGcash({{ order.pk }}, '{% url 'orders:reject_gcash_payment' order.pk %}')" class="btn btn-outline" style="flex:1;color:var(--red-accent);border-color:var(--red-accent)">
+                  ❌ Reject
+                </button>
+              </div>
+            </div>
+            {% elif order.gcash_status == 'rejected' %}
+            <div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:0.85rem;color:#991b1b">
+              ❌ <strong>GCash payment was rejected.</strong> Customer can re-submit a corrected reference.
+              {% if order.gcash_notes %}<br><strong>Note:</strong> {{ order.gcash_notes }}{% endif %}
+            </div>
+            {% endif %}
+
+            {% if order.gcash_status != 'pending' %}
+            {# Only show Cash Pay button if GCash not pending — fallback if customer switches to cash in person #}
+            <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}')" class="btn btn-caramel btn-block" style="margin-bottom:8px">
+              💳 Confirm Cash Payment (if paying at counter)
+            </button>
+            {% endif %}
+
+          {% else %}
+            {# ── Cash payment ── #}
+            <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}')" class="btn btn-caramel btn-block" style="margin-bottom:8px">
+              💳 Pay
+            </button>
+          {% endif %}
+
           <button onclick="cancelOrder({{ order.pk }}, '{% url 'orders:update_status' order.pk %}')" class="btn btn-outline btn-block" style="color:var(--red-accent);border-color:var(--red-accent)">
             ✕ Cancel Order
           </button>
@@ -166,7 +223,57 @@
 
 {% block extra_js %}
 <script>
-// ── Quick-advance from order detail page ──────────────────────────────────
+// ── GCash verify ──────────────────────────────────────────────────────────
+async function verifyGcash(orderId, url) {
+  if (!confirm('Confirm that you have checked your GCash account and this payment is valid?')) return;
+  const btn = document.querySelector('[onclick*="verifyGcash"]');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Verifying…'; }
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCookie('csrftoken') },
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('GCash payment verified! Order is now Preparing.', 'success');
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      showToast(data.error || 'Could not verify payment', 'error');
+      if (btn) { btn.disabled = false; btn.textContent = '✅ Verify Payment'; }
+    }
+  } catch (err) {
+    showToast('Network error — please try again', 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '✅ Verify Payment'; }
+  }
+}
+
+// ── GCash reject ───────────────────────────────────────────────────────────
+async function rejectGcash(orderId, url) {
+  const note = prompt('Optional: enter a rejection reason (e.g. "Reference not found in GCash"):');
+  if (note === null) return; // cancelled
+  const btn = document.querySelector('[onclick*="rejectGcash"]');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Rejecting…'; }
+  const formData = new FormData();
+  formData.append('rejection_note', note || '');
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCookie('csrftoken') },
+      body: formData,
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('Payment submission rejected. Customer has been notified.', 'info');
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      showToast(data.error || 'Could not reject payment', 'error');
+      if (btn) { btn.disabled = false; btn.textContent = '❌ Reject'; }
+    }
+  } catch (err) {
+    showToast('Network error — please try again', 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '❌ Reject'; }
+  }
+}
 async function quickAdvanceDetail(orderId, url, nextLabel) {
   const btn = document.querySelector(`button[onclick*="quickAdvanceDetail(${orderId}"]`);
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Updating…'; }

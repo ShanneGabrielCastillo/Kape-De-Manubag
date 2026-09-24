@@ -122,6 +122,11 @@
       return;
     }
 
+    // GCash rejected — show re-submission form
+    if (data.gcash_status === 'rejected' && currentStatus === 'awaiting_payment' && !data.is_paid) {
+      applyGcashRejected(data.gcash_notes || '');
+    }
+
     // Payment confirmed (is_paid became true, order still awaiting_payment)
     if (data.is_paid && !isPaid) {
       applyPaymentConfirmed();
@@ -242,6 +247,50 @@
     sseSource.addEventListener('heartbeat', function () {
       // Server alive; nothing to do.
     });
+
+    // GCash payment rejected by staff — customer can re-submit.
+    sseSource.addEventListener('gcash_rejected', function (e) {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.order_number !== config.orderNumber) return;
+        applyGcashRejected(data.rejection_note || '');
+        poll(); // refresh full state
+      } catch (err) { /* ignore */ }
+    });
+  }
+
+  // ── GCash rejected ────────────────────────────────────────────
+  function applyGcashRejected(note) {
+    const heroEl    = document.getElementById('waiting-hero');
+    const iconEl    = document.getElementById('waiting-icon');
+    const titleEl   = document.getElementById('waiting-title');
+    const subEl     = document.getElementById('waiting-subtitle');
+
+    if (heroEl) { heroEl.className = 'waiting-hero state-rejected'; }
+    if (iconEl)  iconEl.textContent  = '❌';
+    if (titleEl) titleEl.textContent = 'Payment Not Verified';
+    if (subEl)   subEl.textContent   = 'Your payment could not be verified. Please check the details and re-submit.';
+
+    // Hide the pending card and show the form again if present
+    const pendingCard = document.getElementById('gcash-pending-card');
+    if (pendingCard) pendingCard.style.display = 'none';
+    const formCard = document.getElementById('gcash-form-card');
+    if (formCard) {
+      formCard.style.display = 'block';
+      if (note) {
+        let rejNote = formCard.querySelector('.gcash-reject-runtime-note');
+        if (!rejNote) {
+          rejNote = document.createElement('div');
+          rejNote.className = 'gcash-reject-runtime-note';
+          rejNote.style.cssText = 'background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:0.85rem;color:#991b1b';
+          formCard.insertBefore(rejNote, formCard.firstChild);
+        }
+        rejNote.textContent = '❌ Rejected: ' + note;
+      }
+      // Re-enable submit button
+      const btn = document.getElementById('gcash-submit-btn');
+      if (btn) { btn.disabled = false; btn.textContent = '📨 Submit Payment for Verification'; }
+    }
   }
 
   // ── Bootstrap ─────────────────────────────────────────────────

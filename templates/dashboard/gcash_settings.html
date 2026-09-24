@@ -1,0 +1,116 @@
+{% extends "base_admin.html" %}
+{% load static %}
+{% block page_title %}GCash Payment Settings{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">📱 GCash Payment Settings</h1>
+    <p class="page-subtitle">Configure the GCash account information shown to customers at checkout</p>
+  </div>
+  <a href="{% url 'dashboard:system_settings' %}" class="btn btn-outline">← Settings</a>
+</div>
+
+<div style="max-width:680px">
+
+  {% if gcash.is_configured %}
+  <div style="background:#d1e7dd;border:1px solid #a3cfbb;border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:0.88rem;color:#0f5132">
+    ✅ GCash is configured — customers can select GCash at checkout.
+  </div>
+  {% else %}
+  <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:0.88rem;color:#856404">
+    ⚠️ GCash is not fully configured yet. Set at least the account name and number so customers can make GCash payments.
+  </div>
+  {% endif %}
+
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header"><h3>💳 Account Details</h3></div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:18px">
+
+        <div class="form-group">
+          <label class="form-label">GCash Account Name *</label>
+          <input type="text" name="account_name" value="{{ gcash.account_name }}"
+                 class="form-control" placeholder="e.g. Juan dela Cruz"
+                 maxlength="200">
+          <div style="font-size:0.78rem;color:#aaa;margin-top:4px">The name as it appears in your GCash account.</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">GCash Number *</label>
+          <input type="text" name="account_number" value="{{ gcash.account_number }}"
+                 class="form-control" placeholder="e.g. 09171234567"
+                 maxlength="20" inputmode="tel">
+          <div style="font-size:0.78rem;color:#aaa;margin-top:4px">Your GCash mobile number (11 digits).</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Additional Instructions (optional)</label>
+          <textarea name="instructions" class="form-control" rows="3"
+                    placeholder="e.g. Send the exact amount. Do not include any remarks."
+                    maxlength="500">{{ gcash.instructions }}</textarea>
+          <div style="font-size:0.78rem;color:#aaa;margin-top:4px">Shown to customers on the payment page. Leave blank to use default steps.</div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header"><h3>🔲 GCash QR Code</h3></div>
+      <div class="card-body">
+        {% if gcash.qr_image %}
+        <div style="margin-bottom:16px">
+          <div style="font-size:0.8rem;font-weight:700;color:#888;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em">Current QR Code</div>
+          <img src="{{ gcash.qr_image.url }}" alt="Current GCash QR"
+               style="max-width:200px;max-height:200px;border-radius:10px;border:2px solid var(--cream);display:block;margin-bottom:10px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;cursor:pointer">
+            <input type="checkbox" name="clear_qr" value="1"> Remove current QR image
+          </label>
+        </div>
+        {% endif %}
+
+        <div class="form-group" style="margin-top:12px">
+          <label class="form-label">{% if gcash.qr_image %}Replace{% else %}Upload{% endif %} QR Code Image</label>
+          <input type="file" name="qr_image" class="form-control"
+                 accept="image/jpeg,image/png,image/webp">
+          <div style="font-size:0.78rem;color:#aaa;margin-top:4px">
+            JPG, PNG or WEBP · Max 3 MB · Recommended: scan GCash → Receive Money → Your QR
+          </div>
+        </div>
+
+        {% if not gcash.qr_image %}
+        <div style="background:var(--cream);border-radius:10px;padding:14px;margin-top:12px;font-size:0.85rem;color:#888">
+          💡 Upload your GCash QR code so customers can scan it directly. This is optional but improves the customer experience.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px">
+      <button type="submit" class="btn btn-primary">💾 Save GCash Settings</button>
+      <a href="{% url 'dashboard:index' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+
+  <div class="card" style="margin-top:24px">
+    <div class="card-header"><h3>ℹ️ How Manual GCash Verification Works</h3></div>
+    <div class="card-body" style="font-size:0.88rem;color:#666;line-height:1.8">
+      <ol style="padding-left:20px">
+        <li>Customer selects <strong>GCash</strong> at checkout and places their order.</li>
+        <li>Customer sees your GCash number/QR and the exact amount to pay.</li>
+        <li>Customer pays via their GCash app.</li>
+        <li>Customer enters the <strong>GCash reference number</strong> and optionally uploads a screenshot.</li>
+        <li>Staff receives a notification and sees the submission in Order Management.</li>
+        <li>Staff checks the actual GCash account to confirm the payment.</li>
+        <li>Staff clicks <strong>Verify Payment</strong> — order moves to Preparing.</li>
+        <li>Customer is notified in real-time and sees Order Received.</li>
+      </ol>
+      <p style="margin-top:10px;color:#c0392b;font-size:0.85rem">
+        ⚠️ <strong>Never click Verify</strong> without checking your actual GCash account first. The customer's reference number alone is not proof of payment.
+      </p>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

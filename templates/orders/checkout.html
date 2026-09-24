@@ -37,6 +37,20 @@
             {% if form.order_type.errors %}<small style="color:var(--red-accent)">{{ form.order_type.errors.0 }}</small>{% endif %}
           </div>
           <div class="form-group">
+            <label class="form-label">Payment Method *</label>
+            <div class="order-type-selector" id="payment-method-selector">
+              {% for choice in form.payment_method %}
+              <label class="order-type-option">
+                {{ choice.tag }} {{ choice.choice_label }}
+              </label>
+              {% endfor %}
+            </div>
+            {% if form.payment_method.errors %}<small style="color:var(--red-accent)">{{ form.payment_method.errors.0 }}</small>{% endif %}
+            <div id="gcash-hint" style="display:none;margin-top:10px;background:rgba(74,44,42,0.06);border:1.5px solid rgba(74,44,42,0.15);border-radius:10px;padding:12px 14px;font-size:0.85rem;color:var(--brown-mid);line-height:1.6">
+              📱 <strong>GCash Online:</strong> After placing your order you'll see the store's GCash details. Pay from your GCash app, then enter the reference number to submit for staff verification.
+            </div>
+          </div>
+          <div class="form-group">
             <label class="form-label">Special Instructions</label>
             {{ form.notes }}
             {% if form.notes.errors %}<small style="color:var(--red-accent)">{{ form.notes.errors.0 }}</small>{% endif %}
@@ -73,7 +87,7 @@
             <span>Total</span>
             <span id="checkout-grand-total" style="color:var(--caramel)">₱{{ cart.total|floatformat:2 }}</span>
           </div>
-          <p style="font-size:0.78rem;color:#aaa;margin-top:8px">💡 Payment is made at the counter after your order is ready.</p>
+          <p style="font-size:0.78rem;color:#aaa;margin-top:8px" id="payment-hint-text">💡 Payment is made at the counter after your order is ready.</p>
         </div>
         <script id="cart-data" type="application/json">
         {"subtotal": {{ cart.total|floatformat:2 }}, "items": [{% for item in items %}{"product_id": {{ item.product.pk }}, "quantity": {{ item.quantity }}}{% if not forloop.last %},{% endif %}{% endfor %}]}
@@ -97,6 +111,26 @@
     radio.addEventListener('change', syncPillState);
   });
   syncPillState();
+})();
+
+// ── Payment method hint ──
+(function() {
+  const gcashHint = document.getElementById('gcash-hint');
+  const paymentHint = document.getElementById('payment-hint-text');
+  function syncPaymentHint() {
+    const selected = document.querySelector('[name="payment_method"]:checked');
+    const isGCash = selected && selected.value === 'gcash';
+    if (gcashHint) gcashHint.style.display = isGCash ? 'block' : 'none';
+    if (paymentHint) {
+      paymentHint.textContent = isGCash
+        ? '📱 You will pay via GCash after placing your order.'
+        : '💡 Payment is made at the counter after your order is ready.';
+    }
+  }
+  document.querySelectorAll('[name="payment_method"]').forEach(r =>
+    r.addEventListener('change', syncPaymentHint)
+  );
+  syncPaymentHint();
 })();
 
 (function() {

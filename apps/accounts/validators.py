@@ -130,3 +130,81 @@ def validate_profile_image_upload(value):
             DIMENSIONS_TEMPLATE.format(width=width, height=height),
             code='profile_image_dimensions_too_large',
         )
+
+
+# ── Payment proof upload validator ────────────────────────────────────────────
+# Reuses all the same rules as the profile image validator but with a
+# slightly smaller size cap (3 MB) appropriate for payment screenshots,
+# and a distinct error-code namespace so tests can target it specifically.
+
+PROOF_MAX_SIZE_MB = 3
+PROOF_MAX_SIZE_BYTES = PROOF_MAX_SIZE_MB * 1024 * 1024
+
+PROOF_TOO_LARGE = (
+    f'Screenshot is too large ({{size}} MB). '
+    f'Maximum allowed size is {PROOF_MAX_SIZE_MB} MB.'
+)
+PROOF_UNSUPPORTED = (
+    f'Unsupported file format. Please upload a {SUPPORTED_FORMATS_LABEL} image.'
+)
+PROOF_MISMATCH = (
+    "The file's contents do not match its file name. "
+    f'Please upload a valid {SUPPORTED_FORMATS_LABEL} image.'
+)
+PROOF_DIMENSIONS = (
+    'Screenshot dimensions are too large ({width} x {height} pixels). '
+    f'Maximum allowed is {MAX_WIDTH} x {MAX_HEIGHT} pixels.'
+)
+
+
+def validate_payment_proof_upload(value):
+    """Django form-field validator for GCash payment screenshot uploads.
+
+    Applies the same security rules as validate_profile_image_upload:
+      1. Byte-size cap (3 MB — smaller than profile, screenshots are small)
+      2. Extension allowlist (jpg/jpeg/jfif/png/gif/webp)
+      3. Pillow content verification (real image, format matches extension)
+      4. Decompression-bomb dimension cap (8000 × 8000 px)
+
+    Only UploadedFile instances are validated; existing FieldFile values
+    (form re-renders without a new file) pass through unchanged.
+    """
+    if not isinstance(value, UploadedFile):
+        return
+
+    # 1) Size cap
+    if value.size > PROOF_MAX_SIZE_BYTES:
+        raise ValidationError(
+            PROOF_TOO_LARGE.format(size=_format_mb(value.size)),
+            code='proof_too_large',
+        )
+
+    # 2) Extension allowlist
+    name = value.name or ''
+    _, dot, ext = name.rpartition('.')
+    expected_format = ALLOWED_EXTENSIONS.get(ext.lower())
+    if not dot or expected_format is None:
+        raise ValidationError(PROOF_UNSUPPORTED, code='proof_unsupported_format')
+
+    # 3) Content check — header-only parse, no pixel decode
+    try:
+        value.seek(0)
+        probe = io.BytesIO(value.read())
+        image = Image.open(probe)
+        image.verify()
+        detected_format = (image.format or '').upper()
+        width, height = image.size
+    except Exception:
+        raise ValidationError(PROOF_UNSUPPORTED, code='proof_unsupported_format')
+    finally:
+        value.seek(0)
+
+    if detected_format not in ALLOWED_FORMATS:
+        raise ValidationError(PROOF_UNSUPPORTED, code='proof_unsupported_format')
+    if detected_format != expected_format:
+        raise ValidationError(PROOF_MISMATCH, code='proof_extension_mismatch')
+    if width > MAX_WIDTH or height > MAX_HEIGHT:
+        raise ValidationError(
+            PROOF_DIMENSIONS.format(width=width, height=height),
+            code='proof_dimensions_too_large',
+        )

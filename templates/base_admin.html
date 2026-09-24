@@ -90,11 +90,17 @@
       </a>
 
       <div class="nav-section-title">System</div>
-      <a href="{% url 'dashboard:system_settings' %}" class="sidebar-link {% if 'settings' in request.path %}active{% endif %}"
+      <a href="{% url 'dashboard:system_settings' %}" class="sidebar-link {% if request.resolver_match.url_name == 'system_settings' %}active{% endif %}"
          aria-label="Settings">
         <span class="nav-icon">⚙️</span>
         <span class="nav-label">Settings</span>
         <span class="sidebar-tooltip" aria-hidden="true">Settings</span>
+      </a>
+      <a href="{% url 'dashboard:gcash_settings' %}" class="sidebar-link {% if request.resolver_match.url_name == 'gcash_settings' %}active{% endif %}"
+         aria-label="GCash Settings">
+        <span class="nav-icon">📱</span>
+        <span class="nav-label">GCash Settings</span>
+        <span class="sidebar-tooltip" aria-hidden="true">GCash Settings</span>
       </a>
       <a href="{% url 'audit:activity_log' %}" class="sidebar-link {% if request.resolver_match.app_name == 'audit' %}active{% endif %}"
          aria-label="Activity Log">

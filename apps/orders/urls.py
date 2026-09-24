@@ -17,12 +17,17 @@ urlpatterns = [
     path('waiting/<str:tracking_token>/', views.payment_waiting, name='payment_waiting'),
     path('api/waiting/<str:tracking_token>/', views.api_payment_waiting_status, name='api_payment_waiting_status'),
 
+    # Customer GCash payment submission (public, gated by tracking_token in POST body)
+    path('waiting/<str:tracking_token>/submit-gcash/', views.submit_gcash_payment, name='submit_gcash_payment'),
+
     # Staff/Cashier
     path('manage/', views.order_list, name='order_list'),
     path('manage/<int:pk>/', views.order_detail, name='order_detail'),
     path('manage/<int:pk>/status/', views.update_order_status, name='update_status'),
     path('manage/<int:pk>/payment/', views.process_payment, name='process_payment'),
     path('manage/<int:pk>/accept/', views.accept_order, name='accept_order'),
+    path('manage/<int:pk>/gcash/verify/', views.verify_gcash_payment, name='verify_gcash_payment'),
+    path('manage/<int:pk>/gcash/reject/', views.reject_gcash_payment, name='reject_gcash_payment'),
     path('manage/<int:pk>/receipt/', views.print_receipt, name='print_receipt'),
     path('pos/', views.cashier_pos, name='pos'),
     path('pos/create/', views.create_pos_order, name='create_pos_order'),

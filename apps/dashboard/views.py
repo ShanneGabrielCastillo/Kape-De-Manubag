@@ -18,7 +18,7 @@ from apps.audit.services import log_action
 from apps.menu.models import CRITICAL_STOCK_THRESHOLD, Product
 from apps.orders.models import Order, OrderItem
 
-from .models import SystemSetting
+from .models import SystemSetting, GCashSettings
 
 logger = logging.getLogger(__name__)
 
@@ -336,6 +336,65 @@ def chart_data(request):
         # last good chart and the JS shows a fallback message.
         return JsonResponse({'error': 'chart unavailable'}, status=503)
     return JsonResponse({'labels': labels, 'data': data})
+
+
+@login_required
+@admin_required
+def gcash_settings(request):
+    """Admin-only GCash payment settings page.
+
+    Allows authorized admin staff to configure the business owner's GCash
+    account information that customers see when they select GCash at checkout.
+    Uses the GCashSettings singleton model (always pk=1).
+    """
+    settings_obj = GCashSettings.get_settings()
+
+    if request.method == 'POST':
+        account_name   = request.POST.get('account_name', '').strip()
+        account_number = request.POST.get('account_number', '').strip()
+        instructions   = request.POST.get('instructions', '').strip()
+        clear_qr       = request.POST.get('clear_qr') == '1'
+        qr_file        = request.FILES.get('qr_image')
+
+        errors = []
+
+        # Validate QR image if uploaded
+        if qr_file:
+            from apps.accounts.validators import validate_payment_proof_upload
+            from django.core.exceptions import ValidationError as DjangoValidationError
+            try:
+                validate_payment_proof_upload(qr_file)
+            except DjangoValidationError as e:
+                errors.append(e.message)
+
+        if account_number and not account_number.replace('-', '').replace(' ', '').isdigit():
+            errors.append('GCash account number should contain only digits.')
+
+        if errors:
+            for err in errors:
+                messages.error(request, err)
+        else:
+            settings_obj.account_name   = account_name
+            settings_obj.account_number = account_number
+            settings_obj.instructions   = instructions
+            if clear_qr:
+                settings_obj.qr_image = None
+            elif qr_file:
+                settings_obj.qr_image = qr_file
+            settings_obj.save()
+
+            log_action(
+                request.user, 'settings.update',
+                object_type='GCashSettings',
+                object_repr='GCash Settings',
+                detail='GCash payment settings updated.',
+            )
+            messages.success(request, 'GCash settings saved.')
+            return redirect('dashboard:gcash_settings')
+
+    return render(request, 'dashboard/gcash_settings.html', {
+        'gcash': settings_obj,
+    })
 
 
 @login_required

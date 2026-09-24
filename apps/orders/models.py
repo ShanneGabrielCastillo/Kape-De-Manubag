@@ -37,7 +37,7 @@ class Order(models.Model):
     customer_phone = models.CharField(max_length=15, blank=True)
     table_number = models.CharField(max_length=10, blank=True)
     order_type = models.CharField(max_length=20, choices=ORDER_TYPE_CHOICES, default='dine_in')
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='awaiting_payment')
     notes = models.TextField(blank=True)
 
     subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -51,6 +51,60 @@ class Order(models.Model):
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True)
     amount_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     change_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    # ── Manual GCash payment verification ────────────────────────────────────
+    # Populated when the customer submits their GCash payment for verification.
+    # CRITICAL: is_paid stays False until staff explicitly confirms the payment.
+    # These fields are only relevant when payment_method == 'gcash'.
+
+    GCASH_STATUS_CHOICES = [
+        ('none',     'Not Submitted'),     # default — no GCash payment submitted yet
+        ('pending',  'Pending Verification'),  # customer submitted, awaiting staff
+        ('verified', 'Verified'),          # staff confirmed payment is legitimate
+        ('rejected', 'Rejected'),          # staff rejected (invalid ref / not found)
+    ]
+
+    gcash_status = models.CharField(
+        max_length=20,
+        choices=GCASH_STATUS_CHOICES,
+        default='none',
+        help_text='Verification state of a customer-submitted GCash payment.',
+    )
+    gcash_reference = models.CharField(
+        max_length=50,
+        blank=True,
+        default='',
+        help_text='GCash reference number submitted by the customer.',
+    )
+    gcash_proof = models.ImageField(
+        upload_to='gcash_proofs/',
+        blank=True,
+        null=True,
+        help_text='Optional payment screenshot uploaded by the customer.',
+    )
+    gcash_submitted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when the customer submitted GCash payment info.',
+    )
+    gcash_verified_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when staff verified (or rejected) the payment.',
+    )
+    gcash_verified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='gcash_verifications',
+        help_text='Staff member who verified or rejected this GCash payment.',
+    )
+    gcash_notes = models.TextField(
+        blank=True,
+        default='',
+        help_text='Staff notes, e.g. rejection reason.',
+    )
 
     # Inventory
     stock_deducted = models.BooleanField(default=False,

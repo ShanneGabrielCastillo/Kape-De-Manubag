@@ -527,7 +527,7 @@ class OrderingGateTests(TestCase):
         self.product.deactivate()
 
         response = self.client.post(reverse('orders:checkout'), {
-            'customer_name': 'Test Customer', 'order_type': 'dine_in',
+            'customer_name': 'Test Customer', 'order_type': 'dine_in', 'payment_method': 'cash',
         })
         self.assertEqual(response.status_code, 302)
         self.assertRedirects(response, reverse('orders:cart'))

@@ -418,6 +418,9 @@ def checkout_view(request):
                         # awaiting_payment. Confirming payment moves them
                         # straight to preparing in one step.
                         status='awaiting_payment',
+                        # Store the chosen payment method at order creation so
+                        # the payment_waiting page can show the correct flow.
+                        payment_method=form.cleaned_data.get('payment_method', 'cash'),
                     )
 
                     # Add items — all prices and quantities are validated
@@ -617,30 +620,39 @@ def order_success(request, pk):
 def payment_waiting(request, tracking_token):
     """Customer-facing payment-waiting page.
 
-    Shown immediately after checkout.  The page covers two states:
-      PENDING + is_paid=False  → "Payment Required — go to the cashier"
-      PENDING + is_paid=True   → "Payment Confirmed — waiting for staff acceptance"
+    Shown immediately after checkout.  The page covers:
+      - Cash orders: "Go to the cashier" instructions
+      - GCash orders: owner GCash info + reference submission form
+      - After payment confirmed: "Order Received" overlay
 
-    Once the cashier accepts the order it moves to PREPARING and the JS
-    redirects the customer to the order tracker.  Access is gated by the
-    cryptographically random tracking_token so one customer cannot view
-    another's waiting page.
+    Access is gated by the cryptographically random tracking_token.
     """
     order = get_object_or_404(
         Order.objects.only(
             'order_number', 'queue_number', 'customer_name',
             'order_type', 'table_number', 'total', 'subtotal',
             'packaging_fee', 'status', 'is_paid', 'tracking_token',
-            'created_at',
+            'payment_method', 'gcash_status', 'created_at',
         ),
         tracking_token=tracking_token,
     )
     items = order.items.only(
         'product_name', 'size', 'quantity', 'unit_price', 'subtotal',
     )
+    from apps.dashboard.models import GCashSettings
+    gcash_settings = GCashSettings.get_settings() if order.payment_method == 'gcash' else None
+    from .forms import GCashSubmissionForm
+    gcash_form = GCashSubmissionForm() if (
+        order.payment_method == 'gcash'
+        and order.gcash_status in ('none', 'rejected')
+        and not order.is_paid
+        and order.status == 'awaiting_payment'
+    ) else None
     return render(request, 'orders/payment_waiting.html', {
         'order': order,
         'items': items,
+        'gcash_settings': gcash_settings,
+        'gcash_form': gcash_form,
     })
 
 
@@ -655,6 +667,7 @@ def api_payment_waiting_status(request, tracking_token):
         order = Order.objects.only(
             'order_number', 'queue_number', 'customer_name',
             'order_type', 'status', 'is_paid', 'tracking_token',
+            'payment_method', 'gcash_status',
         ).get(tracking_token=tracking_token)
     except Order.DoesNotExist:
         return JsonResponse({'error': 'Order not found'}, status=404)
@@ -665,12 +678,148 @@ def api_payment_waiting_status(request, tracking_token):
         'status':            order.status,
         'status_display':    order.get_status_display(),
         'is_paid':           order.is_paid,
+        'payment_method':    order.payment_method,
+        'gcash_status':      order.gcash_status,
         # True once the cashier has confirmed payment (order moved to
         # preparing or beyond). The waiting page uses this to show the
         # "Order Received" overlay and redirect to the tracker.
         'order_accepted':    order.status not in ('awaiting_payment', 'cancelled'),
         'is_cancelled':      order.status == 'cancelled',
         'tracker_url':       f'/orders/track/{order.tracking_token}/',
+    })
+
+
+# ── GCash customer submission ─────────────────────────────────────────────────
+
+@require_POST
+def submit_gcash_payment(request, tracking_token):
+    """Customer submits their GCash reference number and optional proof.
+
+    Access is gated by the cryptographically random tracking_token — the same
+    mechanism used for the payment_waiting page and api_track_order.  No login
+    required (anonymous customers).
+
+    CRITICAL: This view NEVER sets is_paid=True.  It only stores the customer's
+    submission data and updates gcash_status to 'pending'.  Staff must explicitly
+    verify the payment via verify_gcash_payment.
+
+    Duplicate-submission handling:
+    - Already submitted (gcash_status='pending')  → return current state, no re-write
+    - Already verified (gcash_status='verified')  → reject with error
+    - Rejected previously (gcash_status='rejected') → allow re-submission
+    - Order already paid                          → reject
+    - Order cancelled/completed                   → reject
+    """
+    order = get_object_or_404(
+        Order.objects.select_for_update(),
+        tracking_token=tracking_token,
+    )
+
+    # ── Guard checks ──────────────────────────────────────────────────────
+    if order.payment_method != 'gcash':
+        return JsonResponse({
+            'success': False,
+            'error': 'This order is not a GCash order.',
+        }, status=400)
+
+    if order.is_paid:
+        return JsonResponse({
+            'success': False,
+            'error': 'This order has already been paid.',
+        }, status=400)
+
+    if order.status in ('cancelled', 'completed'):
+        return JsonResponse({
+            'success': False,
+            'error': f'Cannot submit payment: this order has been {order.get_status_display().lower()}.',
+        }, status=400)
+
+    if order.status != 'awaiting_payment':
+        return JsonResponse({
+            'success': False,
+            'error': 'Payment cannot be submitted for this order at this stage.',
+        }, status=400)
+
+    # If already pending verification, return idempotent success — do not
+    # re-write, but tell the customer their submission is still being reviewed.
+    if order.gcash_status == 'pending':
+        return JsonResponse({
+            'success': True,
+            'already_submitted': True,
+            'message': 'Your payment is already submitted and waiting for verification.',
+            'gcash_status': 'pending',
+        })
+
+    if order.gcash_status == 'verified':
+        return JsonResponse({
+            'success': False,
+            'error': 'This payment has already been verified.',
+        }, status=400)
+
+    # ── Validate form ─────────────────────────────────────────────────────
+    from .forms import GCashSubmissionForm
+    form = GCashSubmissionForm(request.POST, request.FILES)
+    if not form.is_valid():
+        # Return first error per field in a simple flat structure.
+        errors = {field: errs[0] for field, errs in form.errors.items()}
+        return JsonResponse({'success': False, 'errors': errors}, status=400)
+
+    reference = form.cleaned_data['gcash_reference']
+    proof_file = form.cleaned_data.get('gcash_proof')
+
+    # ── Duplicate reference check ─────────────────────────────────────────
+    # Prevent the same GCash reference from being used on multiple orders.
+    # Only block if the reference was used on a VERIFIED or PENDING order —
+    # a reference on a REJECTED or NONE order has not been confirmed paid,
+    # so it cannot be a true duplicate.
+    duplicate_qs = Order.objects.filter(
+        gcash_reference=reference,
+        gcash_status__in=('pending', 'verified'),
+    ).exclude(pk=order.pk)
+    if duplicate_qs.exists():
+        return JsonResponse({
+            'success': False,
+            'errors': {
+                'gcash_reference': (
+                    'This GCash reference number has already been submitted '
+                    'for another order. Please check the reference and try again.'
+                ),
+            },
+        }, status=400)
+
+    # ── Persist the submission ────────────────────────────────────────────
+    with transaction.atomic():
+        order.gcash_reference = reference
+        order.gcash_status = 'pending'
+        order.gcash_submitted_at = timezone.now()
+        if proof_file:
+            order.gcash_proof = proof_file
+        order.save(update_fields=[
+            'gcash_reference', 'gcash_status', 'gcash_submitted_at', 'gcash_proof',
+        ])
+
+        log_action(
+            None,  # anonymous customer — no user
+            'order.gcash_submitted',
+            order,
+            detail=f'GCash ref: {reference} — proof: {"yes" if proof_file else "no"}',
+        )
+
+        # Notify staff via SSE that a GCash payment needs verification.
+        from apps.realtime.broker import publish as rt_publish
+        rt_publish('gcash_submitted', {
+            'order_id':      order.pk,
+            'order_number':  order.order_number,
+            'customer_name': order.customer_name,
+            'total':         float(order.total),
+            'gcash_reference': reference,
+        })
+
+    return JsonResponse({
+        'success': True,
+        'already_submitted': False,
+        'message': 'Your payment has been submitted for verification. Please wait for staff confirmation.',
+        'gcash_status': 'pending',
     })
 
 
@@ -693,7 +842,9 @@ def order_list(request):
         .defer('notes', 'customer_phone', 'discount',
                'amount_paid', 'change_amount', 'stock_deducted',
                'request_token', 'queued_at', 'ready_at',
-               'completed_at', 'cancelled_at')
+               'completed_at', 'cancelled_at',
+               'gcash_reference', 'gcash_notes',
+               'gcash_submitted_at', 'gcash_verified_at')
         .order_by('-created_at')
     )
 
@@ -734,9 +885,10 @@ def order_list(request):
 @login_required
 @cashier_or_admin_required
 def order_detail(request, pk):
-    # select_related('cashier') preloads the staff member shown on the page
-    # (order.cashier.get_full_name) -- one query instead of a lazy fetch.
-    order = get_object_or_404(Order.objects.select_related('cashier'), pk=pk)
+    # select_related preloads FK staff members shown on the page — one query.
+    order = get_object_or_404(
+        Order.objects.select_related('cashier', 'gcash_verified_by'), pk=pk
+    )
     items = order.items.select_related('product').all()
     return render(request, 'orders/order_detail.html', {
         'order': order,
@@ -882,6 +1034,28 @@ def process_payment(request, pk):
         # Decimal subtraction — exact peso/centavo arithmetic, no float rounding.
         order.change_amount = amount_paid - order.total
 
+        # ── GCash orders must use the manual verification flow ───────────────
+        # A customer-placed GCash order (awaiting_payment + payment_method='gcash')
+        # should NOT be confirmed via this endpoint — the customer submits their
+        # reference number via submit_gcash_payment and staff verifies via
+        # verify_gcash_payment.  This guard prevents staff from accidentally
+        # bypassing the verification step by using the Cash "Pay" modal on a
+        # GCash order.
+        #
+        # POS staff may still use this endpoint for any order they create
+        # directly (cashier is set) regardless of payment method, since POS
+        # is an in-person transaction that doesn't need remote verification.
+        if (order.status == 'awaiting_payment'
+                and order.payment_method == 'gcash'
+                and order.cashier_id is None):
+            return JsonResponse({
+                'success': False,
+                'error': (
+                    'This is a GCash order. Please use the GCash Verify button '
+                    'to confirm the customer\'s payment after checking your GCash account.'
+                ),
+            })
+
         # ── Customer order vs POS order ──────────────────────────────────────
         # Customer orders (placed anonymously via checkout, cashier is None)
         # now auto-accept on payment: confirming payment moves the order
@@ -1020,6 +1194,187 @@ def accept_order(request, pk):
         'order_number':       order.order_number,
         'new_status':         order.status,
         'new_status_display': order.get_status_display(),
+    })
+
+
+@login_required
+@cashier_or_admin_required
+def verify_gcash_payment(request, pk):
+    """Staff confirms a customer's GCash payment is legitimate.
+
+    After verification:
+    - gcash_status → 'verified'
+    - is_paid → True
+    - payment fields filled in (amount = order.total, change = 0)
+    - gcash_verified_at and gcash_verified_by recorded
+    - order status advances awaiting_payment → preparing
+    - realtime: payment_confirmed + order_accepted sent to customer
+    - audit log entry created
+
+    CRITICAL security checks (all server-side):
+    - Requires authenticated cashier/admin
+    - Order must exist
+    - payment_method must be 'gcash'
+    - gcash_status must be 'pending' (customer must have submitted)
+    - is_paid must still be False (idempotency guard)
+    - Order must be in 'awaiting_payment' status
+    - Not cancelled / completed
+    - Uses SELECT FOR UPDATE to prevent concurrent double-verification
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+    with transaction.atomic():
+        order = get_object_or_404(Order.objects.select_for_update(), pk=pk)
+
+        if order.payment_method != 'gcash':
+            return JsonResponse({
+                'success': False,
+                'error': 'This is not a GCash order.',
+            }, status=400)
+
+        if order.is_paid:
+            return JsonResponse({
+                'success': False,
+                'error': 'This order has already been marked as paid.',
+            }, status=400)
+
+        if order.gcash_status != 'pending':
+            return JsonResponse({
+                'success': False,
+                'error': (
+                    'Cannot verify: the customer has not submitted a GCash '
+                    'reference number yet, or the payment was already processed.'
+                ),
+            }, status=400)
+
+        if order.status in ('cancelled', 'completed'):
+            return JsonResponse({
+                'success': False,
+                'error': f'Cannot verify: order is {order.get_status_display().lower()}.',
+            }, status=400)
+
+        if order.status != 'awaiting_payment':
+            return JsonResponse({
+                'success': False,
+                'error': f'Cannot verify: order status is "{order.get_status_display()}".',
+            }, status=400)
+
+        now = timezone.now()
+
+        # Mark payment as verified + paid.
+        order.gcash_status = 'verified'
+        order.gcash_verified_at = now
+        order.gcash_verified_by = request.user
+        order.is_paid = True
+        order.amount_paid = order.total
+        order.change_amount = Decimal('0.00')
+        order.cashier = request.user
+
+        # Advance order into preparation queue (same as process_payment for Cash).
+        order.status = 'preparing'
+
+        order.save()
+
+        log_action(
+            request.user, 'order.gcash_verified', order,
+            detail=f'GCash ref {order.gcash_reference} verified — order moved to Preparing.',
+        )
+        log_action(
+            request.user, 'order.payment', order,
+            detail=f'GCash ₱{order.amount_paid} — verified by staff',
+        )
+
+        from apps.realtime.broker import publish as rt_publish
+        rt_publish('payment_confirmed', {
+            'order_id':      order.pk,
+            'order_number':  order.order_number,
+            'is_paid':       True,
+            'status':        order.status,
+        })
+        rt_publish('order_accepted', {
+            'order_id':           order.pk,
+            'order_number':       order.order_number,
+            'new_status':         order.status,
+            'new_status_display': order.get_status_display(),
+        })
+
+    return JsonResponse({
+        'success':           True,
+        'order_number':      order.order_number,
+        'new_status':        order.status,
+        'new_status_display': order.get_status_display(),
+    })
+
+
+@login_required
+@cashier_or_admin_required
+def reject_gcash_payment(request, pk):
+    """Staff rejects an unverifiable GCash payment submission.
+
+    After rejection:
+    - gcash_status → 'rejected'
+    - is_paid stays False
+    - order status stays 'awaiting_payment'
+    - gcash_verified_at and gcash_verified_by recorded
+    - optional rejection note stored
+    - realtime: gcash_rejected sent to customer so they can re-submit
+    - audit log entry created
+
+    The customer may re-submit corrected payment information (the submit view
+    allows re-submission when gcash_status='rejected').
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+    with transaction.atomic():
+        order = get_object_or_404(Order.objects.select_for_update(), pk=pk)
+
+        if order.payment_method != 'gcash':
+            return JsonResponse({'success': False, 'error': 'Not a GCash order.'}, status=400)
+
+        if order.is_paid:
+            return JsonResponse({'success': False, 'error': 'Order is already paid.'}, status=400)
+
+        if order.gcash_status != 'pending':
+            return JsonResponse({
+                'success': False,
+                'error': 'No pending GCash submission to reject.',
+            }, status=400)
+
+        if order.status in ('cancelled', 'completed'):
+            return JsonResponse({
+                'success': False,
+                'error': f'Order is {order.get_status_display().lower()}.',
+            }, status=400)
+
+        rejection_note = request.POST.get('rejection_note', '').strip()
+        now = timezone.now()
+
+        order.gcash_status = 'rejected'
+        order.gcash_verified_at = now
+        order.gcash_verified_by = request.user
+        order.gcash_notes = rejection_note
+        order.save(update_fields=[
+            'gcash_status', 'gcash_verified_at', 'gcash_verified_by', 'gcash_notes',
+        ])
+
+        log_action(
+            request.user, 'order.gcash_rejected', order,
+            detail=f'GCash ref {order.gcash_reference} rejected. Note: {rejection_note or "(none)"}',
+        )
+
+        from apps.realtime.broker import publish as rt_publish
+        rt_publish('gcash_rejected', {
+            'order_id':      order.pk,
+            'order_number':  order.order_number,
+            'rejection_note': rejection_note,
+        })
+
+    return JsonResponse({
+        'success': True,
+        'order_number': order.order_number,
+        'message': 'Payment submission rejected. Customer can re-submit.',
     })
 
 

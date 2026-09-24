@@ -352,6 +352,8 @@
             data-accept-url="{% url 'orders:accept_order' order.pk %}"
             data-status-url="{% url 'orders:update_status' order.pk %}"
             data-total-raw="{{ order.total }}"
+            data-payment-method="{{ order.payment_method }}"
+            data-gcash-status="{{ order.gcash_status }}"
         >
           <td><a href="{% url 'orders:order_detail' order.pk %}" style="font-weight:700;color:var(--caramel)">{{ order.order_number }}</a></td>
           <td>{{ order.customer_name }}</td>
@@ -367,15 +369,29 @@
             {% elif order.status == 'cancelled' %}
               <span class="badge badge-cancelled" style="font-size:0.8rem;padding:5px 10px">{{ order.get_status_display }}</span>
             {% elif order.status == 'awaiting_payment' %}
+              {% if order.payment_method == 'gcash' and order.gcash_status == 'pending' %}
+              <span class="badge" style="background:#dbeafe;color:#1e40af;font-size:0.8rem;padding:5px 10px">📋 GCash — Verify</span>
+              {% elif order.payment_method == 'gcash' and order.gcash_status == 'rejected' %}
+              <span class="badge" style="background:#fee2e2;color:#991b1b;font-size:0.8rem;padding:5px 10px">❌ GCash Rejected</span>
+              {% elif order.payment_method == 'gcash' %}
+              <span class="badge" style="background:#fff3cd;color:#856404;font-size:0.8rem;padding:5px 10px">📱 GCash — Pending</span>
+              {% else %}
               <span class="badge" style="background:#fff3cd;color:#856404;font-size:0.8rem;padding:5px 10px">{{ order.get_status_display }}</span>
+              {% endif %}
             {% else %}
               <span class="badge badge-{{ order.status }}" style="font-size:0.8rem;padding:5px 10px">{{ order.get_status_display }}</span>
             {% endif %}
           </td>
           <td>
             {% if order.status == 'awaiting_payment' %}
-              {# One button: confirming payment auto-accepts #}
-              <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}')" class="btn btn-sm btn-caramel">💳 Pay</button>
+              {# GCash: show Verify button when reference submitted; Pay for cash #}
+              {% if order.payment_method == 'gcash' and order.gcash_status == 'pending' %}
+                <a href="{% url 'orders:order_detail' order.pk %}" class="btn btn-sm btn-primary">🔍 Verify GCash</a>
+              {% elif order.payment_method == 'gcash' %}
+                <span style="font-size:0.78rem;color:#888">GCash online</span>
+              {% else %}
+                <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}')" class="btn btn-sm btn-caramel">💳 Pay</button>
+              {% endif %}
             {% elif order.is_paid %}
               <span class="badge badge-paid">Paid</span>
             {% elif order.status != 'cancelled' %}

@@ -32,6 +32,10 @@ ACTION_CATEGORIES = {
         'order.payment',
         'order.cancel',
         'order.status_changed',
+        'order.accepted',
+        'order.gcash_submitted',
+        'order.gcash_verified',
+        'order.gcash_rejected',
     ],
     'products': [
         'product.create',

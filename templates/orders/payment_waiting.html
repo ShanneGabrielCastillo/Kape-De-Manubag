@@ -14,142 +14,118 @@
     body { background: var(--cream-light); overflow-x: hidden; max-width: 100vw; }
     .waiting-page { max-width: 480px; margin: 0 auto; padding: 20px 16px 60px; width: 100%; box-sizing: border-box; }
 
-    /* ── Hero card — changes appearance by state ── */
     .waiting-hero {
       border-radius: 20px;
-      padding: 32px 24px;
+      padding: 28px 24px;
       text-align: center;
       border: 3px solid transparent;
-      transition: background 0.6s ease, border-color 0.6s ease;
+      transition: background 0.5s, border-color 0.5s;
       margin-bottom: 16px;
-      width: 100%;
-      box-sizing: border-box;
+      width: 100%; box-sizing: border-box;
     }
-    .state-awaiting  { background: #fff8e1; border-color: #ffc107; }
-    .state-paid      { background: #e8f5e9; border-color: #43a047; }
-    .state-accepted  { background: #e3f2fd; border-color: #1976d2; }
-    .state-cancelled { background: #fce4ec; border-color: var(--status-cancelled); }
+    .state-awaiting     { background: #fff8e1; border-color: #ffc107; }
+    .state-submitted    { background: #e8f4ff; border-color: #1976d2; }
+    .state-rejected     { background: #fff0f0; border-color: var(--red-accent); }
+    .state-paid         { background: #e8f5e9; border-color: #43a047; }
+    .state-accepted     { background: #e3f2fd; border-color: #1976d2; }
+    .state-cancelled    { background: #fce4ec; border-color: var(--status-cancelled); }
 
-    .waiting-icon { font-size: 3rem; margin-bottom: 10px; }
-    .waiting-title {
-      font-size: 1.4rem;
-      font-weight: 700;
-      font-family: 'Playfair Display', serif;
-      color: var(--brown-dark);
-      margin-bottom: 6px;
-    }
-    .waiting-subtitle { font-size: 0.9rem; color: #666; line-height: 1.5; }
+    .waiting-icon  { font-size: 2.8rem; margin-bottom: 8px; }
+    .waiting-title { font-size: 1.35rem; font-weight: 700; font-family: 'Playfair Display', serif; color: var(--brown-dark); margin-bottom: 6px; }
+    .waiting-subtitle { font-size: 0.88rem; color: #666; line-height: 1.55; }
 
-    /* ── Order number pill ── */
     .order-number-pill {
       display: inline-block;
-      background: var(--brown-dark);
-      color: var(--gold);
+      background: var(--brown-dark); color: var(--gold);
       font-family: 'Playfair Display', serif;
-      font-size: 1.5rem;
-      font-weight: 700;
-      padding: 8px 24px;
-      border-radius: 50px;
-      margin: 12px 0;
-      letter-spacing: 0.02em;
-      white-space: nowrap;
-      max-width: 100%;
+      font-size: 1.4rem; font-weight: 700;
+      padding: 7px 22px; border-radius: 50px; margin: 10px 0;
+      white-space: nowrap; max-width: 100%;
     }
-    @media (max-width: 400px) {
-      .order-number-pill { font-size: 1.1rem; padding: 8px 16px; }
-    }
+    @media (max-width: 400px) { .order-number-pill { font-size: 1.05rem; padding: 7px 14px; } }
 
-    /* ── Info card ── */
     .waiting-card {
       background: var(--cream-white);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      padding: 20px;
-      margin-bottom: 14px;
-      width: 100%;
-      box-sizing: border-box;
+      border-radius: var(--radius); box-shadow: var(--shadow);
+      padding: 18px 20px; margin-bottom: 14px;
+      width: 100%; box-sizing: border-box;
     }
     .waiting-card-label {
-      font-size: 0.7rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: #aaa;
-      margin-bottom: 10px;
+      font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.1em; color: #aaa; margin-bottom: 10px;
     }
+
+    /* ── GCash payment info card ── */
+    .gcash-info-card {
+      background: linear-gradient(135deg, #0058a3 0%, #0077cc 100%);
+      color: #fff; border-radius: 16px; padding: 20px;
+      margin-bottom: 14px; width: 100%; box-sizing: border-box;
+    }
+    .gcash-info-card h3 { color: #fff; font-size: 1rem; margin: 0 0 14px; }
+    .gcash-field { margin-bottom: 10px; }
+    .gcash-field-label { font-size: 0.68rem; opacity: 0.75; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px; }
+    .gcash-field-value { font-size: 1.05rem; font-weight: 700; }
+    .gcash-copy-btn {
+      background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4);
+      color: #fff; border-radius: 6px; padding: 3px 10px; font-size: 0.75rem;
+      cursor: pointer; margin-left: 8px; transition: background 0.2s;
+    }
+    .gcash-copy-btn:hover { background: rgba(255,255,255,0.35); }
+    .gcash-amount-big {
+      font-size: 2.2rem; font-weight: 700; font-family: 'Playfair Display', serif;
+      color: #fff; text-align: center; margin: 14px 0 4px;
+    }
+    .gcash-amount-label { font-size: 0.8rem; opacity: 0.8; text-align: center; margin-bottom: 14px; }
+    .gcash-qr { display: flex; justify-content: center; margin: 14px 0 6px; }
+    .gcash-qr img {
+      max-width: 200px; max-height: 200px; border-radius: 12px;
+      border: 3px solid rgba(255,255,255,0.6); background: #fff;
+    }
+    .gcash-steps {
+      background: rgba(255,255,255,0.1); border-radius: 10px; padding: 12px 14px;
+      margin-top: 12px; font-size: 0.82rem; line-height: 1.7;
+    }
+
+    /* ── Reference submission form ── */
+    .gcash-submit-form { display: flex; flex-direction: column; gap: 12px; }
+    .gcash-submit-form .form-label { font-size: 0.8rem; font-weight: 600; color: var(--brown-dark); margin-bottom: 4px; display: block; }
+    .gcash-submit-form .form-control { width: 100%; box-sizing: border-box; }
+    .field-error { color: var(--red-accent); font-size: 0.78rem; margin-top: 3px; display: none; }
 
     /* ── Payment status pill ── */
     .pay-status {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      border-radius: 50px;
-      padding: 8px 18px;
-      font-weight: 700;
-      font-size: 0.9rem;
+      display: inline-flex; align-items: center; gap: 8px;
+      border-radius: 50px; padding: 8px 18px;
+      font-weight: 700; font-size: 0.88rem;
       transition: background 0.4s, color 0.4s;
     }
     .pay-status-unpaid    { background: #fff3cd; color: #856404; }
+    .pay-status-submitted { background: #dbeafe; color: #1e40af; }
+    .pay-status-rejected  { background: #fee2e2; color: #991b1b; }
     .pay-status-paid      { background: #d1e7dd; color: #0f5132; }
-
-    .pay-dot {
-      width: 10px; height: 10px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-    .pay-dot-unpaid  { background: #ffc107; animation: dotPulse 1.5s ease-in-out infinite; }
-    .pay-dot-paid    { background: #198754; }
-
+    .pay-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .pay-dot-unpaid    { background: #ffc107; animation: dotPulse 1.5s ease-in-out infinite; }
+    .pay-dot-submitted { background: #3b82f6; animation: dotPulse 1.5s ease-in-out infinite; }
+    .pay-dot-rejected  { background: var(--red-accent); }
+    .pay-dot-paid      { background: #198754; }
     @keyframes dotPulse {
       0%, 100% { opacity: 1; transform: scale(1); }
       50%       { opacity: 0.5; transform: scale(0.8); }
     }
 
-    /* ── Cashier instruction banner ── */
-    .cashier-banner {
-      background: rgba(193,122,59,0.10);
-      border: 1.5px solid rgba(193,122,59,0.35);
-      border-radius: 14px;
-      padding: 18px 20px;
-      display: flex;
-      align-items: flex-start;
-      gap: 14px;
-      margin-bottom: 14px;
-    }
-    .cashier-banner-icon { font-size: 1.8rem; flex-shrink: 0; margin-top: 2px; }
-    .cashier-banner-text { flex: 1; }
-    .cashier-banner-title { font-weight: 700; color: var(--brown-dark); font-size: 0.95rem; }
-    .cashier-banner-sub   { font-size: 0.82rem; color: #888; margin-top: 3px; line-height: 1.45; }
-
-    /* ── Item list ── */
     .order-item-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--cream); font-size: 0.88rem; }
     .order-item-row:last-child { border-bottom: none; }
     .order-total-row { display: flex; justify-content: space-between; padding-top: 10px; font-weight: 700; font-size: 1rem; }
 
-    /* ── Accepted overlay (shown when order is accepted) ── */
     .accepted-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(25, 118, 210, 0.96);
-      z-index: 9999;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
+      position: fixed; inset: 0; background: rgba(25, 118, 210, 0.96);
+      z-index: 9999; display: none; align-items: center; justify-content: center; padding: 20px;
     }
     .accepted-overlay-inner {
-      background: #fff;
-      border-radius: 20px;
-      padding: 40px 32px;
-      text-align: center;
-      max-width: 360px;
-      width: 100%;
-      animation: slideUp 0.4s ease;
+      background: #fff; border-radius: 20px; padding: 40px 32px; text-align: center;
+      max-width: 360px; width: 100%; animation: slideUp 0.4s ease;
     }
-    @keyframes slideUp {
-      from { opacity: 0; transform: translateY(30px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: none; } }
     .accepted-overlay-emoji { font-size: 4rem; margin-bottom: 12px; }
     .accepted-overlay-title { font-size: 1.8rem; font-weight: 700; color: #1976d2; font-family: 'Playfair Display', serif; margin-bottom: 8px; }
     .accepted-overlay-number { font-size: 2.8rem; color: #1976d2; font-family: 'Playfair Display', serif; font-weight: 700; margin: 10px 0; }
@@ -158,7 +134,6 @@
 </head>
 <body>
 
-<!-- Navbar -->
 <nav style="background:var(--brown-dark);padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:52px;position:sticky;top:0;z-index:50">
   <span style="font-family:'Playfair Display',serif;font-weight:700;color:var(--gold);font-size:1rem">☕ Kape De Manubag</span>
   <a href="{% url 'menu:index' %}" style="color:rgba(255,255,255,0.7);font-size:0.85rem;text-decoration:none">← Menu</a>
@@ -166,52 +141,187 @@
 
 <div class="waiting-page">
 
-  <!-- Hero — state changes via JS -->
-  <div class="waiting-hero {% if order.is_paid %}state-paid{% else %}state-awaiting{% endif %}" id="waiting-hero">
-    <div class="waiting-icon" id="waiting-icon">{% if order.is_paid %}💳✅{% else %}💳{% endif %}</div>
+  {# ── Hero — state driven by Python/JS ── #}
+  <div class="waiting-hero
+    {% if order.is_paid %}state-paid
+    {% elif order.payment_method == 'gcash' and order.gcash_status == 'pending' %}state-submitted
+    {% elif order.payment_method == 'gcash' and order.gcash_status == 'rejected' %}state-rejected
+    {% else %}state-awaiting{% endif %}"
+    id="waiting-hero">
+    <div class="waiting-icon" id="waiting-icon">
+      {% if order.is_paid %}💳✅
+      {% elif order.payment_method == 'gcash' and order.gcash_status == 'pending' %}📋⏳
+      {% elif order.payment_method == 'gcash' and order.gcash_status == 'rejected' %}❌
+      {% elif order.payment_method == 'gcash' %}📱
+      {% else %}💳{% endif %}
+    </div>
     <div class="order-number-pill">{{ order.order_number }}</div>
     <div class="waiting-title" id="waiting-title">
-      {% if order.is_paid %}Payment Confirmed{% else %}Payment Required{% endif %}
+      {% if order.is_paid %}Payment Confirmed
+      {% elif order.payment_method == 'gcash' and order.gcash_status == 'pending' %}Payment Submitted
+      {% elif order.payment_method == 'gcash' and order.gcash_status == 'rejected' %}Payment Not Verified
+      {% else %}Payment Required{% endif %}
     </div>
     <div class="waiting-subtitle" id="waiting-subtitle">
       {% if order.is_paid %}
-        Your payment has been verified. Please wait while our staff confirms your order.
+        Your payment has been verified. Please wait while your order is being prepared.
+      {% elif order.payment_method == 'gcash' and order.gcash_status == 'pending' %}
+        Your GCash reference has been submitted. Staff will verify your payment shortly.
+      {% elif order.payment_method == 'gcash' and order.gcash_status == 'rejected' %}
+        Your payment could not be verified. Please check the details and re-submit.
+      {% elif order.payment_method == 'gcash' %}
+        Please pay via GCash using the details below, then submit your reference number.
       {% else %}
         Please proceed to the cashier to complete your payment.
       {% endif %}
     </div>
   </div>
 
-  <!-- Cashier instruction banner — hidden once paid -->
-  <div class="cashier-banner" id="cashier-banner" {% if order.is_paid %}style="display:none"{% endif %}>
+  {# ── GCash payment info ── #}
+  {% if order.payment_method == 'gcash' and not order.is_paid %}
+  {% if gcash_settings and gcash_settings.is_configured %}
+  <div class="gcash-info-card" id="gcash-info-card">
+    <h3>📱 GCash Payment Details</h3>
+
+    <div class="gcash-amount-big">₱{{ order.total|floatformat:2 }}</div>
+    <div class="gcash-amount-label">Send this exact amount</div>
+
+    <div class="gcash-field">
+      <div class="gcash-field-label">Account Name</div>
+      <div class="gcash-field-value">
+        {{ gcash_settings.account_name }}
+      </div>
+    </div>
+    <div class="gcash-field">
+      <div class="gcash-field-label">GCash Number</div>
+      <div class="gcash-field-value">
+        {{ gcash_settings.account_number }}
+        <button class="gcash-copy-btn" onclick="copyToClipboard('{{ gcash_settings.account_number }}', this)">Copy</button>
+      </div>
+    </div>
+
+    {% if gcash_settings.qr_image %}
+    <div class="gcash-qr">
+      <img src="{{ gcash_settings.qr_image.url }}" alt="GCash QR Code" loading="lazy">
+    </div>
+    <p style="text-align:center;font-size:0.78rem;opacity:0.8;margin-top:4px">Scan QR code with GCash app</p>
+    {% endif %}
+
+    {% if gcash_settings.instructions %}
+    <div class="gcash-steps">{{ gcash_settings.instructions }}</div>
+    {% else %}
+    <div class="gcash-steps">
+      <strong>How to pay:</strong><br>
+      1. Open GCash → Send Money<br>
+      2. Enter the number above or scan the QR code<br>
+      3. Enter exactly <strong>₱{{ order.total|floatformat:2 }}</strong><br>
+      4. Complete the payment<br>
+      5. Copy the 13-digit reference number<br>
+      6. Enter it below and tap Submit
+    </div>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="waiting-card" style="border:1.5px solid #ffc107;background:#fff8e1">
+    <p style="margin:0;font-size:0.88rem;color:#856404">
+      ⚠️ GCash payment details are not yet configured. Please pay at the counter with cash, or contact staff.
+    </p>
+  </div>
+  {% endif %}
+  {% endif %}
+
+  {# ── GCash reference submission form ── #}
+  {% if order.payment_method == 'gcash' and not order.is_paid and order.gcash_status in 'none,rejected' %}
+  <div class="waiting-card" id="gcash-form-card">
+    <div class="waiting-card-label">
+      {% if order.gcash_status == 'rejected' %}Re-Submit Payment{% else %}Submit Payment Reference{% endif %}
+    </div>
+
+    {% if order.gcash_status == 'rejected' %}
+    <div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:0.85rem;color:#991b1b">
+      ❌ Your previous submission was not verified.
+      {% if order.gcash_notes %}<br><strong>Reason:</strong> {{ order.gcash_notes }}{% endif %}
+      <br>Please check your GCash app and re-enter the correct reference number.
+    </div>
+    {% endif %}
+
+    <form class="gcash-submit-form" id="gcash-submit-form" enctype="multipart/form-data" novalidate>
+      {% csrf_token %}
+      <div>
+        <label class="form-label" for="id_gcash_reference">GCash Reference Number *</label>
+        {{ gcash_form.gcash_reference }}
+        <div class="field-error" id="error-gcash_reference"></div>
+        <div style="font-size:0.75rem;color:#aaa;margin-top:4px">The 13-digit number from your GCash transaction receipt.</div>
+      </div>
+      <div>
+        <label class="form-label" for="id_gcash_proof">Payment Screenshot (optional)</label>
+        {{ gcash_form.gcash_proof }}
+        <div class="field-error" id="error-gcash_proof"></div>
+        <div style="font-size:0.75rem;color:#aaa;margin-top:4px">JPG, PNG or WEBP · max 3 MB</div>
+      </div>
+      <div id="gcash-submit-error" style="display:none;background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;font-size:0.85rem;color:#991b1b"></div>
+      <button type="submit" class="btn btn-primary btn-block" id="gcash-submit-btn">
+        📨 Submit Payment for Verification
+      </button>
+    </form>
+  </div>
+  {% endif %}
+
+  {# ── Submitted / awaiting verification state ── #}
+  {% if order.payment_method == 'gcash' and not order.is_paid and order.gcash_status == 'pending' %}
+  <div class="waiting-card" id="gcash-pending-card">
+    <div class="waiting-card-label">Payment Status</div>
+    <div id="pay-status-pill" class="pay-status pay-status-submitted">
+      <span class="pay-dot pay-dot-submitted" id="pay-dot"></span>
+      <span id="pay-status-text">Waiting for Verification</span>
+    </div>
+    <p style="margin-top:10px;font-size:0.8rem;color:#aaa" id="pay-status-hint">
+      Our staff will check your GCash account and verify your payment shortly.
+    </p>
+  </div>
+  {% endif %}
+
+  {# ── Cash payment instruction banner ── #}
+  {% if order.payment_method == 'cash' and not order.is_paid %}
+  <div class="cashier-banner" id="cashier-banner">
     <div class="cashier-banner-icon">🏪</div>
     <div class="cashier-banner-text">
       <div class="cashier-banner-title">Go to the cashier</div>
       <div class="cashier-banner-sub">
         Show your order number <strong>{{ order.order_number }}</strong> to the cashier and pay
         <strong style="color:var(--caramel)">₱{{ order.total|floatformat:2 }}</strong>.
-        <br>Payment methods: Cash or GCash.
+        <br>Payment methods: Cash or GCash (at counter).
       </div>
     </div>
   </div>
+  {% endif %}
 
-  <!-- Payment status card -->
+  {# ── Cash payment status pill (when awaiting staff pay) ── #}
+  {% if order.payment_method == 'cash' and not order.is_paid %}
   <div class="waiting-card">
     <div class="waiting-card-label">Payment Status</div>
-    <div id="pay-status-pill" class="pay-status {% if order.is_paid %}pay-status-paid{% else %}pay-status-unpaid{% endif %}">
-      <span class="pay-dot {% if order.is_paid %}pay-dot-paid{% else %}pay-dot-unpaid{% endif %}" id="pay-dot"></span>
-      <span id="pay-status-text">{% if order.is_paid %}Payment Confirmed ✓{% else %}Waiting for Payment{% endif %}</span>
+    <div id="pay-status-pill" class="pay-status pay-status-unpaid">
+      <span class="pay-dot pay-dot-unpaid" id="pay-dot"></span>
+      <span id="pay-status-text">Waiting for Payment</span>
     </div>
     <p style="margin-top:10px;font-size:0.8rem;color:#aaa" id="pay-status-hint">
-      {% if order.is_paid %}
-        Waiting for staff to confirm your order…
-      {% else %}
-        Your order will be confirmed after our staff verifies your payment.
-      {% endif %}
+      Your order will be confirmed after our staff verifies your payment.
     </p>
   </div>
+  {% endif %}
 
-  <!-- Order info grid -->
+  {# ── After payment confirmed (both Cash and GCash) ── #}
+  {% if order.is_paid %}
+  <div class="waiting-card">
+    <div class="waiting-card-label">Payment Status</div>
+    <div class="pay-status pay-status-paid">
+      <span class="pay-dot pay-dot-paid"></span>
+      <span>Payment Confirmed ✓</span>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Order details ── #}
   <div class="waiting-card">
     <div class="waiting-card-label">Order Details</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -223,12 +333,10 @@
         <div style="font-size:0.7rem;color:#aaa;font-weight:700;text-transform:uppercase">Order Type</div>
         <div style="font-weight:600;font-size:0.9rem">{{ order.get_order_type_display }}</div>
       </div>
-      {% if order.table_number %}
       <div style="background:var(--cream);border-radius:8px;padding:10px">
-        <div style="font-size:0.7rem;color:#aaa;font-weight:700;text-transform:uppercase">Table</div>
-        <div style="font-weight:600;font-size:0.9rem">{{ order.table_number }}</div>
+        <div style="font-size:0.7rem;color:#aaa;font-weight:700;text-transform:uppercase">Payment</div>
+        <div style="font-weight:600;font-size:0.9rem">{{ order.get_payment_method_display }}</div>
       </div>
-      {% endif %}
       <div style="background:var(--cream);border-radius:8px;padding:10px">
         <div style="font-size:0.7rem;color:#aaa;font-weight:700;text-transform:uppercase">Total</div>
         <div style="font-weight:700;color:var(--caramel);font-size:0.95rem">₱{{ order.total|floatformat:2 }}</div>
@@ -236,7 +344,7 @@
     </div>
   </div>
 
-  <!-- Item list -->
+  {# ── Item list ── #}
   <div class="waiting-card">
     <div class="waiting-card-label" style="margin-bottom:10px">Your Order</div>
     {% for item in items %}
@@ -261,30 +369,130 @@
     🔄 Connecting for live updates…
   </p>
 
-</div>
+</div><!-- /.waiting-page -->
 
-<!-- Order Accepted Overlay — shown when cashier accepts the order -->
+{# ── Order Accepted overlay ── #}
 <div class="accepted-overlay" id="accepted-overlay">
   <div class="accepted-overlay-inner">
     <div class="accepted-overlay-emoji">🎉</div>
     <div class="accepted-overlay-title">Order Received!</div>
     <div class="accepted-overlay-number">{{ order.order_number }}</div>
-    <div class="accepted-overlay-sub">Your order has been confirmed by our staff. You will be notified when it's ready!</div>
+    <div class="accepted-overlay-sub">Your order has been confirmed and is now being prepared!</div>
     <a id="accepted-tracker-link" href="{% url 'orders:order_tracker' order.tracking_token %}" class="btn btn-primary btn-block">📱 Track Your Order →</a>
   </div>
 </div>
 
 <script>
 window.WAITING_CONFIG = {
-  orderNumber:    '{{ order.order_number }}',
-  trackingToken:  '{{ order.tracking_token }}',
-  initialIsPaid:  {{ order.is_paid|yesno:'true,false' }},
-  initialStatus:  '{{ order.status }}',
-  apiUrl:         '{% url "orders:api_payment_waiting_status" order.tracking_token %}',
-  sseUrl:         '{% url "realtime:customer_order_stream" %}?tracking_token={{ order.tracking_token|urlencode }}',
-  trackerUrl:     '{% url "orders:order_tracker" order.tracking_token %}',
-  pollInterval:   5000,
+  orderNumber:   '{{ order.order_number }}',
+  trackingToken: '{{ order.tracking_token }}',
+  initialIsPaid: {{ order.is_paid|yesno:'true,false' }},
+  initialStatus: '{{ order.status }}',
+  initialGcashStatus: '{{ order.gcash_status }}',
+  paymentMethod: '{{ order.payment_method }}',
+  apiUrl:        '{% url "orders:api_payment_waiting_status" order.tracking_token %}',
+  sseUrl:        '{% url "realtime:customer_order_stream" %}?tracking_token={{ order.tracking_token|urlencode }}',
+  submitUrl:     '{% url "orders:submit_gcash_payment" order.tracking_token %}',
+  trackerUrl:    '{% url "orders:order_tracker" order.tracking_token %}',
+  pollInterval:  5000,
 };
+</script>
+<script>
+// ── GCash copy helper ──
+function copyToClipboard(text, btn) {
+  navigator.clipboard.writeText(text).then(function() {
+    var orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(function() { btn.textContent = orig; }, 2000);
+  }).catch(function() {
+    // Fallback for browsers without clipboard API
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    btn.textContent = 'Copied!';
+    setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
+  });
+}
+
+// ── GCash reference form submission ──
+(function() {
+  var form = document.getElementById('gcash-submit-form');
+  if (!form) return;
+
+  form.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var btn = document.getElementById('gcash-submit-btn');
+    var errBox = document.getElementById('gcash-submit-error');
+
+    // Clear previous errors
+    document.querySelectorAll('.field-error').forEach(function(el) {
+      el.style.display = 'none'; el.textContent = '';
+    });
+    errBox.style.display = 'none';
+
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Submitting…'; }
+
+    var formData = new FormData(form);
+
+    try {
+      var response = await fetch(window.WAITING_CONFIG.submitUrl, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': formData.get('csrfmiddlewaretoken') },
+        body: formData,
+      });
+      var data = await response.json();
+
+      if (data.success) {
+        // Hide form, show submitted state
+        var formCard = document.getElementById('gcash-form-card');
+        if (formCard) formCard.style.display = 'none';
+        var gcashInfo = document.getElementById('gcash-info-card');
+        // Keep GCash info visible (amount etc.)
+
+        // Update hero
+        var hero = document.getElementById('waiting-hero');
+        if (hero) { hero.className = 'waiting-hero state-submitted'; }
+        var icon = document.getElementById('waiting-icon');
+        if (icon) icon.textContent = '📋⏳';
+        var title = document.getElementById('waiting-title');
+        if (title) title.textContent = 'Payment Submitted';
+        var subtitle = document.getElementById('waiting-subtitle');
+        if (subtitle) subtitle.textContent = 'Your GCash reference has been submitted. Staff will verify your payment shortly.';
+
+        // Show pending card
+        var pendingCard = document.getElementById('gcash-pending-card');
+        if (pendingCard) pendingCard.style.display = 'block';
+      } else {
+        // Field-level errors
+        if (data.errors) {
+          Object.keys(data.errors).forEach(function(field) {
+            var errEl = document.getElementById('error-' + field);
+            if (errEl) {
+              errEl.textContent = data.errors[field];
+              errEl.style.display = 'block';
+            } else {
+              errBox.textContent = data.errors[field];
+              errBox.style.display = 'block';
+            }
+          });
+        } else if (data.error) {
+          errBox.textContent = data.error;
+          errBox.style.display = 'block';
+        }
+        if (btn) { btn.disabled = false; btn.textContent = '📨 Submit Payment for Verification'; }
+      }
+    } catch(err) {
+      errBox.textContent = 'Network error — please try again.';
+      errBox.style.display = 'block';
+      if (btn) { btn.disabled = false; btn.textContent = '📨 Submit Payment for Verification'; }
+    }
+  });
+})();
 </script>
 <script src="{% static 'js/payment_waiting.js' %}"></script>
 </body>

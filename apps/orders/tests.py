@@ -11,6 +11,7 @@ from unittest import mock
 
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.accounts.models import CustomUser
 from apps.inventory.models import InventoryLog
@@ -44,6 +45,7 @@ class CheckoutAtomicityTests(TestCase):
         return self.client.post(reverse('orders:checkout'), {
             'customer_name': 'Test Customer',
             'order_type': 'dine_in',
+            'payment_method': 'cash',
         })
 
     def test_checkout_deducts_stock_creates_order_and_clears_cart(self):
@@ -55,8 +57,8 @@ class CheckoutAtomicityTests(TestCase):
             response,
             reverse('orders:payment_waiting', kwargs={'tracking_token': order.tracking_token}),
         )
-        # Order starts in pending status with is_paid=False
-        self.assertEqual(order.status, 'pending')
+        # Order starts in awaiting_payment status with is_paid=False
+        self.assertEqual(order.status, 'awaiting_payment')
         self.assertFalse(order.is_paid)
         self.assertTrue(order.stock_deducted)
         self.product.refresh_from_db()
@@ -326,6 +328,7 @@ class DuplicateOrderProtectionTests(TestCase):
         post = {
             'customer_name': 'Test Customer',
             'order_type': 'dine_in',
+            'payment_method': 'cash',
             'request_token': token,
         }
         first = self.client.post(reverse('orders:checkout'), post)
@@ -345,6 +348,7 @@ class DuplicateOrderProtectionTests(TestCase):
         response = self.client.post(reverse('orders:checkout'), {
             'customer_name': 'Test Customer',
             'order_type': 'dine_in',
+            'payment_method': 'cash',
         })
         order = Order.objects.get()
         # Payment-first flow: redirects to payment_waiting
@@ -353,7 +357,7 @@ class DuplicateOrderProtectionTests(TestCase):
             reverse('orders:payment_waiting', kwargs={'tracking_token': order.tracking_token}),
         )
         self.assertEqual(Order.objects.count(), 1)
-        self.assertEqual(order.status, 'pending')
+        self.assertEqual(order.status, 'awaiting_payment')
 
 
 class CancellationAtomicityTests(TestCase):
@@ -417,7 +421,7 @@ class CancellationAtomicityTests(TestCase):
         # The restore was rolled back: stock stays deducted, the order is
         # still active, and no adjustment log was written.
         order.refresh_from_db()
-        self.assertEqual(order.status, 'pending')
+        self.assertEqual(order.status, 'awaiting_payment')
         self.assertTrue(order.stock_deducted)
         self.product.refresh_from_db()
         self.assertEqual(self.product.stock_quantity, 8)
@@ -606,7 +610,7 @@ class StockAvailabilityGuardTests(TestCase):
         self.product.stock_quantity = 0
         self.product.save(update_fields=['stock_quantity'])
         response = self.client.post(reverse('orders:checkout'), {
-            'customer_name': 'Test Customer', 'order_type': 'dine_in',
+            'customer_name': 'Test Customer', 'order_type': 'dine_in', 'payment_method': 'cash',
         })
         self.assertRedirects(response, reverse('orders:cart'))
         self.assertFalse(CartItem.objects.filter(product=self.product).exists())
@@ -617,7 +621,7 @@ class StockAvailabilityGuardTests(TestCase):
         self.product.is_available = False
         self.product.save(update_fields=['is_available'])
         response = self.client.post(reverse('orders:checkout'), {
-            'customer_name': 'Test Customer', 'order_type': 'dine_in',
+            'customer_name': 'Test Customer', 'order_type': 'dine_in', 'payment_method': 'cash',
         })
         self.assertRedirects(response, reverse('orders:cart'))
         self.assertFalse(CartItem.objects.filter(product=self.product).exists())
@@ -928,10 +932,11 @@ class PaymentFirstFlowTests(TestCase):
         )
 
     def _customer_order(self, quantity=1):
-        """Create a customer order (no cashier, PENDING, unpaid by default)."""
+        """Create a customer order (no cashier, awaiting_payment, unpaid, cash by default)."""
         order = Order.objects.create(
             customer_name='Customer A',
-            status='pending',
+            status='awaiting_payment',
+            payment_method='cash',
             cashier=None,   # customer order — no cashier assigned yet
         )
         OrderItem.objects.create(
@@ -951,7 +956,7 @@ class PaymentFirstFlowTests(TestCase):
     # ── Checkout redirect ──────────────────────────────────────────────────
 
     def test_checkout_creates_pending_unpaid_order(self):
-        """Customer checkout must create an order in PENDING status with is_paid=False."""
+        """Customer checkout must create an order in awaiting_payment with is_paid=False."""
         session = self.client.session
         session['_seed'] = 'x'
         cart = Cart.objects.create(session_key=session.session_key)
@@ -962,10 +967,11 @@ class PaymentFirstFlowTests(TestCase):
         response = self.client.post(reverse('orders:checkout'), {
             'customer_name': 'Pay-First Customer',
             'order_type': 'dine_in',
+            'payment_method': 'cash',
         })
         order = Order.objects.get()
-        # Order is PENDING + UNPAID — not a separate awaiting_payment status
-        self.assertEqual(order.status, 'pending')
+        # Order is awaiting_payment + UNPAID
+        self.assertEqual(order.status, 'awaiting_payment')
         self.assertFalse(order.is_paid)
         # Redirect goes to payment_waiting, not order_success
         self.assertRedirects(
@@ -989,9 +995,9 @@ class PaymentFirstFlowTests(TestCase):
         self.assertFalse(data['success'])
         self.assertIn('payment', data['error'].lower())
 
-        # Status must remain PENDING — not moved to PREPARING
+        # Status must remain awaiting_payment — not moved to PREPARING
         order.refresh_from_db()
-        self.assertEqual(order.status, 'pending')
+        self.assertEqual(order.status, 'awaiting_payment')
 
     def test_accept_order_requires_login(self):
         """Unauthenticated attempt to accept order must be rejected."""
@@ -1002,7 +1008,7 @@ class PaymentFirstFlowTests(TestCase):
         # Redirects to login (302) — not a 200 JSON success
         self.assertNotEqual(response.status_code, 200)
         order.refresh_from_db()
-        self.assertEqual(order.status, 'pending')
+        self.assertEqual(order.status, 'awaiting_payment')
 
     def test_accept_order_rejects_already_preparing(self):
         """accept_order on an order already in preparing must return error."""
@@ -1036,8 +1042,8 @@ class PaymentFirstFlowTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(data['success'])
 
-    def test_process_payment_marks_paid_keeps_pending(self):
-        """For customer orders, process_payment must set is_paid=True but NOT complete."""
+    def test_process_payment_cash_advances_to_preparing(self):
+        """Cash payment confirms AND auto-advances awaiting_payment → preparing."""
         self.client.force_login(self.cashier)
         order = self._customer_order()
 
@@ -1047,40 +1053,33 @@ class PaymentFirstFlowTests(TestCase):
         )
         data = response.json()
         self.assertTrue(data['success'])
-        self.assertTrue(data['awaiting_acceptance'])
 
         order.refresh_from_db()
         self.assertTrue(order.is_paid)
-        # Status must stay PENDING — NOT completed or changed
-        self.assertEqual(order.status, 'pending')
+        # Cash: awaiting_payment → preparing in one step
+        self.assertEqual(order.status, 'preparing')
         self.assertEqual(order.payment_method, 'cash')
         from decimal import Decimal
         self.assertEqual(order.change_amount, Decimal('25.00'))  # 100 - 75
 
-    def test_process_then_accept_moves_to_preparing(self):
-        """Full flow: confirm payment then accept moves PENDING → PREPARING."""
+    def test_process_payment_gcash_blocked_for_customer_order(self):
+        """process_payment must reject GCash for customer orders (use verify_gcash_payment)."""
         self.client.force_login(self.cashier)
         order = self._customer_order()
+        order.payment_method = 'gcash'
+        order.save(update_fields=['payment_method'])
 
-        # Step 1: Process payment — status stays PENDING, is_paid becomes True
-        self.client.post(
+        response = self.client.post(
             reverse('orders:process_payment', args=[order.pk]),
             {'payment_method': 'gcash', 'amount_paid': '75.00'},
         )
-        order.refresh_from_db()
-        self.assertTrue(order.is_paid)
-        self.assertEqual(order.status, 'pending')   # still PENDING after payment
-
-        # Step 2: Accept — PENDING+PAID → PREPARING
-        response = self.client.post(
-            reverse('orders:accept_order', args=[order.pk]),
-        )
         data = response.json()
-        self.assertTrue(data['success'])
-        self.assertEqual(data['new_status'], 'preparing')
+        self.assertFalse(data['success'])
+        self.assertIn('GCash', data['error'])
 
         order.refresh_from_db()
-        self.assertEqual(order.status, 'preparing')
+        self.assertFalse(order.is_paid)
+        self.assertEqual(order.status, 'awaiting_payment')
 
     def test_duplicate_payment_rejected(self):
         """A second payment attempt on an already-paid order must be rejected."""
@@ -1106,35 +1105,20 @@ class PaymentFirstFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, order.order_number)
 
-    def test_api_payment_waiting_status_pending_unpaid(self):
-        """api_payment_waiting_status returns correct data for PENDING + UNPAID."""
+    def test_api_payment_waiting_status_awaiting_unpaid(self):
+        """api_payment_waiting_status: awaiting_payment + unpaid = not accepted."""
         order = self._customer_order()
         response = self.client.get(
             reverse('orders:api_payment_waiting_status', kwargs={'tracking_token': order.tracking_token}),
         )
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data['status'], 'pending')
+        self.assertEqual(data['status'], 'awaiting_payment')
         self.assertFalse(data['is_paid'])
-        # order_accepted is False — order has not moved to preparing yet
         self.assertFalse(data['order_accepted'])
 
-    def test_api_payment_waiting_status_pending_paid(self):
-        """api_payment_waiting_status: PENDING + PAID is not yet order_accepted."""
-        order = self._customer_order()
-        order.is_paid = True
-        order.save(update_fields=['is_paid'])
-        response = self.client.get(
-            reverse('orders:api_payment_waiting_status', kwargs={'tracking_token': order.tracking_token}),
-        )
-        data = response.json()
-        self.assertEqual(data['status'], 'pending')
-        self.assertTrue(data['is_paid'])
-        # Still PENDING — cashier has not accepted yet → order_accepted is False
-        self.assertFalse(data['order_accepted'])
-
-    def test_api_payment_waiting_status_after_accept(self):
-        """api_payment_waiting_status reflects order_accepted=True after PREPARING."""
+    def test_api_payment_waiting_status_after_preparing(self):
+        """api_payment_waiting_status reflects order_accepted=True when preparing."""
         order = self._customer_order()
         order.is_paid = True
         order.status = 'preparing'
@@ -1146,40 +1130,255 @@ class PaymentFirstFlowTests(TestCase):
         self.assertEqual(data['status'], 'preparing')
         self.assertTrue(data['order_accepted'])
 
-    def test_validate_status_transition_blocks_accept_unpaid_customer(self):
-        """validate_status_transition rejects pending→preparing for unpaid customer order."""
+    def test_validate_status_transition_blocks_awaiting_payment_to_preparing_unpaid(self):
+        """awaiting_payment → preparing must be blocked for unpaid orders."""
         from apps.orders.services import validate_status_transition
-        order = self._customer_order()  # cashier=None, is_paid=False
+        order = self._customer_order()  # is_paid=False
         with self.assertRaises(ValueError) as ctx:
-            validate_status_transition('pending', 'preparing', order=order)
+            validate_status_transition('awaiting_payment', 'preparing', order=order)
         self.assertIn('payment', str(ctx.exception).lower())
 
-    def test_validate_status_transition_allows_accept_when_paid(self):
-        """validate_status_transition allows pending→preparing for paid customer order."""
+    def test_validate_status_transition_allows_awaiting_payment_to_preparing_paid(self):
+        """awaiting_payment → preparing is allowed when is_paid=True."""
         from apps.orders.services import validate_status_transition
         order = self._customer_order()
         order.is_paid = True
         order.save(update_fields=['is_paid'])
         # Should not raise
-        validate_status_transition('pending', 'preparing', order=order)
+        validate_status_transition('awaiting_payment', 'preparing', order=order)
 
-    def test_validate_status_transition_allows_pos_accept_unpaid(self):
-        """POS orders (cashier set) can advance to preparing even if not yet paid."""
-        from apps.orders.services import validate_status_transition
-        order = self._customer_order()
-        order.cashier = self.cashier   # make it a POS order
-        order.save(update_fields=['cashier'])
-        # POS orders use the legacy path — no payment gate on pending→preparing
-        validate_status_transition('pending', 'preparing', order=order)
+    # ── GCash-specific tests ───────────────────────────────────────────────
 
-    def test_pending_is_not_implicitly_paid(self):
-        """PENDING status alone does not imply payment — is_paid must be checked."""
-        order = self._customer_order()
-        self.assertEqual(order.status, 'pending')
-        self.assertFalse(order.is_paid)
-        # These are logically independent: status and payment
+    def _gcash_order(self, quantity=1):
+        """Create a customer GCash order in awaiting_payment."""
+        order = self._customer_order(quantity)
+        order.payment_method = 'gcash'
+        order.save(update_fields=['payment_method'])
+        return order
+
+    def test_submit_gcash_payment_sets_pending_status(self):
+        """Customer submits GCash reference → gcash_status becomes pending, is_paid stays False."""
+        order = self._gcash_order()
+        response = self.client.post(
+            reverse('orders:submit_gcash_payment', kwargs={'tracking_token': order.tracking_token}),
+            {'gcash_reference': 'REF1234567890', 'csrfmiddlewaretoken': 'dummy'},
+        )
+        # Use Django test client which handles CSRF automatically
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data['success'])
+
+        order.refresh_from_db()
+        self.assertEqual(order.gcash_status, 'pending')
+        self.assertFalse(order.is_paid)  # CRITICAL: must NOT be paid
+        self.assertEqual(order.status, 'awaiting_payment')  # status unchanged
+        self.assertEqual(order.gcash_reference, 'REF1234567890')
+
+    def test_submit_gcash_idempotent_for_pending(self):
+        """Re-submitting when already pending returns success without re-writing."""
+        order = self._gcash_order()
+        order.gcash_status = 'pending'
+        order.gcash_reference = 'ORIGINAL123'
+        order.save(update_fields=['gcash_status', 'gcash_reference'])
+
+        response = self.client.post(
+            reverse('orders:submit_gcash_payment', kwargs={'tracking_token': order.tracking_token}),
+            {'gcash_reference': 'DIFFERENT456'},
+        )
+        data = response.json()
+        self.assertTrue(data['success'])
+        self.assertTrue(data.get('already_submitted'))
+
+        order.refresh_from_db()
+        self.assertEqual(order.gcash_reference, 'ORIGINAL123')  # unchanged
+
+    def test_submit_gcash_rejects_empty_reference(self):
+        """Empty reference number must be rejected."""
+        order = self._gcash_order()
+        response = self.client.post(
+            reverse('orders:submit_gcash_payment', kwargs={'tracking_token': order.tracking_token}),
+            {'gcash_reference': ''},
+        )
+        data = response.json()
+        self.assertFalse(data['success'])
+        self.assertIn('gcash_reference', data.get('errors', {}))
+
+    def test_submit_gcash_blocks_on_paid_order(self):
+        """Cannot submit GCash reference if order is already paid."""
+        order = self._gcash_order()
         order.is_paid = True
         order.save(update_fields=['is_paid'])
+
+        response = self.client.post(
+            reverse('orders:submit_gcash_payment', kwargs={'tracking_token': order.tracking_token}),
+            {'gcash_reference': 'REF123'},
+        )
+        data = response.json()
+        self.assertFalse(data['success'])
+        self.assertIn('already been paid', data['error'])
+
+    def test_submit_gcash_blocks_on_cancelled_order(self):
+        """Cannot submit GCash reference on a cancelled order."""
+        order = self._gcash_order()
+        order.status = 'cancelled'
+        order.cancelled_at = timezone.now()
+        order.save(update_fields=['status', 'cancelled_at'])
+
+        response = self.client.post(
+            reverse('orders:submit_gcash_payment', kwargs={'tracking_token': order.tracking_token}),
+            {'gcash_reference': 'REF123'},
+        )
+        data = response.json()
+        self.assertFalse(data['success'])
+
+    def test_submit_gcash_blocks_on_cash_order(self):
+        """submit_gcash_payment must reject cash orders."""
+        order = self._customer_order()  # payment_method='cash' by default
+        response = self.client.post(
+            reverse('orders:submit_gcash_payment', kwargs={'tracking_token': order.tracking_token}),
+            {'gcash_reference': 'REF123'},
+        )
+        data = response.json()
+        self.assertFalse(data['success'])
+
+    def test_submit_gcash_blocks_duplicate_reference(self):
+        """Same reference number cannot be used on two different orders."""
+        order1 = self._gcash_order()
+        order1.gcash_status = 'pending'
+        order1.gcash_reference = 'DUPREF123'
+        order1.save(update_fields=['gcash_status', 'gcash_reference'])
+
+        order2 = Order.objects.create(
+            customer_name='Another Customer',
+            status='awaiting_payment',
+            payment_method='gcash',
+        )
+
+        response = self.client.post(
+            reverse('orders:submit_gcash_payment', kwargs={'tracking_token': order2.tracking_token}),
+            {'gcash_reference': 'DUPREF123'},
+        )
+        data = response.json()
+        self.assertFalse(data['success'])
+        self.assertIn('gcash_reference', data.get('errors', {}))
+
+    def test_verify_gcash_marks_paid_and_prepares(self):
+        """Staff verification: gcash_status→verified, is_paid→True, status→preparing."""
+        self.client.force_login(self.cashier)
+        order = self._gcash_order()
+        order.gcash_status = 'pending'
+        order.gcash_reference = 'VERIFY123'
+        order.save(update_fields=['gcash_status', 'gcash_reference'])
+
+        response = self.client.post(
+            reverse('orders:verify_gcash_payment', args=[order.pk]),
+        )
+        data = response.json()
+        self.assertTrue(data['success'])
+
         order.refresh_from_db()
-        self.assertEqual(order.status, 'pending')  # status unchanged
-        self.assertTrue(order.is_paid)             # payment is separate
+        self.assertTrue(order.is_paid)
+        self.assertEqual(order.gcash_status, 'verified')
+        self.assertEqual(order.status, 'preparing')
+        self.assertEqual(order.gcash_verified_by, self.cashier)
+        self.assertIsNotNone(order.gcash_verified_at)
+
+    def test_verify_gcash_requires_staff(self):
+        """Anonymous user cannot verify GCash payment."""
+        order = self._gcash_order()
+        order.gcash_status = 'pending'
+        order.gcash_reference = 'REF123'
+        order.save(update_fields=['gcash_status', 'gcash_reference'])
+
+        response = self.client.post(
+            reverse('orders:verify_gcash_payment', args=[order.pk]),
+        )
+        # Must redirect to login
+        self.assertNotEqual(response.status_code, 200)
+        order.refresh_from_db()
+        self.assertFalse(order.is_paid)
+
+    def test_verify_gcash_blocks_not_pending(self):
+        """verify_gcash_payment must reject if gcash_status is not 'pending'."""
+        self.client.force_login(self.cashier)
+        order = self._gcash_order()
+        # gcash_status is still 'none' — customer hasn't submitted
+
+        response = self.client.post(
+            reverse('orders:verify_gcash_payment', args=[order.pk]),
+        )
+        data = response.json()
+        self.assertFalse(data['success'])
+        self.assertEqual(response.status_code, 400)
+
+    def test_verify_gcash_idempotent_blocks_double_verify(self):
+        """Second verification attempt on already-paid order must be rejected."""
+        self.client.force_login(self.cashier)
+        order = self._gcash_order()
+        order.is_paid = True
+        order.gcash_status = 'verified'
+        order.save(update_fields=['is_paid', 'gcash_status'])
+
+        response = self.client.post(
+            reverse('orders:verify_gcash_payment', args=[order.pk]),
+        )
+        data = response.json()
+        self.assertFalse(data['success'])
+
+    def test_reject_gcash_resets_to_rejected_allows_resubmit(self):
+        """Staff reject: gcash_status→rejected, is_paid stays False."""
+        self.client.force_login(self.cashier)
+        order = self._gcash_order()
+        order.gcash_status = 'pending'
+        order.gcash_reference = 'BADREF123'
+        order.save(update_fields=['gcash_status', 'gcash_reference'])
+
+        response = self.client.post(
+            reverse('orders:reject_gcash_payment', args=[order.pk]),
+            {'rejection_note': 'Reference not found in GCash'},
+        )
+        data = response.json()
+        self.assertTrue(data['success'])
+
+        order.refresh_from_db()
+        self.assertFalse(order.is_paid)
+        self.assertEqual(order.gcash_status, 'rejected')
+        self.assertEqual(order.status, 'awaiting_payment')
+        self.assertIn('not found', order.gcash_notes)
+
+    def test_verify_gcash_does_not_deduct_inventory_again(self):
+        """GCash verification must not deduct inventory a second time."""
+        self.client.force_login(self.cashier)
+        order = self._gcash_order()
+        order.gcash_status = 'pending'
+        order.gcash_reference = 'INV_TEST'
+        order.save(update_fields=['gcash_status', 'gcash_reference'])
+
+        stock_before = self.product.stock_quantity
+
+        self.client.post(reverse('orders:verify_gcash_payment', args=[order.pk]))
+
+        self.product.refresh_from_db()
+        # Stock must be unchanged — already deducted at order creation
+        self.assertEqual(self.product.stock_quantity, stock_before)
+
+    def test_checkout_with_gcash_sets_payment_method(self):
+        """Checkout with GCash selected stores payment_method='gcash' on the order."""
+        session = self.client.session
+        session['_seed'] = 'x'
+        cart = Cart.objects.create(session_key=session.session_key)
+        CartItem.objects.create(
+            cart=cart, product=self.product, size='none',
+            quantity=1, unit_price='75.00',
+        )
+        response = self.client.post(reverse('orders:checkout'), {
+            'customer_name': 'GCash Customer',
+            'order_type': 'dine_in',
+            'payment_method': 'gcash',
+        })
+        order = Order.objects.get()
+        self.assertEqual(order.payment_method, 'gcash')
+        self.assertEqual(order.status, 'awaiting_payment')
+        self.assertFalse(order.is_paid)
+
+

@@ -8,4 +8,5 @@ urlpatterns = [
     path('summary/', views.dashboard_summary, name='summary'),
     path('chart-data/', views.chart_data, name='chart_data'),
     path('settings/', views.system_settings, name='system_settings'),
+    path('settings/gcash/', views.gcash_settings, name='gcash_settings'),
 ]
