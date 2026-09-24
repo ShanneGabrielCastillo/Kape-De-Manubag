@@ -131,6 +131,10 @@
                 <strong>Reference #:</strong>
                 <code style="background:#dbeafe;padding:2px 8px;border-radius:4px;font-size:0.92rem;letter-spacing:0.05em">{{ order.gcash_reference }}</code>
               </div>
+              {# Inject live order data so the verify modal JS can display them #}
+              <script>
+                window.GV_ORDER_NUMBER = {{ order.order_number|safe|escapejs|default:''|stringformat:"s"|add:'"'|add:'"|slice:"1:-1"'|default:'""' }};
+              </script>
               {% if order.gcash_submitted_at %}
               <div style="font-size:0.78rem;color:#888;margin-bottom:8px">Submitted: {{ order.gcash_submitted_at|date:"M d, Y g:i A" }}</div>
               {% endif %}
@@ -218,32 +222,188 @@
   </div>
 </div>
 
+<!-- GCash Payment Verification Modal -->
+<div id="gcash-verify-backdrop" class="modal-backdrop" style="display:none"
+     role="dialog" aria-modal="true" aria-labelledby="gcash-verify-title">
+  <div class="modal" style="max-width:480px;width:100%;box-sizing:border-box">
+
+    <!-- Header -->
+    <div class="modal-header" style="background:#1e40af">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:1.25rem;line-height:1">✅</span>
+        <h4 id="gcash-verify-title" style="color:#fff;margin:0">Verify GCash Payment</h4>
+      </div>
+      <button class="modal-close" id="gcash-verify-close"
+              style="color:#fff;opacity:0.8;background:none;border:none;font-size:1.3rem;cursor:pointer;padding:0;line-height:1"
+              aria-label="Close">×</button>
+    </div>
+
+    <!-- Body -->
+    <div class="modal-body" style="padding:20px 24px 16px">
+      <p style="color:var(--brown-dark);font-size:0.92rem;line-height:1.6;margin:0 0 16px">
+        Please confirm that you have checked the business GCash account and verified this payment.
+      </p>
+
+      <!-- Payment summary card -->
+      <div style="background:var(--cream);border-radius:10px;padding:14px 16px;margin-bottom:16px;display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+          <span style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#aaa;white-space:nowrap">Order</span>
+          <span id="gv-order-number" style="font-weight:700;color:var(--caramel);font-family:'Playfair Display',serif;text-align:right"></span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+          <span style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#aaa;white-space:nowrap">Amount</span>
+          <span id="gv-amount" style="font-weight:700;color:var(--brown-dark);font-size:1.05rem;text-align:right"></span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+          <span style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#aaa;white-space:nowrap;padding-top:2px">Reference #</span>
+          <code id="gv-reference"
+                style="background:#dbeafe;color:#1e40af;padding:3px 10px;border-radius:5px;font-size:0.88rem;text-align:right;word-break:break-all;overflow-wrap:anywhere;max-width:70%;display:inline-block"></code>
+        </div>
+      </div>
+
+      <!-- Warning -->
+      <div style="background:#fffbeb;border:1.5px solid #fbbf24;border-radius:8px;padding:10px 14px;display:flex;align-items:flex-start;gap:8px">
+        <span style="font-size:1rem;flex-shrink:0;margin-top:1px">⚠️</span>
+        <p style="margin:0;font-size:0.83rem;color:#92400e;line-height:1.55">
+          Make sure the payment is visible in the business GCash account before confirming. Do not verify if you have not checked.
+        </p>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="modal-footer" style="padding:14px 24px 20px;gap:10px;flex-direction:column-reverse">
+      <button id="gcash-verify-cancel" class="btn btn-outline btn-block">Cancel</button>
+      <button id="gcash-verify-confirm" class="btn btn-primary btn-block">✅ Verify Payment</button>
+    </div>
+  </div>
+</div>
+
 <!-- Payment Modal -->
 {% include "partials/payment_modal.html" %}
 
+{{ order.order_number|json_script:"gv-order-number-data" }}
+{{ order.total|json_script:"gv-amount-data" }}
+{{ order.gcash_reference|json_script:"gv-reference-data" }}
 {% block extra_js %}
 <script>
-// ── GCash verify ──────────────────────────────────────────────────────────
-async function verifyGcash(orderId, url) {
-  if (!confirm('Confirm that you have checked your GCash account and this payment is valid?')) return;
-  const btn = document.querySelector('[onclick*="verifyGcash"]');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Verifying…'; }
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'X-CSRFToken': getCookie('csrftoken') },
-    });
-    const data = await res.json();
-    if (data.success) {
-      showToast('GCash payment verified! Order is now Preparing.', 'success');
-      setTimeout(() => location.reload(), 1000);
-    } else {
-      showToast(data.error || 'Could not verify payment', 'error');
-      if (btn) { btn.disabled = false; btn.textContent = '✅ Verify Payment'; }
+// ── GCash Verify modal ────────────────────────────────────────────────────
+// Replaces the native confirm() with a custom branded modal.
+// The actual verification fetch is unchanged — only the confirmation UI changed.
+(function () {
+  const backdrop   = document.getElementById('gcash-verify-backdrop');
+  const closeBtn   = document.getElementById('gcash-verify-close');
+  const cancelBtn  = document.getElementById('gcash-verify-cancel');
+  const confirmBtn = document.getElementById('gcash-verify-confirm');
+  const orderNumEl = document.getElementById('gv-order-number');
+  const amountEl   = document.getElementById('gv-amount');
+  const refEl      = document.getElementById('gv-reference');
+
+  if (!backdrop) return; // page has no GCash pending order — bail out
+
+  let _pendingUrl   = null;
+  let _pendingBtn   = null;
+  let _submitting   = false;
+
+  function openModal(url, triggerBtn) {
+    _pendingUrl = url;
+    _pendingBtn = triggerBtn;
+    _submitting = false;
+    // Read live order data from the json_script elements (XSS-safe Django embed).
+    const orderNum = JSON.parse(document.getElementById('gv-order-number-data')?.textContent || '""');
+    const amount   = JSON.parse(document.getElementById('gv-amount-data')?.textContent || '0');
+    const ref      = JSON.parse(document.getElementById('gv-reference-data')?.textContent || '""');
+    if (orderNumEl) orderNumEl.textContent = orderNum;
+    if (amountEl)   amountEl.textContent   = '₱' + parseFloat(amount).toFixed(2);
+    if (refEl)      refEl.textContent      = ref || '—';
+    backdrop.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    if (cancelBtn) cancelBtn.focus();
+    document.addEventListener('keydown', onKey);
+  }
+
+  function closeModal() {
+    backdrop.style.display = 'none';
+    document.body.style.overflow = '';
+    document.removeEventListener('keydown', onKey);
+    _pendingUrl = null;
+    if (_pendingBtn && !_submitting) {
+      _pendingBtn.disabled = false;
+      _pendingBtn.textContent = '✅ Verify Payment';
     }
-  } catch (err) {
-    showToast('Network error — please try again', 'error');
-    if (btn) { btn.disabled = false; btn.textContent = '✅ Verify Payment'; }
+    _pendingBtn = null;
+  }
+
+  function onKey(e) {
+    if (e.key === 'Escape') closeModal();
+  }
+
+  if (closeBtn)  closeBtn.addEventListener('click',  closeModal);
+  if (cancelBtn) cancelBtn.addEventListener('click',  closeModal);
+  backdrop.addEventListener('click', function (e) {
+    if (e.target === backdrop) closeModal();
+  });
+
+  if (confirmBtn) {
+    confirmBtn.addEventListener('click', async function () {
+      if (_submitting || !_pendingUrl) return;
+      _submitting = true;
+
+      // Disable confirm button to prevent double-submission
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = '⏳ Verifying…';
+      if (cancelBtn) cancelBtn.disabled = true;
+
+      try {
+        const res = await fetch(_pendingUrl, {
+          method: 'POST',
+          headers: { 'X-CSRFToken': getCookie('csrftoken') },
+        });
+        const data = await res.json();
+        backdrop.style.display = 'none';
+        document.body.style.overflow = '';
+        document.removeEventListener('keydown', onKey);
+
+        if (data.success) {
+          showToast('GCash payment verified! Order is now Preparing.', 'success');
+          setTimeout(() => location.reload(), 1000);
+        } else {
+          showToast(data.error || 'Could not verify payment', 'error');
+          // Re-enable the page-level button since the modal is closed
+          if (_pendingBtn) {
+            _pendingBtn.disabled = false;
+            _pendingBtn.textContent = '✅ Verify Payment';
+          }
+        }
+      } catch (err) {
+        backdrop.style.display = 'none';
+        document.body.style.overflow = '';
+        document.removeEventListener('keydown', onKey);
+        showToast('Network error — please try again', 'error');
+        if (_pendingBtn) {
+          _pendingBtn.disabled = false;
+          _pendingBtn.textContent = '✅ Verify Payment';
+        }
+      }
+
+      _pendingUrl = null;
+      _pendingBtn = null;
+    });
+  }
+
+  // Expose opener so the inline onclick can call it
+  window.openGcashVerifyModal = openModal;
+})();
+
+async function verifyGcash(orderId, url) {
+  // Opens the custom branded modal instead of the native confirm() dialog.
+  // The actual fetch is handled inside the modal's confirm button listener above.
+  const btn = document.querySelector('[onclick*="verifyGcash"]');
+  if (btn) { btn.disabled = true; }
+  if (window.openGcashVerifyModal) {
+    window.openGcashVerifyModal(url, btn);
+  } else {
+    // Fallback: should never reach here in production
+    if (btn) btn.disabled = false;
   }
 }
 
