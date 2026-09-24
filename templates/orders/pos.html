@@ -235,12 +235,21 @@
       <div style="margin-bottom:8px">
         <input type="text" id="pos-customer-name" placeholder="Customer name" class="form-control" style="font-size:0.82rem;padding:6px 10px">
       </div>
-      <div class="pos-order-type" style="display:flex;gap:12px">
+      <div class="pos-order-type" style="display:flex;gap:12px;margin-bottom:8px">
         <label style="display:flex;align-items:center;gap:5px;font-size:0.82rem;cursor:pointer;font-weight:600">
           <input type="radio" name="pos-order-type" value="dine_in" checked> Dine-In
         </label>
         <label style="display:flex;align-items:center;gap:5px;font-size:0.82rem;cursor:pointer;font-weight:600">
           <input type="radio" name="pos-order-type" value="takeout"> Take-Out
+        </label>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center">
+        <span style="font-size:0.78rem;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap">Payment:</span>
+        <label style="display:flex;align-items:center;gap:5px;font-size:0.82rem;cursor:pointer;font-weight:600">
+          <input type="radio" name="pos-payment-method" value="cash" checked> 💵 Cash
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:0.82rem;cursor:pointer;font-weight:600">
+          <input type="radio" name="pos-payment-method" value="gcash"> 📱 GCash
         </label>
       </div>
     </div>

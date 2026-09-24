@@ -1442,6 +1442,14 @@ def create_pos_order(request):
     # leave a half-created order or a partial deduction behind.
     try:
         with transaction.atomic():
+            # Accept payment_method from the POS payload.  Validate it
+            # server-side against the known choices so the browser cannot
+            # inject an arbitrary string.  Default to 'cash' so existing
+            # POS clients without the field continue to work.
+            raw_payment_method = data.get('payment_method', 'cash')
+            if raw_payment_method not in ('cash', 'gcash'):
+                raw_payment_method = 'cash'
+
             order = Order.objects.create(
                 customer_name=data.get('customer_name', 'Walk-in Customer'),
                 table_number=data.get('table_number', ''),
@@ -1452,6 +1460,9 @@ def create_pos_order(request):
                 # POS orders use the same payment-first flow as customer
                 # orders: awaiting_payment → preparing on payment confirmation.
                 status='awaiting_payment',
+                # Store the payment method at order creation so the payment
+                # modal and finance queries have it immediately.
+                payment_method=raw_payment_method,
             )
 
             # Fetch every product for the order in one batched query

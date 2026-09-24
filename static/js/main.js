@@ -806,6 +806,7 @@ window.POS = {
       items: this.items,
       customerName: document.getElementById('pos-customer-name')?.value || '',
       orderType: document.querySelector('[name=pos-order-type]:checked')?.value || 'dine_in',
+      paymentMethod: document.querySelector('[name=pos-payment-method]:checked')?.value || 'cash',
       requestToken: this._requestToken || null,
       savedAt: new Date().toISOString(),
     };
@@ -837,6 +838,10 @@ window.POS = {
     // pos.html as a second, duplicate listener on these same radios.)
     document.querySelectorAll('[name=pos-order-type]').forEach(r =>
       r.addEventListener('change', () => { this.saveDraft(); this.updatePackagingFee(); })
+    );
+    // Keep payment method in draft when changed.
+    document.querySelectorAll('[name=pos-payment-method]').forEach(r =>
+      r.addEventListener('change', () => this.saveDraft())
     );
   },
 
@@ -889,6 +894,8 @@ window.POS = {
     if (nameEl) nameEl.value = draft.customerName || '';
     const orderTypeRadio = document.querySelector(`[name=pos-order-type][value="${draft.orderType || 'dine_in'}"]`);
     if (orderTypeRadio) orderTypeRadio.checked = true;
+    const payMethodRadio = document.querySelector(`[name=pos-payment-method][value="${draft.paymentMethod || 'cash'}"]`);
+    if (payMethodRadio) payMethodRadio.checked = true;
 
     if (restored.length) {
       showToast('Restored your current order from before the refresh', 'info', 4000);
@@ -1183,6 +1190,7 @@ window.POS = {
     if (this.items.length === 0) { showToast('No items in order', 'error'); return; }
     const customerName = document.getElementById('pos-customer-name')?.value || 'Walk-in Customer';
     const orderType = document.querySelector('[name=pos-order-type]:checked')?.value || 'dine_in';
+    const paymentMethod = document.querySelector('[name=pos-payment-method]:checked')?.value || 'cash';
 
     // Capture the idempotency token and mirror the exact submission to the
     // draft BEFORE the request goes out: if the page refreshes mid-flight, the
@@ -1221,6 +1229,7 @@ window.POS = {
           body: JSON.stringify({
             customer_name: customerName,
             order_type: orderType,
+            payment_method: paymentMethod,
             request_token: requestToken,
             items: this.items.map(i => ({ product_id: i.id, size: i.size, quantity: i.qty })),
           }),

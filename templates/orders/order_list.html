@@ -390,12 +390,12 @@
               {% elif order.payment_method == 'gcash' %}
                 <span style="font-size:0.78rem;color:#888">GCash online</span>
               {% else %}
-                <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}')" class="btn btn-sm btn-caramel">💳 Pay</button>
+                <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}', '{{ order.payment_method }}', '')" class="btn btn-sm btn-caramel">💳 Pay</button>
               {% endif %}
             {% elif order.is_paid %}
               <span class="badge badge-paid">Paid</span>
             {% elif order.status != 'cancelled' %}
-              <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}')" class="btn btn-sm btn-caramel">Pay</button>
+              <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}', '{{ order.payment_method }}', '')" class="btn btn-sm btn-caramel">Pay</button>
             {% endif %}
           </td>
           <td style="font-size:0.8rem;color:#aaa;white-space:nowrap">{{ order.created_at|date:"M d, g:i A" }}</td>
@@ -579,7 +579,7 @@ RealtimeConnection.on('new_order', function(order) {
 
     if (isAwaitingPayment) {
       statusCellHtml = `<span class="badge" style="background:#fff3cd;color:#856404;font-size:0.8rem;padding:5px 10px">💳 Awaiting Payment</span>`;
-      paymentCellHtml = `<button onclick="openPaymentModal(${order.order_id}, ${Number(order.total).toFixed(2)}, '${payUrl}')" class="btn btn-sm btn-caramel">💳 Pay</button>`;
+      paymentCellHtml = `<button onclick="openPaymentModal(${order.order_id}, ${Number(order.total).toFixed(2)}, '${payUrl}', '${escHtml(order.payment_method || 'cash')}', '')" class="btn btn-sm btn-caramel">💳 Pay</button>`;
       actionCellHtml = `
         <div style="display:flex;gap:4px;flex-wrap:wrap">
           <a href="${detailUrl}" class="btn btn-sm btn-outline">View</a>
@@ -592,7 +592,7 @@ RealtimeConnection.on('new_order', function(order) {
           ${selectHtml}
           <button type="submit" class="btn btn-sm btn-primary">✓</button>
         </form>`;
-      paymentCellHtml = `<button onclick="openPaymentModal(${order.order_id}, ${Number(order.total).toFixed(2)}, '${payUrl}')" class="btn btn-sm btn-caramel">Pay</button>`;
+      paymentCellHtml = `<button onclick="openPaymentModal(${order.order_id}, ${Number(order.total).toFixed(2)}, '${payUrl}', '${escHtml(order.payment_method || 'cash')}', '')" class="btn btn-sm btn-caramel">Pay</button>`;
       actionCellHtml = `
         <div style="display:flex;gap:4px;flex-wrap:wrap">
           <a href="${detailUrl}" class="btn btn-sm btn-outline">View</a>
@@ -671,7 +671,7 @@ RealtimeConnection.on('status_changed', function(data) {
     const totalRaw  = row.dataset.totalRaw  || '0';
 
     if (newStatus === 'awaiting_payment' && !isPaid) {
-      payCell.innerHTML = `<button onclick="openPaymentModal(${orderId}, ${parseFloat(totalRaw).toFixed(2)}, '${payUrl}')" class="btn btn-sm btn-caramel">💳 Pay</button>`;
+      payCell.innerHTML = `<button onclick="openPaymentModal(${orderId}, ${parseFloat(totalRaw).toFixed(2)}, '${payUrl}', '${escHtml(row.dataset.paymentMethod || 'cash')}', '')" class="btn btn-sm btn-caramel">💳 Pay</button>`;
     } else if (newStatus === 'cancelled') {
       payCell.innerHTML = '';
     } else if (isPaid) {
@@ -762,12 +762,12 @@ RealtimeConnection.on('status_changed', function(data) {
     let payHtml;
     if (status === 'awaiting_payment' && !isPaid) {
       // Single button: confirming payment auto-accepts
-      payHtml = `<button onclick="openPaymentModal(${escHtml(d.orderId)}, ${escHtml(d.totalRaw || '0')}, '${escHtml(d.payUrl || '')}')"
+      payHtml = `<button onclick="openPaymentModal(${escHtml(d.orderId)}, ${escHtml(d.totalRaw || '0')}, '${escHtml(d.payUrl || '')}', '${escHtml(d.paymentMethod || 'cash')}', '')"
                          class="btn btn-sm btn-caramel">💳 Pay</button>`;
     } else if (isPaid) {
       payHtml = `<span class="badge badge-paid" style="font-size:0.72rem">● Paid</span>`;
     } else if (status !== 'cancelled') {
-      payHtml = `<button onclick="openPaymentModal(${escHtml(d.orderId)}, ${escHtml(d.totalRaw || '0')}, '${escHtml(d.payUrl || '')}')"
+      payHtml = `<button onclick="openPaymentModal(${escHtml(d.orderId)}, ${escHtml(d.totalRaw || '0')}, '${escHtml(d.payUrl || '')}', '${escHtml(d.paymentMethod || 'cash')}', '')"
                          class="btn btn-sm btn-caramel">Pay</button>`;
     } else {
       payHtml = `<span style="font-size:0.75rem;color:#aaa">—</span>`;

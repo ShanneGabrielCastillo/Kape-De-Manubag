@@ -159,6 +159,20 @@ class PosOrderAtomicityTests(TestCase):
             content_type='application/json',
         )
 
+    def _post_pos_with_payment(self, payment_method='cash', quantity=2):
+        """Helper that creates a POS order with a specific payment method."""
+        item = {'product_id': self.product.pk, 'quantity': quantity, 'size': 'none'}
+        return self.client.post(
+            reverse('orders:create_pos_order'),
+            json.dumps({
+                'customer_name': 'Walk-in Customer',
+                'items': [item],
+                'order_type': 'dine_in',
+                'payment_method': payment_method,
+            }),
+            content_type='application/json',
+        )
+
     def test_pos_order_deducts_stock(self):
         response = self._post_pos(quantity=3)
         data = response.json()
@@ -223,6 +237,134 @@ class PosOrderAtomicityTests(TestCase):
         self.assertEqual(InventoryLog.objects.count(), 0)
         self.product.refresh_from_db()
         self.assertEqual(self.product.stock_quantity, 10)
+
+    # ── Payment method at POS order creation ───────────────────────────────
+
+    def test_pos_order_stores_cash_payment_method(self):
+        """POS order with payment_method='cash' stores it on the order."""
+        response = self._post_pos_with_payment('cash')
+        data = response.json()
+        self.assertTrue(data['success'])
+        order = Order.objects.get(pk=data['order_id'])
+        self.assertEqual(order.payment_method, 'cash')
+
+    def test_pos_order_stores_gcash_payment_method(self):
+        """POS order with payment_method='gcash' stores it on the order."""
+        response = self._post_pos_with_payment('gcash')
+        data = response.json()
+        self.assertTrue(data['success'])
+        order = Order.objects.get(pk=data['order_id'])
+        self.assertEqual(order.payment_method, 'gcash')
+
+    def test_pos_order_defaults_to_cash_when_no_method_sent(self):
+        """POS order without a payment_method defaults to 'cash'."""
+        response = self._post_pos(quantity=1)  # no payment_method field
+        data = response.json()
+        self.assertTrue(data['success'])
+        order = Order.objects.get(pk=data['order_id'])
+        self.assertEqual(order.payment_method, 'cash')
+
+    def test_pos_order_rejects_invalid_payment_method(self):
+        """POS order with an invalid payment_method falls back to 'cash'."""
+        response = self.client.post(
+            reverse('orders:create_pos_order'),
+            json.dumps({
+                'customer_name': 'Walk-in Customer',
+                'items': [{'product_id': self.product.pk, 'quantity': 1, 'size': 'none'}],
+                'order_type': 'dine_in',
+                'payment_method': 'card',  # invalid — not cash/gcash
+            }),
+            content_type='application/json',
+        )
+        data = response.json()
+        self.assertTrue(data['success'])
+        order = Order.objects.get(pk=data['order_id'])
+        # Invalid value is sanitized to 'cash'
+        self.assertEqual(order.payment_method, 'cash')
+
+    def test_pos_cash_payment_confirms_correctly(self):
+        """POS Cash order: process_payment confirms correctly with change."""
+        response = self._post_pos_with_payment('cash')
+        order = Order.objects.get(pk=response.json()['order_id'])
+        self.assertEqual(order.payment_method, 'cash')
+
+        pay_response = self.client.post(
+            reverse('orders:process_payment', args=[order.pk]),
+            {'payment_method': 'cash', 'amount_paid': '150.00'},
+        )
+        data = pay_response.json()
+        self.assertTrue(data['success'])
+
+        order.refresh_from_db()
+        self.assertTrue(order.is_paid)
+        self.assertEqual(order.payment_method, 'cash')
+        self.assertEqual(order.status, 'preparing')
+        from decimal import Decimal
+        self.assertEqual(order.change_amount, Decimal('150.00') - order.total)
+
+    def test_pos_gcash_payment_confirms_without_customer_reference(self):
+        """POS GCash order: process_payment must succeed without any customer
+        reference or proof — staff verifies the business GCash account directly.
+        This is the critical test: POS GCash must never require gcash_reference."""
+        response = self._post_pos_with_payment('gcash')
+        order = Order.objects.get(pk=response.json()['order_id'])
+        self.assertEqual(order.payment_method, 'gcash')
+        self.assertEqual(order.gcash_status, 'none')  # no customer reference
+        self.assertEqual(order.cashier, self.cashier)  # POS order — cashier set
+
+        pay_response = self.client.post(
+            reverse('orders:process_payment', args=[order.pk]),
+            {'payment_method': 'gcash', 'amount_paid': str(order.total)},
+        )
+        data = pay_response.json()
+        self.assertTrue(data['success'], msg=data.get('error'))
+
+        order.refresh_from_db()
+        self.assertTrue(order.is_paid)
+        self.assertEqual(order.payment_method, 'gcash')
+        self.assertEqual(order.status, 'preparing')
+        from decimal import Decimal
+        self.assertEqual(order.change_amount, Decimal('0.00'))
+        self.assertEqual(order.amount_paid, order.total)
+
+    def test_pos_gcash_inventory_not_deducted_twice(self):
+        """Confirming a POS GCash payment must not trigger a second inventory deduction."""
+        response = self._post_pos_with_payment('gcash', quantity=2)
+        order = Order.objects.get(pk=response.json()['order_id'])
+        self.product.refresh_from_db()
+        stock_after_creation = self.product.stock_quantity  # deducted once at creation
+
+        self.client.post(
+            reverse('orders:process_payment', args=[order.pk]),
+            {'payment_method': 'gcash', 'amount_paid': str(order.total)},
+        )
+
+        self.product.refresh_from_db()
+        # Stock must not change further — only deducted at order creation
+        self.assertEqual(self.product.stock_quantity, stock_after_creation)
+
+    def test_pos_gcash_finance_records_gcash_not_cash(self):
+        """Finance must count a POS GCash order as GCash, not Cash."""
+        from apps.finance.models import DailyFinance
+        from decimal import Decimal
+        response = self._post_pos_with_payment('gcash', quantity=1)
+        order = Order.objects.get(pk=response.json()['order_id'])
+
+        # Confirm payment and advance to completed
+        self.client.post(
+            reverse('orders:process_payment', args=[order.pk]),
+            {'payment_method': 'gcash', 'amount_paid': str(order.total)},
+        )
+        order.refresh_from_db()
+        order.status = 'completed'
+        order.completed_at = timezone.now()
+        order.save(update_fields=['status', 'completed_at'])
+
+        # Create a DailyFinance record for today
+        finance = DailyFinance.objects.create(date=timezone.localdate())
+        # Order must appear in GCash sales, not Cash sales
+        self.assertEqual(finance.get_cash_sales(), Decimal('0.00'))
+        self.assertGreater(finance.get_gcash_sales(), Decimal('0.00'))
 
 
 class DuplicateOrderProtectionTests(TestCase):
