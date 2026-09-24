@@ -170,7 +170,7 @@
             {% if order.gcash_status != 'pending' %}
             {# Only show Cash Pay button if GCash not pending — fallback if customer switches to cash in person #}
             <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}')" class="btn btn-caramel btn-block" style="margin-bottom:8px">
-              💳 Confirm Cash Payment (if paying at counter)
+              💵 Confirm Cash Payment
             </button>
             {% endif %}
 

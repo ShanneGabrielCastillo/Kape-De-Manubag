@@ -406,9 +406,6 @@
               {% if order.next_status %}
               <button onclick="quickAdvance('{% url 'orders:quick_status_advance' order.pk %}', this)" class="btn btn-sm btn-caramel" title="Advance to {{ order.next_status }}" data-next-status="{{ order.next_status }}" data-is-paid="{{ order.is_paid|yesno:'true,false' }}">▶ {{ order.next_status|title }}</button>
               {% endif %}
-              {% if order.status not in 'completed,cancelled' %}
-              <button onclick="cancelOrder({{ order.pk }}, '{% url 'orders:update_status' order.pk %}')" class="btn btn-sm" style="background:#fff0f0;color:var(--red-accent);border:1px solid #fcc" title="Cancel order">✕ Cancel</button>
-              {% endif %}
             </div>
           </td>
         </tr>
@@ -682,11 +679,10 @@ RealtimeConnection.on('status_changed', function(data) {
     }
   }
 
-  // ── 3. Quick-advance and Cancel buttons ──────────────────────────────
+  // ── 3. Quick-advance button ──────────────────────────────────────────
   const forwardFlow = { preparing: 'ready', ready: 'completed' };
   const nextStatus  = forwardFlow[newStatus];
   const advanceBtn  = row.querySelector('.btn-caramel[onclick*="quickAdvance"]');
-  const cancelBtn   = row.querySelector('[onclick*="cancelOrder"]');
 
   if (advanceBtn) {
     if (nextStatus) {
@@ -699,11 +695,6 @@ RealtimeConnection.on('status_changed', function(data) {
     } else {
       advanceBtn.style.display = 'none';
     }
-  }
-
-  // Hide cancel button for terminal states
-  if (cancelBtn) {
-    cancelBtn.style.display = isTerminal ? 'none' : '';
   }
 
   // ── 4. Keep row-level data attributes current ─────────────────────────
@@ -828,21 +819,12 @@ RealtimeConnection.on('status_changed', function(data) {
                       ▶ ${escHtml(nextLabel)}
                     </button>`;
     }
-    let cancelBtn = '';
-    if (!isTerminal) {
-      cancelBtn = `<button onclick="cancelOrder(${escHtml(d.orderId || '')}, '${escHtml(d.statusUrl || '')}')"
-                           class="btn btn-sm"
-                           style="background:#fff0f0;color:var(--red-accent);border:1px solid #fcc">
-                     ✕ Cancel
-                   </button>`;
-    }
-    const actionCount = [advanceBtn, cancelBtn].filter(Boolean).length + 2; // +2 for view+print
+    const actionCount = advanceBtn ? 3 : 2;
     const actionsHtml = `
       <div class="om-actions${actionCount === 2 ? ' om-actions--2' : ''}">
         ${viewBtn}
         ${printBtn}
         ${advanceBtn}
-        ${cancelBtn}
       </div>`;
 
     card.innerHTML = topHtml + metaHtml + paySecHtml + dateHtml + `<div class="om-divider"></div>` + actionsHtml;
