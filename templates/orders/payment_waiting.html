@@ -439,12 +439,18 @@ function copyToClipboard(text, btn) {
 
     var formData = new FormData(form);
 
+    // 30-second timeout so the button never spins forever on slow networks
+    var controller = new AbortController();
+    var timeoutId = setTimeout(function() { controller.abort(); }, 30000);
+
     try {
       var response = await fetch(window.WAITING_CONFIG.submitUrl, {
         method: 'POST',
         headers: { 'X-CSRFToken': formData.get('csrfmiddlewaretoken') },
         body: formData,
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
       var data = await response.json();
 
       if (data.success) {
@@ -487,7 +493,12 @@ function copyToClipboard(text, btn) {
         if (btn) { btn.disabled = false; btn.textContent = '📨 Submit Payment for Verification'; }
       }
     } catch(err) {
-      errBox.textContent = 'Network error — please try again.';
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        errBox.textContent = 'Request timed out — the server may be starting up. Please wait a moment and try again.';
+      } else {
+        errBox.textContent = 'Network error — please check your connection and try again.';
+      }
       errBox.style.display = 'block';
       if (btn) { btn.disabled = false; btn.textContent = '📨 Submit Payment for Verification'; }
     }

@@ -702,31 +702,17 @@ def submit_gcash_payment(request, tracking_token):
     CRITICAL: This view NEVER sets is_paid=True.  It only stores the customer's
     submission data and updates gcash_status to 'pending'.  Staff must explicitly
     verify the payment via verify_gcash_payment.
-
-    Duplicate-submission handling:
-    - Already submitted (gcash_status='pending')  → return current state, no re-write
-    - Already verified (gcash_status='verified')  → reject with error
-    - Rejected previously (gcash_status='rejected') → allow re-submission
-    - Order already paid                          → reject
-    - Order cancelled/completed                   → reject
     """
-    order = get_object_or_404(
-        Order.objects.select_for_update(),
-        tracking_token=tracking_token,
-    )
+    # ── Fast read-only guard checks (no lock, no transaction) ─────────────
+    # Validate the token and basic eligibility before doing any form parsing
+    # or file processing, so invalid requests are rejected cheaply.
+    order = get_object_or_404(Order, tracking_token=tracking_token)
 
-    # ── Guard checks ──────────────────────────────────────────────────────
     if order.payment_method != 'gcash':
-        return JsonResponse({
-            'success': False,
-            'error': 'This order is not a GCash order.',
-        }, status=400)
+        return JsonResponse({'success': False, 'error': 'This order is not a GCash order.'}, status=400)
 
     if order.is_paid:
-        return JsonResponse({
-            'success': False,
-            'error': 'This order has already been paid.',
-        }, status=400)
+        return JsonResponse({'success': False, 'error': 'This order has already been paid.'}, status=400)
 
     if order.status in ('cancelled', 'completed'):
         return JsonResponse({
@@ -740,8 +726,7 @@ def submit_gcash_payment(request, tracking_token):
             'error': 'Payment cannot be submitted for this order at this stage.',
         }, status=400)
 
-    # If already pending verification, return idempotent success — do not
-    # re-write, but tell the customer their submission is still being reviewed.
+    # Idempotent: already submitted and pending — tell the customer without re-writing.
     if order.gcash_status == 'pending':
         return JsonResponse({
             'success': True,
@@ -751,27 +736,19 @@ def submit_gcash_payment(request, tracking_token):
         })
 
     if order.gcash_status == 'verified':
-        return JsonResponse({
-            'success': False,
-            'error': 'This payment has already been verified.',
-        }, status=400)
+        return JsonResponse({'success': False, 'error': 'This payment has already been verified.'}, status=400)
 
-    # ── Validate form ─────────────────────────────────────────────────────
+    # ── Form validation (before acquiring any lock) ───────────────────────
     from .forms import GCashSubmissionForm
     form = GCashSubmissionForm(request.POST, request.FILES)
     if not form.is_valid():
-        # Return first error per field in a simple flat structure.
         errors = {field: errs[0] for field, errs in form.errors.items()}
         return JsonResponse({'success': False, 'errors': errors}, status=400)
 
     reference = form.cleaned_data['gcash_reference']
     proof_file = form.cleaned_data.get('gcash_proof')
 
-    # ── Duplicate reference check ─────────────────────────────────────────
-    # Prevent the same GCash reference from being used on multiple orders.
-    # Only block if the reference was used on a VERIFIED or PENDING order —
-    # a reference on a REJECTED or NONE order has not been confirmed paid,
-    # so it cannot be a true duplicate.
+    # ── Duplicate reference check (read-only, before lock) ────────────────
     duplicate_qs = Order.objects.filter(
         gcash_reference=reference,
         gcash_status__in=('pending', 'verified'),
@@ -787,8 +764,21 @@ def submit_gcash_payment(request, tracking_token):
             },
         }, status=400)
 
-    # ── Persist the submission ────────────────────────────────────────────
+    # ── Atomic write — lock only for the actual update ────────────────────
     with transaction.atomic():
+        # Re-read with lock inside the transaction to guard against a race
+        # where two concurrent submissions arrive simultaneously.
+        order = get_object_or_404(Order.objects.select_for_update(), pk=order.pk)
+
+        # Re-check inside the lock (state may have changed since the read above).
+        if order.is_paid or order.gcash_status not in ('none', 'rejected'):
+            return JsonResponse({
+                'success': True,
+                'already_submitted': True,
+                'message': 'Your payment has already been submitted.',
+                'gcash_status': order.gcash_status,
+            })
+
         order.gcash_reference = reference
         order.gcash_status = 'pending'
         order.gcash_submitted_at = timezone.now()
@@ -799,19 +789,18 @@ def submit_gcash_payment(request, tracking_token):
         ])
 
         log_action(
-            None,  # anonymous customer — no user
+            None,
             'order.gcash_submitted',
             order,
             detail=f'GCash ref: {reference} — proof: {"yes" if proof_file else "no"}',
         )
 
-        # Notify staff via SSE that a GCash payment needs verification.
         from apps.realtime.broker import publish as rt_publish
         rt_publish('gcash_submitted', {
-            'order_id':      order.pk,
-            'order_number':  order.order_number,
-            'customer_name': order.customer_name,
-            'total':         float(order.total),
+            'order_id':        order.pk,
+            'order_number':    order.order_number,
+            'customer_name':   order.customer_name,
+            'total':           float(order.total),
             'gcash_reference': reference,
         })
 
