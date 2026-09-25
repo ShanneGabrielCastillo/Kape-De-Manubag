@@ -122,11 +122,12 @@ if (sidebarToggle && sidebar) {
 }
 
 // ── Active Nav Link ──
-document.querySelectorAll('.sidebar-link').forEach(link => {
-  if (link.href === window.location.href || window.location.pathname.startsWith(link.getAttribute('href'))) {
-    link.classList.add('active');
-  }
-});
+// Active state is set server-side by Django's request.resolver_match in
+// base_admin.html. No client-side override needed — removing the old
+// startsWith() logic here was the fix for multiple items appearing active
+// simultaneously (e.g. Dashboard + Settings + GCash Settings all lit up
+// because /dashboard/settings/gcash/ starts with /dashboard/ and
+// /dashboard/settings/).
 
 // ── Add to Cart (AJAX) ──
 document.querySelectorAll('.add-to-cart-form').forEach(form => {

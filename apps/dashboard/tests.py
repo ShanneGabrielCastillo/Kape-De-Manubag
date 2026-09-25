@@ -939,3 +939,48 @@ class SidebarNavigationActiveStateTests(TestCase):
         self._assert_only_active(
             reverse('dashboard:gcash_settings') + '?saved=1', 'GCash Settings',
         )
+
+
+class SidebarJSRegressionTest(TestCase):
+    """Guard against the JS active-state override being re-introduced.
+
+    The root cause of the multiple-active-items bug was a block in main.js:
+
+        document.querySelectorAll('.sidebar-link').forEach(link => {
+          if (link.href === window.location.href ||
+              window.location.pathname.startsWith(link.getAttribute('href'))) {
+            link.classList.add('active');
+          }
+        });
+
+    ``startsWith`` causes every ancestor path to also receive the active class
+    (e.g. visiting /dashboard/settings/gcash/ makes Dashboard, Settings AND
+    GCash Settings all active because the path starts with /dashboard/ and
+    /dashboard/settings/).
+
+    This test reads main.js directly and fails if that pattern is ever
+    re-introduced, ensuring the fix cannot silently regress.
+    """
+
+    def test_main_js_does_not_contain_startswith_active_override(self):
+        import os
+        js_path = os.path.join(
+            os.path.dirname(__file__),   # apps/dashboard/
+            '..', '..',                   # project root
+            'static', 'js', 'main.js',
+        )
+        js_path = os.path.normpath(js_path)
+        with open(js_path, 'r', encoding='utf-8') as f:
+            js_source = f.read()
+
+        # The offending pattern: startsWith on a link's href to decide active.
+        # We check for the combination rather than startsWith alone (which is
+        # used legitimately elsewhere).
+        bad_pattern = "pathname.startsWith(link.getAttribute('href'))"
+        self.assertNotIn(
+            bad_pattern, js_source,
+            "main.js contains the startsWith-based sidebar active override "
+            "that causes multiple items to appear active simultaneously. "
+            "This block must be removed — active state is set server-side "
+            "by Django's request.resolver_match in base_admin.html."
+        )
