@@ -795,14 +795,19 @@ def submit_gcash_payment(request, tracking_token):
             detail=f'GCash ref: {reference} — proof: {"yes" if proof_file else "no"}',
         )
 
-        from apps.realtime.broker import publish as rt_publish
-        rt_publish('gcash_submitted', {
-            'order_id':        order.pk,
-            'order_number':    order.order_number,
-            'customer_name':   order.customer_name,
-            'total':           float(order.total),
-            'gcash_reference': reference,
-        })
+        # Broadcast AFTER the transaction commits so the event never arrives
+        # at the browser before the DB change is durable.  If the transaction
+        # rolls back, no event is sent.
+        def _broadcast_gcash_submitted():
+            from apps.realtime.broker import publish as rt_publish
+            rt_publish('gcash_submitted', {
+                'order_id':        order.pk,
+                'order_number':    order.order_number,
+                'customer_name':   order.customer_name,
+                'total':           float(order.total),
+                'gcash_reference': reference,
+            })
+        transaction.on_commit(_broadcast_gcash_submitted)
 
     return JsonResponse({
         'success': True,

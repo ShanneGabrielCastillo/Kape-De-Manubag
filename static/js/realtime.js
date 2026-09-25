@@ -43,6 +43,9 @@ window.RealtimeConnection = (function () {
     eventSource.addEventListener('inventory_changed', (e) => {
       dispatch('inventory_changed', JSON.parse(e.data));
     });
+    eventSource.addEventListener('gcash_submitted', (e) => {
+      dispatch('gcash_submitted', JSON.parse(e.data));
+    });
     eventSource.addEventListener('heartbeat', () => {
       // keep-alive — no action needed
     });

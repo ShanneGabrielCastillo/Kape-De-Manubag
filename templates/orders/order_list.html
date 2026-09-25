@@ -554,6 +554,8 @@ RealtimeConnection.on('new_order', function(order) {
     row.dataset.acceptUrl    = acceptUrl;
     row.dataset.statusUrl    = statusFormUrl;
     row.dataset.isPaid       = order.is_paid ? 'true' : 'false';
+    row.dataset.paymentMethod = order.payment_method || 'cash';
+    row.dataset.gcashStatus  = order.gcash_status || 'none';
     row.className = 'new-order-highlight';
 
     // The status select for a brand-new (awaiting_payment) order — no
@@ -701,6 +703,51 @@ RealtimeConnection.on('status_changed', function(data) {
   row.dataset.isPaid = isPaid ? 'true' : 'false';
   row.dataset.status = newStatus;
 });
+
+// ── Real-time: GCash reference submitted by customer ──────────────────────
+// When a customer submits their GCash reference number, the backend fires a
+// 'gcash_submitted' event.  Without this handler the live row would continue
+// showing "💳 Pay" until the staff manually reloads the page.  This listener
+// immediately updates the row so it matches a freshly server-rendered page.
+RealtimeConnection.on('gcash_submitted', function(data) {
+  const row = document.querySelector(`tr[data-order-id="${data.order_id}"]`);
+
+  if (!row) {
+    // Row not currently visible (filtered out or paginated away) — no action.
+    // A page reload or navigation will show the correct state.
+    return;
+  }
+
+  // 1. Update the dataset so the mobile card builder reads the correct state.
+  row.dataset.gcashStatus = 'pending';
+
+  // 2. Update the Status column badge (column index 5, fixed table layout).
+  const statusCell = row.cells[5];
+  if (statusCell) {
+    statusCell.innerHTML = `<span class="badge" style="background:#dbeafe;color:#1e40af;font-size:0.8rem;padding:5px 10px">📋 GCash — Verify</span>`;
+  }
+
+  // 3. Update the Payment column (column index 6).
+  const payCell = row.cells[6];
+  if (payCell) {
+    const detailUrl = row.dataset.detailUrl || '';
+    payCell.innerHTML = `<a href="${escHtml(detailUrl)}" class="btn btn-sm btn-primary">🔍 Verify GCash</a>`;
+  }
+
+  // 4. Rebuild the mobile card so it reflects the new state.
+  if (typeof window.initResponsiveTables === 'function') {
+    window.initResponsiveTables();
+  }
+
+  // 5. Notify staff via the existing toast mechanism.
+  const name = data.customer_name ? escHtml(data.customer_name) : '';
+  const msg  = name
+    ? `📋 GCash reference submitted — ${name}`
+    : '📋 GCash payment reference submitted';
+  showToast(msg, 'info', 5000);
+  playNotificationSound();
+});
+
 // ── Custom mobile card builder for the order list page ───────────────────
 // Replaces the generic responsive-tables output with a layout that matches
 // the order-management mockup. Runs after DOMContentLoaded.
@@ -761,9 +808,18 @@ RealtimeConnection.on('status_changed', function(data) {
     // ── Payment section ──
     let payHtml;
     if (status === 'awaiting_payment' && !isPaid) {
-      // Single button: confirming payment auto-accepts
-      payHtml = `<button onclick="openPaymentModal(${escHtml(d.orderId)}, ${escHtml(d.totalRaw || '0')}, '${escHtml(d.payUrl || '')}', '${escHtml(d.paymentMethod || 'cash')}', '')"
-                         class="btn btn-sm btn-caramel">💳 Pay</button>`;
+      const gcashStatus = d.gcashStatus || 'none';
+      const payMethod   = d.paymentMethod || 'cash';
+
+      if (payMethod === 'gcash' && gcashStatus === 'pending') {
+        // Customer has submitted a GCash reference — show Verify link
+        payHtml = `<a href="${escHtml(d.detailUrl || '')}" class="btn btn-sm btn-primary">🔍 Verify GCash</a>`;
+      } else if (payMethod === 'gcash' && gcashStatus === 'rejected') {
+        payHtml = `<span style="font-size:0.75rem;color:#991b1b">❌ Rejected</span>`;
+      } else {
+        payHtml = `<button onclick="openPaymentModal(${escHtml(d.orderId)}, ${escHtml(d.totalRaw || '0')}, '${escHtml(d.payUrl || '')}', '${escHtml(payMethod)}', '')"
+                           class="btn btn-sm btn-caramel">💳 Pay</button>`;
+      }
     } else if (isPaid) {
       payHtml = `<span class="badge badge-paid" style="font-size:0.72rem">● Paid</span>`;
     } else if (status !== 'cancelled') {
