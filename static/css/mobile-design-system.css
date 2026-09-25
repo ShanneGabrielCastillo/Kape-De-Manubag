@@ -44,9 +44,11 @@
  * ── SECTION 2: GLOBAL LAYOUT ──
  */
 @media (max-width: 575.98px) {
-  /* Prevent any horizontal overflow at body level */
+  /* Prevent any horizontal overflow at body level.
+     overflow-x: clip (not hidden) preserves the window as the scroll
+     container so that position:sticky on the menu topbar keeps working. */
   html, body {
-    overflow-x: hidden;
+    overflow-x: clip;
     max-width: 100vw;
   }
 

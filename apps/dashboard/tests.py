@@ -711,3 +711,231 @@ class DashboardErrorResilienceTests(TestCase):
             response = self.client.get(CHART_URL)
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json(), {'error': 'chart unavailable'})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sidebar Navigation Active-State Tests
+#
+# Verifies that exactly ONE sidebar navigation item carries the ``active``
+# class on every admin page.  The critical regression case is GCash Settings:
+# it must activate *only* "GCash Settings", not Dashboard or Settings.
+#
+# How the check works:
+#   Each sidebar link is identified by its stable ``aria-label`` attribute.
+#   We fetch the page, scan the rendered HTML, and assert that the single
+#   expected label's ``<a>`` tag contains the class "active", while every
+#   other label's ``<a>`` tag does NOT.
+#
+# Implementation detail: ``re.search`` is used rather than a full HTML parser
+# because (a) the sidebar markup is predictable/stable and (b) it avoids an
+# extra test dependency.  The regex matches ``<a … class="… active …"`` blocks
+# that contain the given aria-label on the same element.
+# ─────────────────────────────────────────────────────────────────────────────
+
+import re
+
+from django.urls import reverse
+
+
+# All sidebar nav items that carry an aria-label.
+# The list is used to assert that all *other* items are NOT active.
+ALL_NAV_LABELS = [
+    'Dashboard',
+    'Order Management',
+    'POS Terminal',
+    'Products',
+    'Categories',
+    'Inventory',
+    'Sales Reports',
+    'Staff Accounts',
+    'Settings',
+    'GCash Settings',
+    'Activity Log',
+    'Finance',
+]
+
+
+def _active_labels(html: str) -> list[str]:
+    """Return every aria-label whose <a> element carries the 'active' class."""
+    found = []
+    for label in ALL_NAV_LABELS:
+        # Match an <a …> opening tag that contains BOTH the aria-label and
+        # the 'active' CSS class.  The tag ends at the first '>'.
+        # We use re.DOTALL so the dot matches newlines inside long class attrs.
+        pattern = (
+            r'<a\b[^>]*\baria-label="' + re.escape(label) + r'"[^>]*\bactive\b[^>]*>'
+            r'|'
+            r'<a\b[^>]*\bactive\b[^>]*\baria-label="' + re.escape(label) + r'"[^>]*>'
+        )
+        if re.search(pattern, html, re.DOTALL):
+            found.append(label)
+    return found
+
+
+class SidebarNavigationActiveStateTests(TestCase):
+    """Exactly one sidebar nav item is active on each admin page.
+
+    Critical regression: visiting GCash Settings must NOT activate Dashboard
+    or Settings — only GCash Settings should be active.
+    """
+
+    def setUp(self):
+        # Admin user has access to all sidebar items.
+        self.admin = CustomUser.objects.create_user(
+            username='nav_admin', password=PASSWORD, role='admin',
+        )
+        self.client.force_login(self.admin)
+
+    def _assert_only_active(self, url, expected_label, *, msg_prefix=''):
+        """GET ``url``, assert ``expected_label`` is active and no other is."""
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200,
+                         f'{msg_prefix}Expected 200 for {url}')
+        html = response.content.decode()
+        active = _active_labels(html)
+        self.assertEqual(
+            active, [expected_label],
+            f'{msg_prefix}URL {url!r}: expected only [{expected_label!r}] '
+            f'active, got {active}',
+        )
+
+    # ── Dashboard ──────────────────────────────────────────────────────────
+
+    def test_dashboard_activates_only_dashboard(self):
+        self._assert_only_active(
+            reverse('dashboard:index'), 'Dashboard',
+        )
+
+    # ── Settings (the critical overlap cases) ─────────────────────────────
+
+    def test_settings_activates_only_settings(self):
+        self._assert_only_active(
+            reverse('dashboard:system_settings'), 'Settings',
+        )
+
+    def test_gcash_settings_activates_only_gcash_settings(self):
+        """The main regression: GCash Settings must NOT also activate
+        Dashboard or Settings."""
+        self._assert_only_active(
+            reverse('dashboard:gcash_settings'), 'GCash Settings',
+        )
+
+    def test_gcash_settings_does_not_activate_dashboard(self):
+        response = self.client.get(reverse('dashboard:gcash_settings'))
+        html = response.content.decode()
+        active = _active_labels(html)
+        self.assertNotIn('Dashboard', active,
+                         'Dashboard must NOT be active on the GCash Settings page')
+        self.assertNotIn('Settings', active,
+                         'Settings must NOT be active on the GCash Settings page')
+        self.assertIn('GCash Settings', active,
+                      'GCash Settings MUST be active on the GCash Settings page')
+
+    # ── Orders ─────────────────────────────────────────────────────────────
+
+    def test_order_list_activates_only_order_management(self):
+        self._assert_only_active(
+            reverse('orders:order_list'), 'Order Management',
+        )
+
+    def test_pos_activates_only_pos_terminal(self):
+        self._assert_only_active(
+            reverse('orders:pos'), 'POS Terminal',
+        )
+
+    # ── Menu ───────────────────────────────────────────────────────────────
+
+    def test_products_activates_only_products(self):
+        self._assert_only_active(
+            reverse('menu:product_list'), 'Products',
+        )
+
+    def test_categories_activates_only_categories(self):
+        self._assert_only_active(
+            reverse('menu:category_list'), 'Categories',
+        )
+
+    # ── Stock & Reports ────────────────────────────────────────────────────
+
+    def test_inventory_activates_only_inventory(self):
+        self._assert_only_active(
+            reverse('inventory:list'), 'Inventory',
+        )
+
+    def test_reports_activates_only_sales_reports(self):
+        self._assert_only_active(
+            reverse('reports:index'), 'Sales Reports',
+        )
+
+    # ── Staff Accounts ─────────────────────────────────────────────────────
+
+    def test_staff_list_activates_only_staff_accounts(self):
+        self._assert_only_active(
+            reverse('accounts:staff_list'), 'Staff Accounts',
+        )
+
+    # ── Finance ────────────────────────────────────────────────────────────
+
+    def test_finance_activates_only_finance(self):
+        self._assert_only_active(
+            reverse('finance:index'), 'Finance',
+        )
+
+    # ── Navigation sequence regression ────────────────────────────────────
+
+    def test_navigation_sequence_settings_to_gcash(self):
+        """Navigating Settings → GCash Settings must shift active correctly."""
+        response = self.client.get(reverse('dashboard:system_settings'))
+        self.assertEqual(_active_labels(response.content.decode()), ['Settings'])
+
+        response = self.client.get(reverse('dashboard:gcash_settings'))
+        self.assertEqual(_active_labels(response.content.decode()), ['GCash Settings'])
+
+    def test_navigation_sequence_gcash_back_to_dashboard(self):
+        """Navigating GCash Settings → Dashboard restores Dashboard as active."""
+        response = self.client.get(reverse('dashboard:gcash_settings'))
+        self.assertEqual(_active_labels(response.content.decode()), ['GCash Settings'])
+
+        response = self.client.get(reverse('dashboard:index'))
+        self.assertEqual(_active_labels(response.content.decode()), ['Dashboard'])
+
+    def test_navigation_sequence_full(self):
+        """Full navigation sequence: every page activates only its own item."""
+        sequence = [
+            (reverse('dashboard:index'),           'Dashboard'),
+            (reverse('dashboard:system_settings'), 'Settings'),
+            (reverse('dashboard:gcash_settings'),  'GCash Settings'),
+            (reverse('dashboard:index'),           'Dashboard'),
+            (reverse('orders:order_list'),         'Order Management'),
+            (reverse('dashboard:gcash_settings'),  'GCash Settings'),
+            (reverse('orders:pos'),                'POS Terminal'),
+            (reverse('inventory:list'),            'Inventory'),
+            (reverse('reports:index'),             'Sales Reports'),
+            (reverse('accounts:staff_list'),       'Staff Accounts'),
+            (reverse('menu:product_list'),         'Products'),
+            (reverse('menu:category_list'),        'Categories'),
+            (reverse('finance:index'),             'Finance'),
+        ]
+        for url, expected in sequence:
+            with self.subTest(url=url, expected=expected):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 200)
+                active = _active_labels(response.content.decode())
+                self.assertEqual(
+                    active, [expected],
+                    f'After navigating to {url!r}: expected [{expected!r}] '
+                    f'active, got {active}',
+                )
+
+    # ── Query-parameter stability ──────────────────────────────────────────
+
+    def test_order_list_with_query_param_stays_active(self):
+        """Query parameters must not break the active state."""
+        self._assert_only_active(
+            reverse('orders:order_list') + '?page=2', 'Order Management',
+        )
+
+    def test_gcash_settings_page_query_param_stays_active(self):
+        self._assert_only_active(
+            reverse('dashboard:gcash_settings') + '?saved=1', 'GCash Settings',
+        )

@@ -11,7 +11,10 @@
 @media (max-width: 575.98px) {
 
   /* ── Page-level overflow guard ── */
-  body          { overflow-x: hidden; }
+  /* overflow-x: clip prevents horizontal scrolling WITHOUT creating a new
+     scroll container, so position:sticky on the menu topbar still works.
+     overflow-x: hidden would make body the scroll container and break sticky. */
+  body          { overflow-x: clip; }
   .page-content { padding: 16px; overflow-x: hidden; }
   /* Do NOT set overflow-x on .main-content — it would make .main-content
      the scroll container instead of the window, breaking position:sticky
@@ -427,7 +430,7 @@
    ========================================================================== */
 @media (min-width: 576px) and (max-width: 767.98px) {
 
-  body          { overflow-x: hidden; }
+  body          { overflow-x: clip; }
   .page-content { padding: 20px; overflow-x: hidden; }
   /* Do NOT set overflow-x on .main-content — see note in XS media query. */
 
