@@ -229,6 +229,14 @@
               <span style="color:var(--red-accent)">✖ Order Cancelled</span>
             {% elif log.action == "order.status_changed" %}
               🔄 Status Changed
+            {% elif log.action == "order.accepted" %}
+              <span style="color:var(--green-success)">✅ Order Accepted</span>
+            {% elif log.action == "order.gcash_submitted" %}
+              📤 GCash Payment Submitted
+            {% elif log.action == "order.gcash_verified" %}
+              <span style="color:var(--green-success)">✅ GCash Payment Verified</span>
+            {% elif log.action == "order.gcash_rejected" %}
+              <span style="color:var(--red-accent)">✖ GCash Payment Rejected</span>
             {% elif log.action == "product.create" %}
               ➕ Product Created
             {% elif log.action == "product.update" %}
