@@ -143,13 +143,15 @@
     </div><!-- /.sidebar-nav-wrapper -->
 
     <div class="sidebar-user">
-      <div class="user-avatar">
-        {% if user.profile_image %}<img src="{{ user.profile_image.url }}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span style="display:none">{{ user.first_name|first|upper|default:user.username|first|upper }}</span>{% else %}{{ user.first_name|first|upper|default:user.username|first|upper }}{% endif %}
-      </div>
-      <div class="user-info">
-        <div class="user-name">{{ user.get_full_name|default:user.username }}</div>
-        <div class="user-role">{{ user.get_role_display }}</div>
-      </div>
+      <a href="{% url 'accounts:profile' %}" class="sidebar-profile-link" aria-label="My Profile">
+        <div class="user-avatar">
+          {% if user.profile_image %}<img src="{{ user.profile_image.url }}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span style="display:none">{{ user.first_name|first|upper|default:user.username|first|upper }}</span>{% else %}{{ user.first_name|first|upper|default:user.username|first|upper }}{% endif %}
+        </div>
+        <div class="user-info">
+          <div class="user-name">{{ user.get_full_name|default:user.username }}</div>
+          <div class="user-role">{{ user.get_role_display }}</div>
+        </div>
+      </a>
       <a href="{% url 'accounts:logout' %}" style="margin-left:auto;color:rgba(255,255,255,0.4);font-size:1.1rem;text-decoration:none" title="Logout" aria-label="Sign out">
         <span class="logout-icon">⏻</span>
         <span class="logout-text">Sign Out</span>
@@ -171,7 +173,6 @@
       </div>
       <div class="topbar-actions">
         <a href="{% url 'orders:order_list' %}" style="color:var(--brown-mid);font-size:1.2rem;text-decoration:none" title="Orders">📋</a>
-        <a href="{% url 'accounts:profile' %}" style="color:var(--brown-mid);font-size:1.2rem;text-decoration:none" title="Profile">👤</a>
       </div>
     </header>
 

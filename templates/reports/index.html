@@ -92,8 +92,6 @@
   <div class="card">
     <div class="card-header"><h3>🏆 Top Products</h3></div>
     <div class="table-wrapper reports-table-wrapper">
-      <table>
-        <thead><tr><th>Product</th><th>Qty Sold</th><th>Revenue</th></tr></thead>
         <tbody>
           {% for p in top_products %}
           <tr>
@@ -107,7 +105,8 @@
         </tbody>
       </table>
     </div>
-    <div class="reports-mobile-cards" id="top-products-cards">
+    <div class="reports-mobile-cards" id="top-products-cards"
+         style="max-height:340px;overflow-y:auto;-webkit-overflow-scrolling:touch">
       {% for p in top_products %}
       <div class="report-card-item">
         <div class="report-card-item-main">

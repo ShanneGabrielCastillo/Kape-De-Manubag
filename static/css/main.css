@@ -410,6 +410,35 @@ tbody tr:last-child { border-bottom: none; }
   text-transform: capitalize;
 }
 
+/* ── Sidebar profile link (avatar + name → /accounts/profile/) ── */
+.sidebar-profile-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  border-radius: 8px;
+  padding: 4px 6px;
+  margin: -4px -6px;        /* offset padding so the hover area is flush */
+  transition: background 0.18s;
+  min-width: 0;             /* allow text truncation inside flex parent */
+  flex: 1;                  /* take available space, push logout btn to edge */
+}
+.sidebar-profile-link:hover,
+.sidebar-profile-link:focus-visible {
+  background: rgba(255,255,255,0.08);
+  outline: none;
+}
+.sidebar-profile-link:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+.sidebar-profile-link .user-avatar {
+  flex-shrink: 0;
+}
+.sidebar-profile-link .user-info {
+  min-width: 0;
+}
+
 /* ── Main Content ── */
 .main-content {
   margin-left: var(--sidebar-w);
@@ -1729,6 +1758,12 @@ tbody tr:last-child { border-bottom: none; }
   .sidebar-collapsed .sidebar .user-info,
   .sidebar-collapsed .sidebar .sidebar-user > a[href*="logout"] {
     display: none;
+  }
+  /* Collapsed: profile link shrinks to avatar only (user-info already hidden) */
+  .sidebar-collapsed .sidebar .sidebar-profile-link {
+    flex: 0 0 auto;
+    padding: 0;
+    margin: 0;
   }
 
   /* ── Tooltips: appear outside the narrow rail on hover/focus ── */
