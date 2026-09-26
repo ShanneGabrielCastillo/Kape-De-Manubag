@@ -124,23 +124,46 @@
     gap: 4px;
   }
 
-  /* ── Reports date filter ── */
+  /* ── Reports date filter — 2-column mobile layout ── */
+  /* The form itself stacks the two row-groups vertically */
   .reports-date-filter {
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
     width: 100%;
   }
-  .reports-date-filter .form-group {
-    margin: 0;
+  /* Date inputs row: From | To side-by-side */
+  .reports-filter-dates {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
     width: 100%;
   }
-  .reports-date-filter .form-control[type="date"] {
+  .reports-filter-dates .form-group {
+    margin: 0;          /* override global mobile-design-system margin-bottom */
+    min-width: 0;
+  }
+  .reports-filter-dates .form-control {
     width: 100%;
+    min-width: 0;
     min-height: 46px;
+    font-size: 0.875rem;
+    box-sizing: border-box;
   }
-  .reports-date-filter .btn {
+  /* Action buttons row: Apply | Reset side-by-side */
+  .reports-filter-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
     width: 100%;
+  }
+  .reports-filter-actions .btn {
+    min-width: 0;
     min-height: 46px;
+    justify-content: center;
+    display: flex;
+    align-items: center;
+    touch-action: manipulation;
+    white-space: nowrap;
   }
 
   /* ── Reports page mobile layout ── */
@@ -459,23 +482,42 @@
     min-height: 44px;
   }
 
-  /* ── Reports date filter ── */
+  /* ── Reports date filter — 2-column layout (tablet SM) ── */
   .reports-date-filter {
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
     width: 100%;
   }
-  .reports-date-filter .form-group {
-    margin: 0;
+  .reports-filter-dates {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
     width: 100%;
   }
-  .reports-date-filter .form-control[type="date"] {
+  .reports-filter-dates .form-group {
+    margin: 0;          /* override global mobile-design-system margin-bottom */
+    min-width: 0;
+  }
+  .reports-filter-dates .form-control {
     width: 100%;
+    min-width: 0;
     min-height: 46px;
+    font-size: 0.875rem;
+    box-sizing: border-box;
   }
-  .reports-date-filter .btn {
+  .reports-filter-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
     width: 100%;
+  }
+  .reports-filter-actions .btn {
+    min-width: 0;
     min-height: 46px;
+    justify-content: center;
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
   }
 
   /* ── Reports tablet: single column, tables with scroll ── */
@@ -2625,43 +2667,60 @@
 }
 
 /* --------------------------------------------------------------------------
-   FIX R-2: Date filter — Apply and Reset buttons side-by-side on narrow screens
-   At 320px two full-width buttons stack fine, but the Reset <a.btn> may not
-   get full-width treatment from the existing rule if it is matched differently.
-   Explicitly target both button types inside .reports-date-filter.
+   FIX R-2: Date filter — 2-column grid on mobile (≤575.98px)
+   From | To side-by-side, Apply Filter | Reset side-by-side.
+   Works down to 320px: each column gets 50% minus the 8px gap half.
    -------------------------------------------------------------------------- */
 @media (max-width: 575.98px) {
 
-  .reports-date-filter form {
-    flex-direction: column !important;
-    gap: 12px;
+  /* Form: stack the dates row above the actions row */
+  .reports-date-filter {
+    flex-direction: column;
+    gap: 10px;
     width: 100%;
   }
 
-  .reports-date-filter a.btn,
-  .reports-date-filter button.btn,
-  .reports-date-filter .btn {
-    width: 100% !important;
-    min-height: 48px;
+  /* Dates row — 2 equal columns */
+  .reports-filter-dates {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .reports-filter-dates .form-group {
+    margin: 0;          /* override global mobile-design-system margin-bottom */
+    min-width: 0;
+  }
+  .reports-filter-dates .form-control,
+  .reports-filter-dates input[type="date"] {
+    width: 100%;
+    min-width: 0;
+    min-height: 46px;
+    font-size: 0.875rem;
+    padding: 10px 8px;
+    box-sizing: border-box;
+  }
+
+  /* Actions row — 2 equal columns */
+  .reports-filter-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .reports-filter-actions .btn,
+  .reports-filter-actions a.btn,
+  .reports-filter-actions button.btn {
+    width: 100%;
+    min-width: 0;
+    min-height: 46px;
     justify-content: center;
     display: flex;
     align-items: center;
     touch-action: manipulation;
-  }
-
-  /* Date inputs: full width and taller touch target */
-  .reports-date-filter input[type="date"],
-  .reports-date-filter .form-control {
-    width: 100% !important;
-    min-height: 48px;
-    font-size: 1rem;
-    box-sizing: border-box;
-  }
-
-  /* Label + input groups: full width */
-  .reports-date-filter .form-group {
-    width: 100% !important;
-    margin: 0;
+    white-space: nowrap;
   }
 
 }
@@ -2884,22 +2943,17 @@
 }
 
 /* --------------------------------------------------------------------------
-   FIX R-12: Tablet (576–767px) — date filter same fix as mobile
-   The date filter inline style + gap can still overflow at 576–640px.
+   FIX R-12: Tablet (576–767px) — date filter button sizing
    -------------------------------------------------------------------------- */
 @media (min-width: 576px) and (max-width: 767.98px) {
 
-  .reports-date-filter a.btn,
-  .reports-date-filter button.btn {
+  .reports-filter-actions .btn,
+  .reports-filter-actions a.btn,
+  .reports-filter-actions button.btn {
     min-height: 44px;
     touch-action: manipulation;
-  }
-
-  /* Keep Apply + Reset side-by-side on tablet but give them equal share */
-  .reports-date-filter .btn {
-    flex: 1;
     justify-content: center;
-    display: inline-flex;
+    display: flex;
     align-items: center;
   }
 
