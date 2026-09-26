@@ -386,7 +386,13 @@
 
   <!-- Top Products — real content -->
   <div class="card dash-content">
-    <div class="card-header"><h3>🏆 Top Products</h3></div>
+    <div class="card-header">
+      <h3>🏆 Top Products</h3>
+      {# Period pill — updated by JS when the chart period changes #}
+      <span id="top-products-period-label" style="font-size:0.75rem;font-weight:600;padding:3px 10px;border-radius:20px;background:var(--cream);color:var(--brown-mid)">
+        {% if initial_period == 'month' %}This Month{% else %}This Week{% endif %}
+      </span>
+    </div>
     <div class="card-body dash-list" id="top-products-list" style="padding:0">
       {% if 'top_products' in widget_errors %}
       <div class="empty-state widget-error">
@@ -631,6 +637,12 @@
     updateChartEmptyState(data);
   }
 
+  // Update the Top Products period pill label whenever the period changes.
+  function updateTopProductsPeriodLabel(period) {
+    const label = document.getElementById('top-products-period-label');
+    if (label) label.textContent = period === 'month' ? 'This Month' : 'This Week';
+  }
+
   async function loadChart(period, btn) {
     // Update active button state
     document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
@@ -664,6 +676,13 @@
       btn.textContent = originalText;
       btn.disabled = false;
     }
+
+    // Update the Top Products period label immediately, then fetch fresh
+    // top-products data for the new period via the summary endpoint.
+    // fetchDashboardSummary() reads the now-active .period-btn so it sends
+    // the correct ?period= to the server — no extra argument needed.
+    updateTopProductsPeriodLabel(period);
+    fetchDashboardSummary();
   }
 
   // ── Real-time: dashboard statistics refresh ───────────────────────────────

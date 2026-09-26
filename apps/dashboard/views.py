@@ -80,7 +80,7 @@ def _sales_stats():
     raises "Cannot compute Sum('total'): 'total' is an aggregate".
     """
     today = timezone.localdate()
-    week_start = today - timedelta(days=today.weekday())
+    week_start = today - timedelta(days=today.isoweekday() % 7)  # Sunday-start (Sun=0…Sat=6)
     month_start = today.replace(day=1)
 
     sales = Order.objects.filter(is_paid=True, status='completed').aggregate(
@@ -114,22 +114,43 @@ def _status_counts():
     return counts['pending'] or 0, counts['preparing'] or 0
 
 
+def _period_start(period, today):
+    """Return the first date of the requested dashboard period.
+
+    This is the single source of truth for both the Sales Overview chart and
+    the Top Products widget so the two can never show different windows.
+
+    'week'  → Sunday of the current calendar week (Sun–Sat).
+              isoweekday() returns 1 (Mon) … 7 (Sun).
+              7 % 7 == 0 keeps Sunday as day-0; every other day subtracts
+              its 1-based weekday so Mon→-1, Tue→-2 … Sat→-6.
+    'month' → The 1st of the current calendar month.
+
+    timezone.localdate() is already in Asia/Manila (USE_TZ=True,
+    TIME_ZONE='Asia/Manila'), so no manual tz conversion is needed.
+    """
+    if period == 'month':
+        return today.replace(day=1)
+    # week: Sunday-start calendar week
+    return today - timedelta(days=today.isoweekday() % 7)
+
+
 def _chart_series(period='week', label_fmt=None):
     """Chart labels+data for the requested period — one grouped query for the
     whole range instead of one per day.
+
+    Period boundaries come from _period_start() — the single source of truth:
+      'week'  → Sunday of the current calendar week … today  (Sun–Sat)
+      'month' → 1st of the current calendar month  … today
 
     Filters: is_paid=True AND status='completed' — matches _sales_stats() and
     the finance module so the chart bars agree with the stats tiles.
     """
     today = timezone.localdate()
-    if period == 'month':
-        start = today - timedelta(days=29)      # last 30 days
-        if label_fmt is None:
-            label_fmt = '%d'
-    else:
-        start = today - timedelta(days=6)       # last 7 days (default)
-        if label_fmt is None:
-            label_fmt = '%a'
+    start = _period_start(period, today)
+
+    if label_fmt is None:
+        label_fmt = '%b %d' if period == 'month' else '%a'
 
     day_sales = (
         Order.objects.filter(is_paid=True, status='completed', created_at__date__gte=start)
@@ -148,15 +169,28 @@ def _chart_series(period='week', label_fmt=None):
     return labels, data
 
 
-def _top_products():
-    """Top selling products — one grouped query, top 5.
+def _top_products(period='week'):
+    """Top selling products for the given period — one grouped query, top 5.
+
+    Uses _period_start() — the same source of truth as _chart_series() — so
+    the Top Products widget always reflects exactly the same date window as
+    the Sales Overview chart:
+      'week'  → Sunday of the current calendar week … today  (Sun–Sat)
+      'month' → 1st of the current calendar month  … today
 
     Filters to completed orders only so cancelled order items do not
     inflate product counts or revenue totals.
+    Ranked by total quantity sold (highest first).
     """
+    today = timezone.localdate()
+    start = _period_start(period, today)
+
     return list(
         OrderItem.objects
-        .filter(order__status='completed')
+        .filter(
+            order__status='completed',
+            order__created_at__date__gte=start,
+        )
         .values('product_name')
         .annotate(
             total_qty=Sum('quantity'),
@@ -242,7 +276,9 @@ def _load_widgets(period='week', chart_label_fmt=None, *, include_recent=False):
             failed.add('recent_orders')
         widgets['recent_orders'] = recent
 
-    top_products, top_failed = _widget('top products', [], _top_products)
+    top_products, top_failed = _widget(
+        'top products', [], lambda: _top_products(period),
+    )
     if top_failed:
         failed.add('top_products')
     widgets['top_products'] = top_products
@@ -268,6 +304,7 @@ def dashboard_index(request):
     )
     context = dict(widgets)
     context['widget_errors'] = widget_errors
+    context['initial_period'] = 'week'   # tells the template which period label to render initially
     return render(request, 'dashboard/index.html', context)
 
 
