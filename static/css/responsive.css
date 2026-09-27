@@ -780,7 +780,7 @@
   .sidebar {
     transform: translateX(-100%);
     transition: transform 0.3s ease;
-    z-index: 200;
+    z-index: 301; /* above topbar (200) and overlay (299) so it covers the full viewport */
 
     /* THREE-ZONE LAYOUT: sidebar does NOT scroll — only the nav zone does */
     height: 100vh;
@@ -961,13 +961,13 @@
     flex-shrink: 0;
   }
 
-  /* Overlay */
+  /* Overlay — sits above the topbar (200) so it dims it, but below the sidebar (301) */
   .sidebar-overlay {
     display: none;
     position: fixed;
     inset: 0;
     background: rgba(44, 24, 16, 0.5);
-    z-index: 199;
+    z-index: 299;
     cursor: pointer;
   }
   .sidebar-overlay.open {
@@ -1283,12 +1283,12 @@
     z-index: 1;
   }
 
-  /* POS order drawer always floats above the sidebar backdrop */
+  /* POS order drawer floats above the sidebar overlay (299) but below the sidebar panel (301) */
   .pos-right {
     z-index: 300 !important;
   }
 
-  /* When sidebar is open, POS drawer still visible above backdrop */
+  /* When sidebar is open, POS drawer is covered by the sidebar panel (301) — intentional */
   body.sidebar-open .pos-right {
     z-index: 300;
   }
@@ -2955,6 +2955,43 @@
     justify-content: center;
     display: flex;
     align-items: center;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   ORDER DETAIL — Print Receipt + Orders buttons: side-by-side on mobile
+   Mobile ONLY (≤575.98px). Desktop layout is unchanged.
+
+   FIX R-1 (above) sets flex-direction:column on all
+   .page-header > div[style*="display:flex"][style*="gap:10px"] containers,
+   which stacks these two buttons vertically. We override that specifically
+   for the order detail header actions container using a 2-column grid so
+   both buttons always sit in one row, equal width, down to 320px.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  .order-detail-header-actions {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    flex-direction: unset !important;  /* neutralise FIX R-1 flex override */
+    gap: 8px !important;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .order-detail-header-actions .btn {
+    width: 100% !important;
+    min-width: 0 !important;   /* allow shrinking below any inherited min-width */
+    min-height: 44px;
+    justify-content: center;
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    touch-action: manipulation;
+    box-sizing: border-box;
   }
 
 }

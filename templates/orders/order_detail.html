@@ -7,7 +7,7 @@
     <h1 class="page-title">Order #{{ order.order_number }}</h1>
     <p class="page-subtitle">{{ order.created_at|date:"F j, Y g:i A" }}</p>
   </div>
-  <div style="display:flex;gap:10px">
+  <div class="order-detail-header-actions" style="display:flex;gap:10px">
     <a href="{% url 'orders:print_receipt' order.pk %}" class="btn btn-outline" target="_blank">🖨️ Print Receipt</a>
     <a href="{% url 'orders:order_list' %}" class="btn btn-primary">← Orders</a>
   </div>

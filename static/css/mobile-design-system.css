@@ -578,7 +578,7 @@
     top: 0;
     transform: translateX(-100%);
     transition: transform 0.3s ease;
-    z-index: 200;
+    z-index: 301;           /* above topbar (200) and overlay (299) */
     height: 100vh;
     height: 100dvh;
     overflow: hidden;
@@ -618,13 +618,13 @@
     margin-left: 0 !important;
   }
 
-  /* Sidebar overlay */
+  /* Sidebar overlay — above topbar (200) to dim it, below sidebar (301) */
   .sidebar-overlay {
     display: none;
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.45);
-    z-index: 199;
+    z-index: 299;
     cursor: pointer;
   }
 
