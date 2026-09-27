@@ -1874,15 +1874,23 @@ tbody tr:last-child { border-bottom: none; }
  * The badge itself: a small red pill/circle with white bold number.
  *
  * Visibility strategy (mobile-only):
- *   - On DESKTOP (> 768 px): always hidden via !important override below.
- *     JS can never make it visible on desktop, no matter what it sets.
- *   - On MOBILE (≤ 768 px): the !important override is lifted.
- *     JS controls display:flex (count > 0) vs display:none (count = 0).
  *
- * The inline style="display:none" set in the HTML is the initial state
- * for mobile — JS updates it once the count is known.
+ *   DESKTOP  (> 768 px): hidden by the min-width media query below
+ *     using !important, so JS inline style can NEVER show it on desktop.
+ *
+ *   MOBILE   (≤ 768 px): the base rule has NO display property, so the
+ *     HTML's initial inline style="display:none" is the default state.
+ *     When JS calls badge.style.display = 'flex', that inline style wins
+ *     because no stylesheet !important is competing with it.
+ *
+ * Key rule: inline styles only beat stylesheet rules when there is no
+ * !important in the stylesheet rule.  The previous implementation put
+ * display:none !important in the base rule (all viewports), which blocked
+ * the JS inline style on mobile.  This version scopes the !important to
+ * desktop only via min-width, leaving mobile entirely under JS control.
  */
 .topbar-awaiting-badge {
+  /* All visual properties — no display property here so mobile JS wins */
   position: absolute;
   top: -6px;
   right: -8px;
@@ -1903,14 +1911,11 @@ tbody tr:last-child { border-bottom: none; }
   z-index: 1;
   align-items: center;
   justify-content: center;
-
-  /* Desktop default: always hidden regardless of JS */
-  display: none !important;
 }
 
-/* Mobile only — allow JS to control display (flex when visible, none when 0) */
-@media (max-width: 768px) {
+/* Desktop only — lock the badge invisible so JS can never show it above 768px */
+@media (min-width: 769px) {
   .topbar-awaiting-badge {
-    display: none;               /* JS overrides this with inline style */
+    display: none !important;
   }
 }
