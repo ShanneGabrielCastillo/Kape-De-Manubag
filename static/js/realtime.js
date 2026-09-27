@@ -25,7 +25,12 @@ window.RealtimeConnection = (function () {
     // Testable handle for automated audits: reflects whether the SSE stream
     // is currently open (auto-reconnect flips it back to true on onopen).
     window.__kdmSSEConnected = false;
-    eventSource.onopen = () => { window.__kdmSSEConnected = true; };
+    eventSource.onopen = () => {
+      window.__kdmSSEConnected = true;
+      // Notify any listeners that the connection (re-)opened.  Used by the
+      // topbar badge to re-sync the count after a reconnect gap.
+      dispatch('_connected', {});
+    };
     eventSource.onerror = () => {
       window.__kdmSSEConnected = false;
       console.warn('Realtime connection lost — reconnecting...');
@@ -94,12 +99,14 @@ window.RealtimeConnection = (function () {
 })();
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Only open the SSE stream on pages that actually handle realtime events
-  // (Dashboard, Order Management, POS). All other admin pages get the
-  // RealtimeConnection API (so RealtimeConnection.on() calls don't error)
-  // but no persistent stream is opened, freeing the WSGI worker thread.
-  // Pages opt in by adding data-realtime="true" to <body>.
-  if (document.body.dataset.realtime === 'true') {
+  // Open the SSE stream when:
+  //  (a) the page explicitly opts in via data-realtime="true" on <body>
+  //      (Dashboard, Order Management, POS — existing behaviour), OR
+  //  (b) the mobile topbar badge element is present, meaning this is a staff
+  //      page that needs live awaiting-payment updates.
+  // Both conditions use the same single stream — no second connection is opened.
+  const hasBadge = !!document.getElementById('topbar-awaiting-badge');
+  if (document.body.dataset.realtime === 'true' || hasBadge) {
     RealtimeConnection.connect();
   }
 });
@@ -138,3 +145,165 @@ function showNewOrderNotification(order) {
 }
 
 RealtimeConnection.on('new_order', showNewOrderNotification);
+
+// ── Mobile topbar awaiting-payment badge ─────────────────────────────────────
+//
+// STATE-BASED APPROACH — prevents duplicate counting from reconnections,
+// replayed events, or double-clicks.
+//
+// A client-side Set (_awaitingIds) tracks which order IDs are currently in
+// the awaiting_payment state as known to this browser tab.  Every badge
+// mutation goes through the Set, making the operations idempotent:
+//
+//   new_order        → always enters awaiting_payment (default status).
+//                      Add to Set and increment only if not already present.
+//
+//   status_changed   → new_status == 'awaiting_payment'   → add + increment (if new)
+//                      new_status != 'awaiting_payment'   → remove + decrement (if present)
+//
+//   gcash_submitted  → order status does NOT change; badge is unaffected.
+//   payment_confirmed / order_accepted → no direct badge action; status_changed
+//                      from the post_save signal carries the transition.
+//
+// On page load and on every SSE reconnect (_connected event) the badge
+// re-fetches the authoritative DB count so any events missed during a
+// connection gap are recovered.  The Set is cleared on re-fetch so it stays
+// in sync with the fresh ground truth.
+//
+// The badge element is mobile-only via CSS (display:none above 768 px).
+// The JS runs on every staff page regardless — it is cheap and harmless on
+// desktop (the element is hidden, render() is a no-op visually).
+
+window.TopbarOrderBadge = (function () {
+
+  // IDs (strings) of orders currently in awaiting_payment, tracked locally.
+  const _awaitingIds = new Set();
+
+  // Current displayed count.  Seeded by _fetchCount().
+  let _count = 0;
+
+  // DOM references resolved once on init().
+  let _badge = null;
+  let _link  = null;
+
+  // ── render ────────────────────────────────────────────────────────────────
+
+  function _render() {
+    if (!_badge) return;
+    if (_count > 0) {
+      _badge.textContent   = _count > 99 ? '99+' : String(_count);
+      _badge.style.display = 'flex';
+    } else {
+      _badge.style.display = 'none';
+    }
+    // Accessible label on the link itself so screen readers get the count
+    // even though the visual badge is aria-hidden.
+    if (_link) {
+      if (_count === 0) {
+        _link.setAttribute('aria-label', 'Order Management — no orders awaiting payment');
+      } else {
+        const display = _count > 99 ? '99+' : _count;
+        _link.setAttribute(
+          'aria-label',
+          `Order Management — ${display} order${_count === 1 ? '' : 's'} awaiting payment`
+        );
+      }
+    }
+  }
+
+  function _pulse() {
+    if (!_badge || _badge.style.display === 'none') return;
+    _badge.classList.add('badge-pulse');
+    setTimeout(() => _badge.classList.remove('badge-pulse'), 1000);
+  }
+
+  // ── initial / reconnect fetch ─────────────────────────────────────────────
+  // Calls the staff-only /orders/api/awaiting-count/ endpoint for the
+  // authoritative DB count.  Resets the local Set so stale entries from
+  // before a reconnect do not persist.
+
+  function _fetchCount() {
+    const url = window.KDM_URLS && window.KDM_URLS.awaitingCount;
+    if (!url) return;
+    fetch(url, { credentials: 'same-origin' })
+      .then((r) => { if (r.ok) return r.json(); })
+      .then((data) => {
+        if (!data || typeof data.count !== 'number') return;
+        // Reset local tracking — the server is the source of truth.
+        _awaitingIds.clear();
+        _count = data.count;
+        _render();
+      })
+      .catch(() => {
+        // Silently ignore network errors; badge will self-correct on next
+        // SSE event or page reload.
+      });
+  }
+
+  // ── SSE event handlers ────────────────────────────────────────────────────
+
+  function _onConnected() {
+    // SSE stream (re-)opened: re-fetch so we recover any orders that arrived
+    // during a connection gap.  Also clears _awaitingIds so the Set stays
+    // consistent with the fresh count.
+    _fetchCount();
+  }
+
+  function _onNewOrder(order) {
+    // Every new order starts at awaiting_payment (the model default).
+    // The Set guards against duplicate events for the same order_id.
+    if (!order || !order.order_id) return;
+    const id = String(order.order_id);
+    if (_awaitingIds.has(id)) return;  // already counted — idempotent
+    _awaitingIds.add(id);
+    _count += 1;
+    _render();
+    _pulse();
+  }
+
+  function _onStatusChanged(data) {
+    // Payload (from apps/realtime/signals.py post_save):
+    //   order_id, order_number, queue_number, new_status, new_status_display, is_paid
+    if (!data || !data.order_id) return;
+    const id        = String(data.order_id);
+    const newStatus = data.new_status;
+
+    if (newStatus === 'awaiting_payment') {
+      // Order entered awaiting_payment (edge case: manual rollback).
+      if (!_awaitingIds.has(id)) {
+        _awaitingIds.add(id);
+        _count += 1;
+        _render();
+      }
+    } else {
+      // Order left awaiting_payment (preparing / ready / completed / cancelled).
+      if (_awaitingIds.has(id)) {
+        _awaitingIds.delete(id);
+        _count = Math.max(0, _count - 1);
+        _render();
+      }
+    }
+  }
+
+  // ── init ──────────────────────────────────────────────────────────────────
+
+  function init() {
+    _badge = document.getElementById('topbar-awaiting-badge');
+    _link  = document.getElementById('topbar-orders-link');
+    if (!_badge) return;  // not a staff page — do nothing
+
+    // Fetch the authoritative count immediately on page load.
+    _fetchCount();
+
+    // Wire up SSE event handlers.
+    RealtimeConnection.on('_connected',     _onConnected);
+    RealtimeConnection.on('new_order',      _onNewOrder);
+    RealtimeConnection.on('status_changed', _onStatusChanged);
+  }
+
+  return { init };
+})();
+
+document.addEventListener('DOMContentLoaded', () => {
+  TopbarOrderBadge.init();
+});

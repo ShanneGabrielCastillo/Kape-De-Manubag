@@ -42,4 +42,7 @@ urlpatterns = [
     path('api/track/<str:tracking_token>/', views.api_track_order, name='api_track_order'),
     path('api/queue-board/', views.api_queue_board, name='api_queue_board'),
     path('manage/<int:pk>/advance/', views.quick_status_advance, name='quick_status_advance'),
+
+    # Mobile badge — staff-only, returns {"count": N} for awaiting_payment orders
+    path('api/awaiting-count/', views.api_awaiting_payment_count, name='api_awaiting_count'),
 ]

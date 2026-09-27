@@ -1854,3 +1854,63 @@ tbody tr:last-child { border-bottom: none; }
 
 }
 /* END SIDEBAR SCROLLBAR STYLING */
+
+/* ── Mobile topbar: Order Management awaiting-payment badge ── */
+
+/*
+ * Wrapper anchor: needs position:relative so the badge can be
+ * absolutely positioned at the upper-right corner of the icon.
+ * display:inline-flex keeps the anchor tight around the emoji.
+ */
+.topbar-orders-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/*
+ * The badge itself: a small red pill/circle with white bold number.
+ *
+ * Visibility strategy (mobile-only):
+ *   - On DESKTOP (> 768 px): always hidden via !important override below.
+ *     JS can never make it visible on desktop, no matter what it sets.
+ *   - On MOBILE (≤ 768 px): the !important override is lifted.
+ *     JS controls display:flex (count > 0) vs display:none (count = 0).
+ *
+ * The inline style="display:none" set in the HTML is the initial state
+ * for mobile — JS updates it once the count is known.
+ */
+.topbar-awaiting-badge {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;            /* pill; becomes a circle for 1–2 digit counts */
+  background: var(--red-accent, #dc3545);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-family: 'DM Sans', sans-serif;
+  line-height: 1;
+  white-space: nowrap;
+  letter-spacing: 0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  pointer-events: none;          /* clicks pass through to the parent link */
+  z-index: 1;
+  align-items: center;
+  justify-content: center;
+
+  /* Desktop default: always hidden regardless of JS */
+  display: none !important;
+}
+
+/* Mobile only — allow JS to control display (flex when visible, none when 0) */
+@media (max-width: 768px) {
+  .topbar-awaiting-badge {
+    display: none;               /* JS overrides this with inline style */
+  }
+}

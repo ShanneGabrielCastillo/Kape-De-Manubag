@@ -172,7 +172,19 @@
         <span class="topbar-title">{% block page_title %}Dashboard{% endblock %}</span>
       </div>
       <div class="topbar-actions">
-        <a href="{% url 'orders:order_list' %}" style="color:var(--brown-mid);font-size:1.2rem;text-decoration:none" title="Orders">📋</a>
+        {# Mobile order badge wrapper — badge is hidden on desktop via CSS #}
+        <a href="{% url 'orders:order_list' %}"
+           id="topbar-orders-link"
+           class="topbar-orders-link"
+           style="color:var(--brown-mid);font-size:1.2rem;text-decoration:none"
+           aria-label="Order Management — loading orders awaiting payment"
+           title="Orders">
+          📋
+          <span id="topbar-awaiting-badge"
+                class="topbar-awaiting-badge"
+                aria-hidden="true"
+                style="display:none">0</span>
+        </a>
       </div>
     </header>
 

@@ -1850,3 +1850,20 @@ def quick_status_advance(request, pk):
         'new_status_display': order.get_status_display(),
         'order_number':     order.order_number,
     })
+
+
+# ── Mobile badge: awaiting-payment count ──────────────────────────────────────
+
+@login_required
+@cashier_or_admin_required
+@require_GET
+def api_awaiting_payment_count(request):
+    """Return the current number of orders in `awaiting_payment` status.
+
+    Used exclusively by the mobile top-bar notification badge.  The response
+    is minimal by design — no order details, no customer information, no PII.
+
+    A single COUNT query is used so no order rows are loaded into Python.
+    """
+    count = Order.objects.filter(status='awaiting_payment').count()
+    return JsonResponse({'count': count})
