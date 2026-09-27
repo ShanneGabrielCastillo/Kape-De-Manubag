@@ -466,24 +466,68 @@ async function quickAdvance(url, btn) {
     }
   }
 
-  // Optimistically disable the button immediately so double-taps don't fire
-  // twice while the request is in flight.
+  // Disable immediately to prevent duplicate submissions while in flight.
   if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
 
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { 'X-CSRFToken': '{{ csrf_token }}' }
-  });
-  const d = await r.json();
-  if (d.success) {
-    showToast(`→ ${d.new_status_display}`, 'success');
-    // No reload needed — the SSE status_changed event already updates the
-    // row badge and buttons in place. Reloading was causing the visible
-    // delay, especially on preparing → ready transitions.
-  } else {
-    // Re-enable on failure so the cashier can try again.
-    if (btn) { btn.disabled = false; btn.textContent = `▶ ${btn.dataset.nextStatus || ''}`; }
-    showToast(d.error || 'Error', 'error');
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+    });
+    const d = await r.json();
+
+    if (d.success) {
+      showToast(`→ ${d.new_status_display}`, 'success');
+
+      // ── Immediate button cleanup on the originating element ──────────
+      // The SSE status_changed handler updates the desktop <tr> row and
+      // triggers buildOrderCards() which rebuilds mobile cards. But on
+      // mobile the card button is a separate DOM element that only gets
+      // replaced after the SSE round-trip arrives. To avoid the button
+      // staying stuck on ⏳ until SSE fires, we update it immediately
+      // from the fetch response — SSE still syncs everything else.
+      if (btn) {
+        const newStatus  = d.new_status;
+        const forwardFlow = { preparing: 'ready', ready: 'completed' };
+        const nextNext   = forwardFlow[newStatus];
+
+        // Also update the hidden <tr> data attributes so buildOrderCards()
+        // produces the correct next button if it runs before SSE arrives.
+        const row = document.querySelector(`tr[data-order-id="${btn.closest('[data-order-id]')?.dataset.orderId || ''}"]`);
+        if (row) {
+          row.dataset.status      = newStatus;
+          row.dataset.nextStatus  = nextNext || '';
+          row.dataset.statusDisplay = d.new_status_display || newStatus;
+        }
+
+        if (nextNext) {
+          // There is a further status to advance to — update button label.
+          const nextLabel = (window.STATUS_LABELS && window.STATUS_LABELS[nextNext]) || nextNext;
+          btn.disabled    = false;
+          btn.textContent = `▶ ${nextLabel}`;
+          btn.dataset.nextStatus = nextNext;
+          btn.title = `Advance to ${nextLabel}`;
+        } else {
+          // Terminal state reached — no more advances. Hide the button so
+          // the card matches what buildOrderCards() will produce on SSE.
+          btn.style.display = 'none';
+        }
+      }
+    } else {
+      // Request failed — restore button so the cashier can retry.
+      if (btn) {
+        btn.disabled    = false;
+        btn.textContent = `▶ ${(window.STATUS_LABELS && btn.dataset.nextStatus && window.STATUS_LABELS[btn.dataset.nextStatus]) || btn.dataset.nextStatus || 'Next'}`;
+      }
+      showToast(d.error || 'Error', 'error');
+    }
+  } catch (err) {
+    // Network error or unexpected exception — always restore the button.
+    if (btn) {
+      btn.disabled    = false;
+      btn.textContent = `▶ ${(window.STATUS_LABELS && btn.dataset.nextStatus && window.STATUS_LABELS[btn.dataset.nextStatus]) || btn.dataset.nextStatus || 'Next'}`;
+    }
+    showToast('Network error — please try again.', 'error');
   }
 }
 
