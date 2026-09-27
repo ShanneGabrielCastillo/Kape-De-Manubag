@@ -1730,7 +1730,8 @@ tbody tr:last-child { border-bottom: none; }
   }
 
   /* Pending badge: reposition over the icon */
-  .sidebar-collapsed .sidebar #sidebar-pending-count {
+  .sidebar-collapsed .sidebar #sidebar-pending-count,
+  .sidebar-collapsed .sidebar #sidebar-awaiting-badge {
     display: flex !important;
     position: absolute;
     top: 4px;
@@ -1913,9 +1914,56 @@ tbody tr:last-child { border-bottom: none; }
   justify-content: center;
 }
 
-/* Desktop only — lock the badge invisible so JS can never show it above 768px */
+/* Desktop only — lock the badge invisible so JS can never show it above 768px,
+   and hide the entire Order Management link from the top bar (desktop uses the
+   sidebar for navigation; the icon is a mobile-only convenience). */
 @media (min-width: 769px) {
+  .topbar-orders-link {
+    display: none !important;
+  }
   .topbar-awaiting-badge {
     display: none !important;
   }
+}
+
+/* ── Desktop sidebar: Order Management awaiting-payment badge ── */
+
+/*
+ * The sidebar badge reuses the same JS state as the mobile topbar badge.
+ * Visually it matches the existing .badge style but is red (notification)
+ * rather than yellow (status label).
+ *
+ * EXPANDED sidebar: badge sits after the "Order Management" label with
+ *   margin-left:auto pushing it flush to the right edge of the link row.
+ *
+ * COLLAPSED sidebar: the existing .sidebar-collapsed rule (above, targeting
+ *   #sidebar-awaiting-badge) repositions it as an absolute overlay at the
+ *   top-right corner of the icon, matching the pre-existing #sidebar-pending-count
+ *   behaviour.  The .sidebar-link gets position:relative in collapsed mode
+ *   (already set by the existing sidebar-collapsed rule), so the absolute
+ *   positioning lands correctly.
+ *
+ * JS controls display: flex (count > 0) vs none (count = 0) via inline style.
+ * There is no !important here so the JS inline style always wins.
+ */
+.sidebar-awaiting-badge {
+  display: none;            /* JS overrides to flex when count > 0 */
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;        /* push to right end of the flex row in expanded mode */
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: var(--red-accent, #dc3545);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-family: 'DM Sans', sans-serif;
+  line-height: 1;
+  white-space: nowrap;
+  letter-spacing: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  flex-shrink: 0;
 }

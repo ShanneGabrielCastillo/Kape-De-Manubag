@@ -43,10 +43,15 @@
       <div class="nav-section-title">Orders</div>
       {# Order Management: active only on staff order-management views (allowlist) #}
       <a href="{% url 'orders:order_list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'orders' and request.resolver_match.url_name in 'order_list,order_detail,update_status,process_payment,accept_order,verify_gcash_payment,reject_gcash_payment,print_receipt,quick_status_advance' %}active{% endif %}"
+         id="sidebar-orders-link"
          aria-label="Order Management">
         <span class="nav-icon">📋</span>
         <span class="nav-label">Order Management</span>
-        {% with count=pending_count %}<span id="sidebar-pending-count" class="badge badge-awaiting-payment" style="margin-left:auto;{% if not count %}display:none{% endif %}">{% if count %}{{ count }}{% endif %}</span>{% endwith %}
+        {# JS-controlled badge — count is set by TopbarOrderBadge (same module as mobile badge) #}
+        <span id="sidebar-awaiting-badge"
+              class="sidebar-awaiting-badge"
+              aria-hidden="true"
+              style="display:none">0</span>
         <span class="sidebar-tooltip" aria-hidden="true">Order Management</span>
       </a>
       {# POS Terminal: active only on pos url_name #}

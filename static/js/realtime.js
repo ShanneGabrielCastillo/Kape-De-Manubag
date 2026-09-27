@@ -102,10 +102,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // Open the SSE stream when:
   //  (a) the page explicitly opts in via data-realtime="true" on <body>
   //      (Dashboard, Order Management, POS — existing behaviour), OR
-  //  (b) the mobile topbar badge element is present, meaning this is a staff
-  //      page that needs live awaiting-payment updates.
+  //  (b) either notification badge element is present — mobile topbar or
+  //      desktop sidebar — meaning this is a staff page that needs live
+  //      awaiting-payment updates.
   // Both conditions use the same single stream — no second connection is opened.
-  const hasBadge = !!document.getElementById('topbar-awaiting-badge');
+  const hasBadge = !!(
+    document.getElementById('topbar-awaiting-badge') ||
+    document.getElementById('sidebar-awaiting-badge')
+  );
   if (document.body.dataset.realtime === 'true' || hasBadge) {
     RealtimeConnection.connect();
   }
@@ -146,7 +150,11 @@ function showNewOrderNotification(order) {
 
 RealtimeConnection.on('new_order', showNewOrderNotification);
 
-// ── Mobile topbar awaiting-payment badge ─────────────────────────────────────
+// ── Order Management notification badge — mobile topbar + desktop sidebar ────
+//
+// A single module (TopbarOrderBadge) drives both the mobile top-bar badge and
+// the desktop sidebar badge from one shared state.  There is no second fetch,
+// no second SSE connection, and no second event listener.
 //
 // STATE-BASED APPROACH — prevents duplicate counting from reconnections,
 // replayed events, or double-clicks.
@@ -168,11 +176,7 @@ RealtimeConnection.on('new_order', showNewOrderNotification);
 // On page load and on every SSE reconnect (_connected event) the badge
 // re-fetches the authoritative DB count so any events missed during a
 // connection gap are recovered.  The Set is cleared on re-fetch so it stays
-// in sync with the fresh ground truth.
-//
-// The badge element is mobile-only via CSS (display:none above 768 px).
-// The JS runs on every staff page regardless — it is cheap and harmless on
-// desktop (the element is hidden, render() is a no-op visually).
+// in sync with the fresh count.
 
 window.TopbarOrderBadge = (function () {
 
@@ -183,38 +187,47 @@ window.TopbarOrderBadge = (function () {
   let _count = 0;
 
   // DOM references resolved once on init().
-  let _badge = null;
-  let _link  = null;
+  // Mobile top-bar badge + its anchor link.
+  let _badge        = null;
+  let _link         = null;
+  // Desktop sidebar badge + its anchor link.
+  let _sidebarBadge = null;
+  let _sidebarLink  = null;
 
-  // ── render ────────────────────────────────────────────────────────────────
+  // ── helpers ───────────────────────────────────────────────────────────────
 
-  function _render() {
-    if (!_badge) return;
-    if (_count > 0) {
-      _badge.textContent   = _count > 99 ? '99+' : String(_count);
-      _badge.style.display = 'flex';
+  function _renderOne(badgeEl, linkEl, count) {
+    if (!badgeEl) return;
+    if (count > 0) {
+      badgeEl.textContent   = count > 99 ? '99+' : String(count);
+      badgeEl.style.display = 'flex';
     } else {
-      _badge.style.display = 'none';
+      badgeEl.style.display = 'none';
     }
-    // Accessible label on the link itself so screen readers get the count
-    // even though the visual badge is aria-hidden.
-    if (_link) {
-      if (_count === 0) {
-        _link.setAttribute('aria-label', 'Order Management — no orders awaiting payment');
+    if (linkEl) {
+      if (count === 0) {
+        linkEl.setAttribute('aria-label', 'Order Management — no orders awaiting payment');
       } else {
-        const display = _count > 99 ? '99+' : _count;
-        _link.setAttribute(
+        const display = count > 99 ? '99+' : count;
+        linkEl.setAttribute(
           'aria-label',
-          `Order Management — ${display} order${_count === 1 ? '' : 's'} awaiting payment`
+          `Order Management — ${display} order${count === 1 ? '' : 's'} awaiting payment`
         );
       }
     }
   }
 
+  function _render() {
+    _renderOne(_badge,        _link,        _count);
+    _renderOne(_sidebarBadge, _sidebarLink, _count);
+  }
+
   function _pulse() {
-    if (!_badge || _badge.style.display === 'none') return;
-    _badge.classList.add('badge-pulse');
-    setTimeout(() => _badge.classList.remove('badge-pulse'), 1000);
+    [_badge, _sidebarBadge].forEach((el) => {
+      if (!el || el.style.display === 'none') return;
+      el.classList.add('badge-pulse');
+      setTimeout(() => el.classList.remove('badge-pulse'), 1000);
+    });
   }
 
   // ── initial / reconnect fetch ─────────────────────────────────────────────
@@ -288,14 +301,22 @@ window.TopbarOrderBadge = (function () {
   // ── init ──────────────────────────────────────────────────────────────────
 
   function init() {
+    // Mobile top-bar elements
     _badge = document.getElementById('topbar-awaiting-badge');
     _link  = document.getElementById('topbar-orders-link');
-    if (!_badge) return;  // not a staff page — do nothing
+
+    // Desktop sidebar elements
+    _sidebarBadge = document.getElementById('sidebar-awaiting-badge');
+    _sidebarLink  = document.getElementById('sidebar-orders-link');
+
+    // Bail out if neither badge element is present (non-staff page).
+    if (!_badge && !_sidebarBadge) return;
 
     // Fetch the authoritative count immediately on page load.
     _fetchCount();
 
-    // Wire up SSE event handlers.
+    // Wire up SSE event handlers.  Registered once — both badges update
+    // from the same single set of listeners.
     RealtimeConnection.on('_connected',     _onConnected);
     RealtimeConnection.on('new_order',      _onNewOrder);
     RealtimeConnection.on('status_changed', _onStatusChanged);
