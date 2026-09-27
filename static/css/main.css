@@ -1614,7 +1614,11 @@ tbody tr:last-child { border-bottom: none; }
   overflow: hidden;
 }
 
-/* ── Collapse/Expand toggle button (in brand row) ── */
+/* ── Mobile close button (inside brand bar on mobile, hidden on desktop) ── */
+.sidebar-mobile-close-btn {
+  display: none; /* shown only on mobile via responsive.css */
+}
+
 .sidebar-collapse-btn {
   display: none; /* hidden on mobile — shown on desktop only */
   align-items: center;

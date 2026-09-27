@@ -5,13 +5,12 @@
 <div class="app-layout" id="app-layout">
   <!-- Sidebar -->
   <aside class="sidebar" id="sidebar">
-    <!-- Mobile close button (hidden on desktop via CSS) -->
-    <div class="sidebar-mobile-close">
-      <button onclick="document.querySelector('.sidebar').classList.remove('open');document.querySelector('.sidebar-overlay').classList.remove('open');document.body.style.overflow='';document.getElementById('sidebar-toggle').setAttribute('aria-expanded','false');"
-              aria-label="Close navigation">×</button>
-    </div>
 
     <div class="sidebar-brand">
+      <!-- Mobile close button — sits inside the brand bar on mobile, hidden on desktop -->
+      <button class="sidebar-mobile-close-btn"
+              onclick="document.querySelector('.sidebar').classList.remove('open');document.querySelector('.sidebar-overlay').classList.remove('open');document.body.style.overflow='';document.getElementById('sidebar-toggle').setAttribute('aria-expanded','false');"
+              aria-label="Close navigation">×</button>
       <!-- Logo badge — always visible (circle with coffee cup) -->
       <div class="brand-logo" aria-hidden="true">☕</div>
       <!-- Brand text — hidden when collapsed -->

@@ -796,37 +796,39 @@
     margin-left: 0 !important;
   }
 
-  /* Zone 1 — Mobile close button (flex-shrink: 0 = always visible) */
-  .sidebar-mobile-close {
+  /* Zone 1 — Brand header (flex-shrink: 0 = always visible)
+     On mobile the brand bar also contains the close button, so we use
+     justify-content: space-between to push the × to the right edge. */
+  .sidebar-brand {
+    flex-shrink: 0;
+    padding: 14px 16px;
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    padding: 8px 16px 0;
-    flex-shrink: 0;
+    justify-content: space-between;
+    gap: 10px;
   }
-  .sidebar-mobile-close button {
-    background: rgba(255,255,255,0.1);
-    border: none;
-    color: rgba(255,255,255,0.7);
-    font-size: 1.2rem;
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    cursor: pointer;
+
+  /* Close button — lives inside .sidebar-brand on mobile */
+  .sidebar-mobile-close-btn {
     display: flex;
     align-items: center;
     justify-content: center;
+    order: 99;            /* always last child visually */
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.7);
+    font-size: 1.2rem;
+    cursor: pointer;
     transition: background 0.2s;
   }
-  .sidebar-mobile-close button:hover {
+  .sidebar-mobile-close-btn:hover,
+  .sidebar-mobile-close-btn:active {
     background: rgba(255,255,255,0.2);
     color: #fff;
-  }
-
-  /* Zone 1 — Brand (flex-shrink: 0 = always visible) */
-  .sidebar-brand {
-    flex-shrink: 0;
-    padding: 16px 20px;
   }
 
   /* Zone 2 — Nav wrapper (flex: 1 so it fills all remaining space) */
@@ -979,7 +981,7 @@
 
 /* ── Hide mobile close button on desktop ── */
 @media (min-width: 768px) {
-  .sidebar-mobile-close {
+  .sidebar-mobile-close-btn {
     display: none;
   }
 }
