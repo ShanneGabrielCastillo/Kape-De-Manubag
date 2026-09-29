@@ -324,6 +324,27 @@ def extract_price_constraints(message: str) -> dict:
             result['price_gte'] = val
             return result
 
+    # ── Budget / "what can I get for N pesos" ─────────────────────────────
+    # Matches natural-language budget queries where the amount is the maximum
+    # the customer is willing to spend.  These are treated as price_lte (<=).
+    #
+    # English  : "for 50 pesos", "for PHP50", "with 50 pesos", "with a budget of 50"
+    # Filipino : "sa 50 pesos", "sa halagang 50 pesos", "sa PHP50"
+    # Bisaya   : "sa 50 pesos", "sa PHP50"
+    #
+    # Only fires when no earlier pattern matched, so "for X to Y" or
+    # "for something below 50" are already handled above.
+    _budget_en  = r'(?:for|with)\s+(?:a\s+)?(?:budget\s+of\s+)?' + _AMT
+    _budget_fil = r'sa\s+(?:halagang\s+)?' + _AMT
+    budget_pat  = r'(?:' + _budget_en + r'|' + _budget_fil + r')'
+    bp = _re.search(budget_pat, m, _re.IGNORECASE)
+    if bp:
+        raw = next((g for g in bp.groups() if g is not None), None)
+        val = _parse(raw) if raw else None
+        if val is not None:
+            result['price_lte'] = val
+            return result
+
     return result   # no constraints found
 
 
@@ -429,6 +450,27 @@ _PRODUCT_QUERY_PATTERNS = [
         r'(.+)',
         re.IGNORECASE,
     ),
+    # "show me <name>" / "show me your <name>"
+    re.compile(
+        r'show\s+me\s+(?:your\s+|the\s+|all\s+(?:the\s+|your\s+)?|some\s+)?'
+        r'(?:available\s+)?(.+)',
+        re.IGNORECASE,
+    ),
+    # "what <name> do you have" / "which <name> do you have/sell/offer"
+    re.compile(
+        r'(?:what|which)\s+(.+?)\s+do\s+you\s+(?:have|sell|serve|offer)',
+        re.IGNORECASE,
+    ),
+    # "what <name> can I get/order/have/buy" / "which <name> can I order"
+    re.compile(
+        r'(?:what|which)\s+(.+?)\s+can\s+i\s+(?:get|order|have|buy|eat|drink)',
+        re.IGNORECASE,
+    ),
+    # "do you have any <name>" / "do you have some <name>"
+    re.compile(
+        r'do\s+you\s+(?:have|sell|serve|offer)\s+(?:any\s+|some\s+)(.+)',
+        re.IGNORECASE,
+    ),
 ]
 
 # Words to strip from the end of an extracted product name
@@ -438,13 +480,58 @@ _NAME_TAIL_NOISE = re.compile(
     re.IGNORECASE,
 )
 
+# Budget/price-phrase suffix — strip these from the END of an extracted term
+# BEFORE the noise check.  Handles the hybrid case:
+#   "What burgers can I get for ₱50?"  → strips "for ₱50"  → left with "burgers"
+#   "What can I get for 50 pesos?"     → strips "for 50 pesos" → left with "" → None
+#   "What can I get with ₱50?"         → strips "with ₱50"     → left with "" → None
+#
+# Pattern covers:
+#   English  : for/with/under/below/within ₱N / N pesos
+#              "or less", "or under", "or below"
+#              "budget of ₱N"
+#   Filipino : sa ₱N / sa N pesos / sa halagang N / na may halagang N
+#   Bisaya   : sa ₱N / sa N pesos
+#
+# The amount portion is: optional ₱/PHP, digits, optional comma/decimal,
+# optional "pesos" — same definition used in extract_price_constraints.
+_BUDGET_PHRASE_SUFFIX = re.compile(
+    r'(?:^|\s+)'
+    r'(?:'
+    # English budget prepositions
+    r'(?:for|with|within|under|below)\s+'
+    r'(?:a\s+)?(?:budget\s+of\s+)?'
+    r'(?:₱|php\s*)?(?:\d{1,6}(?:[,\.]\d{1,3})?)\s*(?:pesos?)?'
+    r'(?:\s+(?:or\s+(?:less|below|under)|and\s+(?:below|under)|max(?:imum)?|pababa))?'
+    r'|'
+    # Filipino / Bisaya: "sa ₱N" / "sa N pesos" / "sa halagang N"
+    r'sa\s+(?:halagang\s+)?(?:₱|php\s*)?(?:\d{1,6}(?:[,\.]\d{1,3})?)\s*(?:pesos?)?'
+    r'(?:\s+(?:o\s+(?:mas\s+)?mura|o\s+(?:mas\s+)?baba|pababa))?'
+    r')'
+    r'\s*\??$',
+    re.IGNORECASE,
+)
+
+# Leading articles / quantifiers to strip from the start of an extracted term.
+# Applied after the pattern match so "any burgers" → "burgers",
+# "a burger" → "burger", "some drinks" → "drinks".
+_NAME_LEAD_NOISE = re.compile(
+    r'^(?:any\s+|some\s+|a\s+|an\s+|the\s+|your\s+|available\s+)+',
+    re.IGNORECASE,
+)
+
 # Short stop-words that, if they make up the entire extracted term, are noise
 _NOISE_TERMS = {
     'something', 'anything', 'food', 'meal', 'drink', 'item', 'product',
     'menu', 'eat', 'order', 'available', 'cheap', 'cheaper', 'expensive',
     'recommend', 'suggestion', 'suggestions', 'good', 'best',
-    # Filipino
+    # Filipino — generic action verbs that are NOT product names
     'pagkain', 'inumin', 'pagkaon', 'sud-an', 'kain', 'inom',
+    'mabibili', 'makukuha', 'makuha', 'bilhin', 'paliton',
+    'mabibili ko', 'makukuha ko', 'makuha ko', 'bilhin ko',
+    # Bisaya — same pattern
+    'mapalit', 'makuha nako', 'mapalit nako', 'paliton nako',
+    'akong makuha', 'akong mapalit', 'nako makuha',
 }
 
 
@@ -478,6 +565,14 @@ def extract_product_name(message: str) -> str | None:
         # Clean tail noise ("?", "please", "po", etc.)
         term = _NAME_TAIL_NOISE.sub('', term).strip()
 
+        # Strip trailing budget/price phrases BEFORE the noise-word check.
+        # "What burgers can I get for ₱50?" → strips " for ₱50" → "burgers"
+        # "What can I get for 50 pesos?"    → strips " for 50 pesos" → ""  → None
+        term = _BUDGET_PHRASE_SUFFIX.sub('', term).strip()
+
+        # Clean leading articles / quantifiers ("any", "some", "a", "an", "the")
+        term = _NAME_LEAD_NOISE.sub('', term).strip()
+
         # Skip if too short or is a generic noise word
         if len(term) < 2:
             continue
@@ -498,19 +593,103 @@ def extract_product_name(message: str) -> str | None:
     return None
 
 
+# ── Search term normalization (singular/plural) ───────────────────────────────
+
+def normalize_search_term(term: str) -> list[str]:
+    """
+    Return a small list of candidate search terms covering common
+    singular ↔ plural variations of *term*.
+
+    Strategy — simple, predictable suffix rules (no NLP dependency):
+      1. Always include the original term as-is.
+      2. If the term ends in 's'  → also try without the 's'  (burgers→burger).
+      3. If the term ends in 'es' → also try without the 'es' (fries→fri is
+         wrong, so we only strip 'es' when the stem would be ≥ 3 chars AND
+         the word ends in a vowel+s pattern that signals a simple plural).
+      4. If the term ends in a consonant that is NOT 's' → also try with 's'
+         added (burger→burgers).
+      5. If the term ends in 'y' → also try replacing 'y' with 'ies'
+         (fry→fries).
+      6. If the term ends in 'ies' → also try replacing 'ies' with 'y'
+         (fries→fry).
+
+    Multi-word terms (e.g. "milk tea") apply rules only to the LAST word so
+    that "milk teas" → "milk tea" works without mangling "milk".
+
+    All candidates are de-duplicated and returned lowercased so the caller
+    can use them directly in case-insensitive DB queries.
+
+    The caller issues one ORM query with Q-objects OR-ing all candidates,
+    so this never causes N+1 queries.
+    """
+    term = term.strip()
+    if not term:
+        return []
+
+    # Split multi-word term; we only mutate the last word
+    words = term.rsplit(' ', 1)
+    prefix = (words[0] + ' ') if len(words) == 2 else ''
+    last   = words[-1].lower()
+
+    candidates: list[str] = []
+
+    def _add(w: str) -> None:
+        full = (prefix + w).strip().lower()
+        if full and full not in candidates:
+            candidates.append(full)
+
+    # 1. Original (lowercased)
+    _add(last)
+
+    # 2 & 3. Term ends in 's' → try stripping to get singular
+    if last.endswith('ies') and len(last) > 4:
+        # fries → fry
+        _add(last[:-3] + 'y')
+    elif last.endswith('es') and len(last) > 3:
+        # e.g. sandwiches→ sandwich (strip 'es'), but only if stem ≥ 3 chars
+        stem = last[:-2]
+        if len(stem) >= 3:
+            _add(stem)
+        # also try stripping just the 's' in case 'es' is part of the stem
+        _add(last[:-1])
+    elif last.endswith('s') and len(last) > 2:
+        # burgers → burger
+        _add(last[:-1])
+
+    # 4. Term ends in consonant (not 's') → try adding 's'
+    _VOWELS = set('aeiou')
+    if last and last[-1] not in _VOWELS and last[-1] != 's':
+        _add(last + 's')
+
+    # 5. Term ends in 'y' → try 'ies'
+    if last.endswith('y') and len(last) > 1 and last[-2] not in _VOWELS:
+        _add(last[:-1] + 'ies')
+
+    return candidates
+
+
 # ── Product name ORM lookup ───────────────────────────────────────────────────
 
 def query_products_by_name(
     name_term: str,
     category_type: str | None = None,
+    constraints: dict | None = None,
 ) -> tuple[str, bool]:
     """
-    Query active + available products whose name contains *name_term*
-    (case-insensitive partial match).
+    Query active + available products whose name contains *name_term*,
+    with automatic singular/plural normalization.
+
+    Generates candidate search terms via normalize_search_term() and issues
+    a single ORM query using Q objects (OR logic) so "burgers" finds the
+    same products as "burger" — one DB round-trip regardless of how many
+    candidates are generated.
 
     Args:
         name_term:     search term extracted from the customer's message
         category_type: optional pre-filter ('meal' / 'drink' / None)
+        constraints:   optional price constraints dict from extract_price_constraints()
+                       — applied in addition to the name filter so hybrid queries
+                       like "What burgers can I get for ₱50?" work correctly.
 
     Returns:
         (context_text, found)
@@ -518,24 +697,46 @@ def query_products_by_name(
         - found: True if at least one product matched
     """
     from apps.menu.models import Product
+    from django.db.models import Q
 
     try:
+        # Build OR filter across all normalized candidates
+        candidates = normalize_search_term(name_term)
+        if not candidates:
+            return '', False
+
+        name_filter = Q()
+        for c in candidates:
+            name_filter |= Q(name__icontains=c)
+
         qs = (
             Product.objects
             .filter(
-                name__icontains=name_term,
+                name_filter,
                 is_active=True,
                 is_available=True,
                 stock_quantity__gt=0,
                 category__is_active=True,
             )
             .select_related('category')
+            .distinct()
         )
 
         if category_type == 'meal':
             qs = qs.filter(category__is_packaging_required=True)
         elif category_type == 'drink':
             qs = qs.filter(category__is_packaging_required=False)
+
+        # Optional price constraints (hybrid: "What burgers can I get for ₱50?")
+        if constraints:
+            if constraints.get('price_lt') is not None:
+                qs = qs.filter(price__lt=constraints['price_lt'])
+            if constraints.get('price_lte') is not None:
+                qs = qs.filter(price__lte=constraints['price_lte'])
+            if constraints.get('price_gt') is not None:
+                qs = qs.filter(price__gt=constraints['price_gt'])
+            if constraints.get('price_gte') is not None:
+                qs = qs.filter(price__gte=constraints['price_gte'])
 
         products = list(qs.order_by('price')[:10])  # cap at 10 — avoid wall-of-text
 
@@ -1470,11 +1671,21 @@ def get_chatbot_response(message: str, history: list[dict], language: str = 'en'
         if product_name:
             # Category context helps narrow when name is ambiguous
             cat_hint = extract_category_type(message)
-            product_ctx, found = query_products_by_name(product_name, cat_hint)
+            # Also extract any price constraint from the same message —
+            # handles hybrid queries like "What burgers can I get for ₱50?"
+            # where extract_product_name() strips the budget suffix and returns
+            # "burgers", but the price constraint is still in the original message.
+            name_constraints = extract_price_constraints(message)
+            price_for_name   = name_constraints if _has_price_constraint(name_constraints) else None
+            product_ctx, found = query_products_by_name(product_name, cat_hint, price_for_name)
 
             if found:
                 filtered_ctx = product_ctx
-                c_summary    = f'product search: "{product_name}"'
+                if price_for_name:
+                    price_note = _build_constraints_summary(name_constraints, None)
+                    c_summary  = f'product search: "{product_name}", {price_note}'
+                else:
+                    c_summary  = f'product search: "{product_name}"'
             else:
                 # Explicit "not found" — tell Gemini so it doesn't hallucinate
                 filtered_ctx = ''   # empty string → "NO products" branch in prompt
