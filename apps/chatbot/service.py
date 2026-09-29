@@ -205,7 +205,580 @@ def detect_intent(message: str) -> str:
     return 'general'
 
 
-# ── Database helpers ──────────────────────────────────────────────────────────
+# ── Price constraint extraction ───────────────────────────────────────────────
+
+def extract_price_constraints(message: str) -> dict:
+    """
+    Extract price constraints from a natural-language customer message.
+    Returns a dict with keys: price_lt, price_lte, price_gt, price_gte
+    All values are Decimal or None.
+
+    Handles English, common Filipino, and common Bisaya/Cebuano price phrases.
+    Deliberately conservative — if a phrase is ambiguous, returns nothing
+    rather than applying an incorrect filter.
+
+    Does NOT match:
+    - Order numbers (KDM-...)
+    - Product quantities ("2 burgers")
+    - Unrelated numbers without a price-context keyword nearby
+    """
+    import re as _re
+    from decimal import Decimal, InvalidOperation
+
+    result = {
+        'price_lt':  None,
+        'price_lte': None,
+        'price_gt':  None,
+        'price_gte': None,
+    }
+
+    # Normalize: lower-case, collapse whitespace
+    m = message.lower()
+    m = _re.sub(r'\s+', ' ', m)
+
+    # Amount pattern: optional ₱ / PHP, digits with optional comma/decimal, optional "pesos"
+    _AMT = r'(?:₱|php\s*)?(\d{1,6}(?:[,\.]\d{1,3})?)\s*(?:pesos?)?'
+
+    def _parse(raw: str) -> 'Decimal | None':
+        """Convert a matched amount string to Decimal, or None on failure."""
+        try:
+            cleaned = raw.replace(',', '')
+            return Decimal(cleaned)
+        except InvalidOperation:
+            return None
+
+    def _first(pattern, text):
+        match = _re.search(pattern, text, _re.IGNORECASE)
+        if match:
+            return match
+        return None
+
+    # ── Range: "between X and Y" / "from X to Y" ─────────────────────────
+    range_pat = (
+        r'(?:between\s+' + _AMT + r'\s+(?:and|to)\s+' + _AMT + r')'
+        r'|(?:from\s+' + _AMT + r'\s+to\s+' + _AMT + r')'
+    )
+    rm = _re.search(range_pat, m, _re.IGNORECASE)
+    if rm:
+        groups = [g for g in rm.groups() if g is not None]
+        if len(groups) >= 2:
+            lo = _parse(groups[0])
+            hi = _parse(groups[1])
+            if lo is not None and hi is not None and lo <= hi:
+                result['price_gte'] = lo
+                result['price_lte'] = hi
+                return result   # range found — stop further processing
+
+    # ── Strict upper limit: below / under / less than / cheaper than ──────
+    # Also handles Filipino: "mas mura sa X", Bisaya: "mas barato sa X"
+    strict_upper_pat = (
+        r'(?:below|under|less\s+than|cheaper\s+than|mas\s+mura\s+(?:sa|kaysa)?\s*|mas\s+barato\s+(?:sa|kaysa)?\s*)\s*'
+        + _AMT
+    )
+    su = _first(strict_upper_pat, m)
+    if su:
+        val = _parse(su.group(1))
+        if val is not None:
+            result['price_lt'] = val
+            return result
+
+    # ── Inclusive upper limit: X or less / up to X / at most X / X max ───
+    # Filipino: "hanggang X" | Bisaya: "hangtod X"
+    incl_upper_pat = (
+        r'(?:'
+        r'up\s+to|at\s+most|(?:maximum|max)(?:\s+of)?|'
+        r'hanggang|hangtod'
+        r')\s*' + _AMT
+        + r'|' + _AMT + r'\s+(?:or\s+(?:less|below|under)|and\s+(?:below|under)|max(?:imum)?|pababa)'
+        + r'|(?:within|not\s+(?:more\s+than|over|exceeding))\s*' + _AMT
+    )
+    iu = _re.search(incl_upper_pat, m, _re.IGNORECASE)
+    if iu:
+        raw = next((g for g in iu.groups() if g is not None), None)
+        val = _parse(raw) if raw else None
+        if val is not None:
+            result['price_lte'] = val
+            return result
+
+    # ── Strict lower limit: more than / above / over ──────────────────────
+    strict_lower_pat = (
+        r'(?:more\s+than|(?:just\s+)?over|above|greater\s+than|exceeds?)\s*' + _AMT
+    )
+    sl = _first(strict_lower_pat, m)
+    if sl:
+        val = _parse(sl.group(1))
+        if val is not None:
+            result['price_gt'] = val
+            return result
+
+    # ── Inclusive lower limit: at least / X or more / minimum ────────────
+    incl_lower_pat = (
+        r'(?:at\s+least|(?:minimum|min)(?:\s+of)?)\s*' + _AMT
+        + r'|' + _AMT + r'\s+(?:or\s+(?:more|above|over)|and\s+(?:above|over)|pataas)'
+    )
+    il = _re.search(incl_lower_pat, m, _re.IGNORECASE)
+    if il:
+        raw = next((g for g in il.groups() if g is not None), None)
+        val = _parse(raw) if raw else None
+        if val is not None:
+            result['price_gte'] = val
+            return result
+
+    return result   # no constraints found
+
+
+def extract_category_type(message: str) -> str | None:
+    """
+    Detect whether the customer is asking about meals, drinks, or all items.
+
+    Returns:
+        'meal'  — customer asked specifically about food/meals
+        'drink' — customer asked specifically about drinks/beverages
+        None    — no specific category type detected (return all)
+
+    Uses keyword matching only — does not call the DB or AI.
+    Covers English, Filipino, and Cebuano/Bisaya.
+    """
+    m = message.lower()
+
+    _MEAL_WORDS = [
+        # English
+        'food', 'meal', 'meals', 'rice', 'burger', 'burgers', 'snack', 'snacks',
+        'pastil', 'combo', 'combos', 'dish', 'dishes', 'eat', 'eating',
+        'viand', 'ulam', 'meryenda', 'lunch', 'dinner', 'breakfast',
+        # Filipino
+        'pagkain', 'pagkaon', 'kain', 'kanin', 'almusal', 'tanghalian', 'hapunan',
+        # Cebuano/Bisaya
+        'sud-an', 'sud-an', 'sud an', 'pagkaon', 'kaon',
+    ]
+
+    _DRINK_WORDS = [
+        # English
+        'drink', 'drinks', 'beverage', 'beverages', 'coffee', 'tea', 'juice',
+        'shake', 'shakes', 'smoothie', 'milk tea', 'milktea', 'frappe',
+        'latte', 'cappuccino', 'americano', 'espresso', 'hot drink',
+        # Filipino
+        'inumin', 'kape', 'tsaa',
+        # Cebuano/Bisaya
+        'inom', 'ininom', 'kape', 'tsa',
+    ]
+
+    has_meal  = any(w in m for w in _MEAL_WORDS)
+    has_drink = any(w in m for w in _DRINK_WORDS)
+
+    if has_meal and not has_drink:
+        return 'meal'
+    if has_drink and not has_meal:
+        return 'drink'
+    # Both or neither → no specific filter (all categories)
+    return None
+
+
+def _has_price_constraint(constraints: dict) -> bool:
+    """Return True if any price constraint was extracted."""
+    return any(v is not None for v in constraints.values())
+
+
+# ── Product name extraction ───────────────────────────────────────────────────
+
+# Phrases that signal a customer is asking about a specific product.
+# Group 1 in each pattern = the product name term.
+_PRODUCT_QUERY_PATTERNS = [
+    # "how much is/are <name>" / "magkano ang <name>" / "pila ang <name>"
+    re.compile(
+        r'(?:how\s+much\s+(?:is|are)\s+(?:the\s+|a\s+|an\s+)?|'
+        r'price\s+of\s+(?:the\s+|a\s+|an\s+)?|'
+        r'cost\s+of\s+(?:the\s+|a\s+|an\s+)?|'
+        r'magkano\s+(?:ang\s+|yung\s+|ang\s+yung\s+)?|'
+        r'tag[-‐]?pila\s+(?:ang\s+)?|'
+        r'pila\s+(?:ang\s+)?)'
+        r'(.+)',
+        re.IGNORECASE,
+    ),
+    # "do you have <name>" / "do you sell <name>" / "is <name> available"
+    re.compile(
+        r'(?:do\s+you\s+(?:have|sell|serve|offer)\s+(?:the\s+|a\s+|an\s+)?|'
+        r'(?:is|are)\s+(?:the\s+|a\s+)?(?:.+?\s+)?available\s*\??|'
+        r'meron\s+(?:ba\s+)?(?:kayong\s+|kayong\s+)?|'
+        r'mayroon\s+(?:ba\s+)?(?:kayong\s+)?|'
+        r'naa\s+(?:ba\s+)?(?:mog\s+|moy\s+)?|'
+        r'aduna\s+(?:ba\s+)?(?:mo(?:ng)?\s+)?)'
+        r'(.+)',
+        re.IGNORECASE,
+    ),
+    # "is <name> available" — second pass catching the subject before "available"
+    re.compile(
+        r'^(?:is|are)\s+(?:the\s+|a\s+)?(.+?)\s+available\s*\??$',
+        re.IGNORECASE,
+    ),
+    # "tell me about <name>" / "what is <name>"
+    re.compile(
+        r'(?:tell\s+me\s+about\s+(?:the\s+|a\s+|an\s+)?|'
+        r'what\s+is\s+(?:the\s+|a\s+|an\s+)?|'
+        r'ano\s+(?:ang\s+)?(?:yung\s+)?|'
+        r'unsa\s+(?:ang\s+)?)'
+        r'(.+)',
+        re.IGNORECASE,
+    ),
+    # "I want <name>" / "order <name>" / "gusto ko ng <name>"
+    re.compile(
+        r'(?:i\s+want\s+(?:to\s+(?:order|have|get)\s+)?(?:the\s+|a\s+|an\s+)?|'
+        r'(?:order|get|have)\s+(?:the\s+|a\s+|an\s+)?|'
+        r'gusto\s+ko\s+(?:ng\s+|nang\s+)?(?:ang\s+)?|'
+        r'ganahan\s+ko\s+(?:sa\s+)?)'
+        r'(.+)',
+        re.IGNORECASE,
+    ),
+]
+
+# Words to strip from the end of an extracted product name
+_NAME_TAIL_NOISE = re.compile(
+    r'\s*\??\s*$'
+    r'|(?:\s+please|\s+po|\s+ba|\s+nga|\s+lang|\s+ha|\s+ha\?|\s+noh?|\s+din|\s+daw)\s*$',
+    re.IGNORECASE,
+)
+
+# Short stop-words that, if they make up the entire extracted term, are noise
+_NOISE_TERMS = {
+    'something', 'anything', 'food', 'meal', 'drink', 'item', 'product',
+    'menu', 'eat', 'order', 'available', 'cheap', 'cheaper', 'expensive',
+    'recommend', 'suggestion', 'suggestions', 'good', 'best',
+    # Filipino
+    'pagkain', 'inumin', 'pagkaon', 'sud-an', 'kain', 'inom',
+}
+
+
+def extract_product_name(message: str) -> str | None:
+    """
+    Extract a specific product name the customer is asking about.
+
+    Returns the name string (e.g. 'Burger', 'Iced Coffee') or None if the
+    message is a general query rather than a product-specific question.
+
+    Conservative by design — only matches clear product-query patterns.
+    The caller then does an ORM icontains lookup rather than exact match,
+    so minor capitalisation/spelling variation is tolerated.
+    """
+    # Strip leading/trailing whitespace
+    msg = message.strip()
+
+    for pattern in _PRODUCT_QUERY_PATTERNS:
+        m = pattern.search(msg)
+        if not m:
+            continue
+
+        # Take the last non-None group (the captured term)
+        term = next(
+            (g.strip() for g in reversed(m.groups()) if g and g.strip()),
+            None,
+        )
+        if not term:
+            continue
+
+        # Clean tail noise ("?", "please", "po", etc.)
+        term = _NAME_TAIL_NOISE.sub('', term).strip()
+
+        # Skip if too short or is a generic noise word
+        if len(term) < 2:
+            continue
+        if term.lower() in _NOISE_TERMS:
+            continue
+
+        # Skip if the term itself contains price-constraint language —
+        # those are handled by extract_price_constraints instead.
+        if re.search(r'\b(?:below|under|above|over|less|more|cheap|mura|barato|mahal)\b', term, re.IGNORECASE):
+            continue
+
+        # Hard cap — real product names are short
+        if len(term) > 50:
+            continue
+
+        return term
+
+    return None
+
+
+# ── Product name ORM lookup ───────────────────────────────────────────────────
+
+def query_products_by_name(
+    name_term: str,
+    category_type: str | None = None,
+) -> tuple[str, bool]:
+    """
+    Query active + available products whose name contains *name_term*
+    (case-insensitive partial match).
+
+    Args:
+        name_term:     search term extracted from the customer's message
+        category_type: optional pre-filter ('meal' / 'drink' / None)
+
+    Returns:
+        (context_text, found)
+        - context_text: formatted product lines (same style as get_filtered_menu_context)
+        - found: True if at least one product matched
+    """
+    from apps.menu.models import Product
+
+    try:
+        qs = (
+            Product.objects
+            .filter(
+                name__icontains=name_term,
+                is_active=True,
+                is_available=True,
+                stock_quantity__gt=0,
+                category__is_active=True,
+            )
+            .select_related('category')
+        )
+
+        if category_type == 'meal':
+            qs = qs.filter(category__is_packaging_required=True)
+        elif category_type == 'drink':
+            qs = qs.filter(category__is_packaging_required=False)
+
+        products = list(qs.order_by('price')[:10])  # cap at 10 — avoid wall-of-text
+
+        if not products:
+            return '', False
+
+        lines = []
+        for p in products:
+            cat = p.category
+            pkg = '[MEAL]' if cat.is_packaging_required else '[DRINK]'
+            price_str = f'₱{p.price}'
+            if p.has_sizes:
+                extras = []
+                if p.price_medium:
+                    extras.append(f'Medium ₱{p.price_medium}')
+                if p.price_large:
+                    extras.append(f'Large ₱{p.price_large}')
+                if extras:
+                    price_str += f' ({" / ".join(extras)})'
+            desc = f' — {p.description[:80]}' if p.description else ''
+            lines.append(f'  - {p.name} {pkg} ({cat.name}): {price_str}{desc}')
+
+        return '\n'.join(lines), True
+
+    except Exception:
+        logger.exception('query_products_by_name failed for term=%r', name_term)
+        return '', False
+
+
+# ── Sort intent extraction (cheapest / most expensive) ───────────────────────
+
+def extract_sort_intent(message: str) -> str | None:
+    """
+    Detect if the customer is asking for the cheapest or most expensive items.
+
+    Returns:
+        'cheapest'      — customer wants the lowest-priced options
+        'most_expensive' — customer wants the highest-priced options
+        None            — no sort intent detected
+
+    Does NOT handle vague words like 'cheap/mura/barato' without a superlative —
+    those are ambiguous and should be handled as normal price queries or prompts
+    for clarification rather than sorted lists.
+    """
+    m = message.lower()
+
+    # Cheapest indicators (clear superlatives / explicit "most affordable")
+    _CHEAPEST = [
+        'cheapest', 'most affordable', 'lowest price', 'lowest priced',
+        'least expensive', 'pinakamura', 'pinaka mura', 'pinaka-mura',
+        'pinakabago', 'pinakamurang',  # common Tagalog superlative constructions
+        'pinakabarato', 'pinaka barato', 'pinaka-barato',  # Bisaya/Filipino
+        'pinakamababa', 'pinaka mababa',  # "lowest" in Filipino
+    ]
+
+    # Most expensive indicators
+    _EXPENSIVE = [
+        'most expensive', 'highest price', 'highest priced', 'priciest',
+        'pinakamahal', 'pinaka mahal', 'pinaka-mahal',
+        'pinakamataas', 'pinaka mataas',  # "highest" in Filipino
+    ]
+
+    if any(k in m for k in _CHEAPEST):
+        return 'cheapest'
+    if any(k in m for k in _EXPENSIVE):
+        return 'most_expensive'
+    return None
+
+
+# ── Cheapest / most expensive ORM queries ────────────────────────────────────
+
+def _sorted_products_context(
+    order_field: str,
+    category_type: str | None = None,
+    limit: int = 5,
+) -> tuple[str, bool]:
+    """
+    Internal helper — returns (context_text, found) for sorted product queries.
+    order_field: 'price' for cheapest, '-price' for most expensive.
+    """
+    from apps.menu.models import Product
+
+    try:
+        qs = (
+            Product.objects
+            .filter(
+                is_active=True,
+                is_available=True,
+                stock_quantity__gt=0,
+                category__is_active=True,
+            )
+            .select_related('category')
+        )
+
+        if category_type == 'meal':
+            qs = qs.filter(category__is_packaging_required=True)
+        elif category_type == 'drink':
+            qs = qs.filter(category__is_packaging_required=False)
+
+        products = list(qs.order_by(order_field, 'name')[:limit])
+
+        if not products:
+            return '', False
+
+        lines = []
+        for p in products:
+            cat = p.category
+            pkg = '[MEAL]' if cat.is_packaging_required else '[DRINK]'
+            price_str = f'₱{p.price}'
+            if p.has_sizes:
+                extras = []
+                if p.price_medium:
+                    extras.append(f'Medium ₱{p.price_medium}')
+                if p.price_large:
+                    extras.append(f'Large ₱{p.price_large}')
+                if extras:
+                    price_str += f' ({" / ".join(extras)})'
+            desc = f' — {p.description[:80]}' if p.description else ''
+            lines.append(f'  - {p.name} {pkg} ({cat.name}): {price_str}{desc}')
+
+        return '\n'.join(lines), True
+
+    except Exception:
+        logger.exception('_sorted_products_context failed')
+        return '', False
+
+
+def query_cheapest_products(
+    category_type: str | None = None,
+    limit: int = 5,
+) -> tuple[str, bool]:
+    """
+    Return the *limit* lowest-priced active products, optionally filtered
+    by category type ('meal' / 'drink' / None).
+
+    Returns (context_text, found).
+    """
+    return _sorted_products_context('price', category_type, limit)
+
+
+def query_most_expensive_products(
+    category_type: str | None = None,
+    limit: int = 5,
+) -> tuple[str, bool]:
+    """
+    Return the *limit* highest-priced active products, optionally filtered
+    by category type ('meal' / 'drink' / None).
+
+    Returns (context_text, found).
+    """
+    return _sorted_products_context('-price', category_type, limit)
+
+
+def get_filtered_menu_context(
+    constraints: dict | None = None,
+    category_type: str | None = None,
+) -> tuple[str, bool]:
+    """
+    Return (menu_text, was_filtered) where menu_text is the product context
+    for Gemini and was_filtered indicates whether server-side filtering was applied.
+
+    Args:
+        constraints: dict from extract_price_constraints(); keys are
+                     price_lt, price_lte, price_gt, price_gte (Decimal or None)
+        category_type: 'meal', 'drink', or None (= all)
+
+    ORM filters are applied BEFORE building the text — Gemini never receives
+    products that fail the constraints.
+
+    Only active + available + non-zero-stock products are returned.
+    Out-of-stock active products are never included when a price filter is
+    active (no point recommending something unavailable in a filtered set).
+    """
+    from apps.menu.models import Product, Category
+    from decimal import Decimal
+
+    constraints = constraints or {}
+    was_filtered = _has_price_constraint(constraints) or (category_type is not None)
+
+    try:
+        # Start from sellable products (active + available)
+        qs = Product.objects.filter(
+            is_active=True,
+            is_available=True,
+            stock_quantity__gt=0,   # exclude out-of-stock in filtered results
+        ).select_related('category').filter(
+            category__is_active=True,
+        )
+
+        # Category type filter
+        if category_type == 'meal':
+            qs = qs.filter(category__is_packaging_required=True)
+        elif category_type == 'drink':
+            qs = qs.filter(category__is_packaging_required=False)
+
+        # Price filters — applied to the base price field
+        # For products with size variants we use the base price as the
+        # reference. This is intentionally conservative: a product whose
+        # base price is ₱60 but has a medium at ₱50 is NOT included in a
+        # "below ₱55" filter, because the displayed base price does not
+        # satisfy the constraint. The AI can note this limitation if needed.
+        if constraints.get('price_lt') is not None:
+            qs = qs.filter(price__lt=constraints['price_lt'])
+        if constraints.get('price_lte') is not None:
+            qs = qs.filter(price__lte=constraints['price_lte'])
+        if constraints.get('price_gt') is not None:
+            qs = qs.filter(price__gt=constraints['price_gt'])
+        if constraints.get('price_gte') is not None:
+            qs = qs.filter(price__gte=constraints['price_gte'])
+
+        products = qs.order_by('category__order', 'category__name', 'price')
+
+        if not products.exists():
+            return '', was_filtered
+
+        # Build the context text grouped by category
+        lines = []
+        current_cat = None
+        for p in products[:50]:   # hard cap — keep prompt small
+            cat = p.category
+            if cat.pk != (current_cat.pk if current_cat else None):
+                current_cat = cat
+                pkg = ' [MEAL - packaging fee applies for takeout]' if cat.is_packaging_required else ' [DRINK - no packaging fee]'
+                lines.append(f'{cat.name}{pkg}:')
+
+            price_str = f'₱{p.price}'
+            if p.has_sizes:
+                extras = []
+                if p.price_medium:
+                    extras.append(f'Medium ₱{p.price_medium}')
+                if p.price_large:
+                    extras.append(f'Large ₱{p.price_large}')
+                if extras:
+                    price_str += f' ({" / ".join(extras)})'
+
+            desc = f' — {p.description[:60]}' if p.description else ''
+            lines.append(f'  - {p.name}: {price_str}{desc}')
+
+        return '\n'.join(lines), was_filtered
+
+    except Exception:
+        logger.exception('get_filtered_menu_context failed')
+        return '', False
 
 def get_menu_context() -> str:
     """
@@ -481,10 +1054,21 @@ def fallback_response(intent: str, message: str, language: str = 'en') -> str:
 
 # ── System prompt ─────────────────────────────────────────────────────────────
 
-def _build_system_prompt(intent: str, language: str = 'en') -> str:
+def _build_system_prompt(
+    intent: str,
+    language: str = 'en',
+    filtered_context: str | None = None,
+    constraints_summary: str = '',
+) -> str:
     """
     Build the system instruction for Gemini.
-    Language is explicitly controlled — not auto-detected from the message.
+
+    filtered_context: if provided, this is the pre-filtered product list
+      from get_filtered_menu_context(). A tighter system prompt is used
+      that tells Gemini the list is already filtered — it must not add
+      products from outside the list.
+    constraints_summary: human-readable description of the applied filters
+      e.g. "meals priced below ₱50" — injected into the prompt.
     """
     fee = get_packaging_fee_display()
     lang_name = LANGUAGE_NAMES.get(language, 'English')
@@ -544,7 +1128,114 @@ WHAT YOU DO NOT KNOW (say so if asked):
 - Staff names or contact information
 """
 
-    # Inject menu data only for intents that need it
+    # ── DB-retrieved context (product name / sort / price filter) ──────────
+    # filtered_context is set whenever the Django ORM was queried first.
+    # It is an empty string when a query ran but returned zero results.
+    # It is None only when no DB query was run (full-menu path).
+    if filtered_context is not None:
+
+        # Determine the kind of lookup so the prompt can be more specific
+        is_product_search = constraints_summary.startswith('product search:')
+        is_sort_query     = any(
+            constraints_summary.startswith(k)
+            for k in ('cheapest', 'most expensive')
+        )
+
+        if filtered_context:
+            # ── Products were found ────────────────────────────────────────
+            filter_note = f' for "{constraints_summary}"' if constraints_summary else ''
+
+            if is_product_search:
+                system += f"""
+PRODUCT SEARCH RESULTS — SERVER-VERIFIED (database-first lookup{filter_note}):
+The following product(s) were retrieved directly from the database.
+These are the ONLY products that match the customer's query — Django found them, not you.
+Prices, availability, and category labels are AUTHORITATIVE — reproduce them exactly.
+
+STRICT RULES FOR THIS RESPONSE:
+- Answer the customer's question using ONLY the products listed below.
+- Do NOT add, invent, or guess any product not in this list.
+- Do NOT change any price, even by one peso.
+- Do NOT claim a product is available if it is not listed here.
+- If the customer asked "how much is X", quote the exact price shown below.
+- If the customer asked "do you have X", confirm it based solely on this list.
+- [MEAL] items have a {fee} packaging fee for takeout; [DRINK] items do NOT.
+
+{filtered_context}
+"""
+            elif is_sort_query:
+                system += f"""
+SORTED PRODUCT LIST — SERVER-VERIFIED ({constraints_summary}):
+The following products were retrieved from the database, already sorted by price.
+These are the actual {constraints_summary} currently available — Django sorted them, not you.
+Prices are AUTHORITATIVE — reproduce them exactly.
+
+STRICT RULES FOR THIS RESPONSE:
+- Present ONLY the products listed below as the answer to the customer's question.
+- Do NOT add cheaper/pricier options that are not in this list.
+- Do NOT change any price.
+- Do NOT invent products.
+- [MEAL] items have a {fee} packaging fee for takeout; [DRINK] items do NOT.
+
+{filtered_context}
+"""
+            else:
+                # Price/category filter path
+                filter_note2 = f' matching "{constraints_summary}"' if constraints_summary else ''
+                system += f"""
+FILTERED PRODUCT LIST — SERVER-VERIFIED (use ONLY these products):
+The following products were retrieved from the database with filters already applied{filter_note2}.
+Prices shown are the actual database prices — reproduce them exactly.
+
+STRICT RULES FOR THIS RESPONSE:
+- Do NOT add any product that is not in this list.
+- Do NOT change any price.
+- Do NOT claim a product is available if it is not listed here.
+- The customer asked about "{constraints_summary}" — every product here satisfies that constraint.
+- [MEAL] items have a {fee} packaging fee for takeout; [DRINK] items do NOT.
+
+{filtered_context}
+"""
+        else:
+            # ── No products matched the query ──────────────────────────────
+            filter_note = f' for "{constraints_summary}"' if constraints_summary else ''
+            if is_product_search:
+                system += f"""
+PRODUCT SEARCH RESULTS — SERVER-VERIFIED:
+The database returned NO products{filter_note}.
+The product the customer asked about does NOT exist in our menu or is currently unavailable.
+
+STRICT RULES FOR THIS RESPONSE:
+- Do NOT claim the product exists.
+- Do NOT guess a price.
+- Tell the customer you couldn't find that item in the current menu.
+- Suggest they browse the full menu page or ask staff.
+- Do NOT invent similar products as substitutes unless the customer explicitly asks.
+"""
+            elif is_sort_query:
+                system += f"""
+SORTED PRODUCT LIST — SERVER-VERIFIED:
+The database returned NO products for "{constraints_summary}".
+
+STRICT RULES FOR THIS RESPONSE:
+- Do NOT invent or list any products.
+- Tell the customer there are currently no available items in that category.
+- Invite them to browse the full menu or ask staff.
+"""
+            else:
+                system += f"""
+FILTERED PRODUCT LIST — SERVER-VERIFIED:
+The database returned NO products{filter_note}.
+
+STRICT RULES FOR THIS RESPONSE:
+- Inform the customer that no items currently match their request.
+- Do NOT suggest or list any products.
+- Do NOT invent alternatives.
+- You may invite them to try a different price range or browse the full menu.
+"""
+        return system
+
+    # ── Unfiltered full menu (normal intent — no price/category constraints)
     if intent in ('menu', 'price', 'recommendation', 'general'):
         menu_ctx = get_menu_context()
         system += f"""
@@ -567,7 +1258,14 @@ def _get_api_key() -> str | None:
     return getattr(settings, 'GEMINI_API_KEY', None) or os.environ.get('GEMINI_API_KEY')
 
 
-def get_ai_response(message: str, intent: str, history: list[dict], language: str = 'en') -> str:
+def get_ai_response(
+    message: str,
+    intent: str,
+    history: list[dict],
+    language: str = 'en',
+    filtered_context: str | None = None,
+    constraints_summary: str = '',
+) -> str:
     """
     Call Gemini API. Returns text response.
     Raises on any failure — caller handles fallback.
@@ -583,7 +1281,11 @@ def get_ai_response(message: str, intent: str, history: list[dict], language: st
 
     genai.configure(api_key=api_key)
 
-    system_prompt = _build_system_prompt(intent, language)
+    system_prompt = _build_system_prompt(
+        intent, language,
+        filtered_context=filtered_context,
+        constraints_summary=constraints_summary,
+    )
 
     model = genai.GenerativeModel(
         model_name='gemini-1.5-flash',
@@ -639,14 +1341,48 @@ def get_ai_response(message: str, intent: str, history: list[dict], language: st
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
+def _build_constraints_summary(constraints: dict, category_type: str | None) -> str:
+    """
+    Build a short human-readable string describing the active filters.
+    Used in the system prompt so Gemini understands what was filtered.
+    """
+    parts = []
+    if category_type == 'meal':
+        parts.append('meals')
+    elif category_type == 'drink':
+        parts.append('drinks')
+    else:
+        parts.append('all items')
+
+    if constraints.get('price_lt') is not None:
+        parts.append(f'priced below ₱{constraints["price_lt"]}')
+    if constraints.get('price_lte') is not None:
+        parts.append(f'priced ₱{constraints["price_lte"]} or less')
+    if constraints.get('price_gt') is not None:
+        parts.append(f'priced above ₱{constraints["price_gt"]}')
+    if constraints.get('price_gte') is not None:
+        parts.append(f'priced at least ₱{constraints["price_gte"]}')
+
+    if len(parts) <= 1:
+        return parts[0] if parts else ''
+    return parts[0] + ' ' + ', '.join(parts[1:])
+
+
 def get_chatbot_response(message: str, history: list[dict], language: str = 'en') -> tuple[str, str]:
     """
     Main chatbot response function.
     Returns (response_text, intent).
 
-    language: validated language code ('en', 'tl', 'ceb'). Default 'en'.
+    Flow:
+    1. Validate language
+    2. Detect intent
+    3. Order status: fully deterministic DB lookup — no AI
+    4. Extract price/category constraints from message (new)
+    5. If constraints found: query DB with ORM filters, send only matching
+       products to Gemini (server-side filtering — fixes the price bug)
+    6. If no constraints: existing full-menu flow
+    7. AI failure → deterministic fallback (also respects constraints)
     """
-    # Ensure language is always valid — belt-and-suspenders after view validation
     if language not in ALLOWED_LANGUAGES:
         language = DEFAULT_LANGUAGE
 
@@ -718,9 +1454,90 @@ def get_chatbot_response(message: str, history: list[dict], language: str = 'en'
             return ("Para ma-check ang imong order status, ihatag ang imong order number.\nFormat: **KDM-YYYYMMDD-XXXX**\nMakita nimo kini sa imong order confirmation page.", intent)
         return ("To check your order status, please provide your order number.\nFormat: **KDM-YYYYMMDD-XXXX**\nYou can find it on your order confirmation page.", intent)
 
+    # ── Product-name lookup (DB-first, highest priority) ──────────────────
+    # Check before price/category extraction so "How much is the Burger?"
+    # returns Burger-specific info rather than a generic price-filtered list.
+    #
+    # Only runs for intents that could involve product questions.
+    filtered_ctx  = None
+    c_summary     = ''
+    constraints   = {}
+    category_type = None
+
+    if intent in ('menu', 'price', 'recommendation', 'general'):
+        product_name = extract_product_name(message)
+
+        if product_name:
+            # Category context helps narrow when name is ambiguous
+            cat_hint = extract_category_type(message)
+            product_ctx, found = query_products_by_name(product_name, cat_hint)
+
+            if found:
+                filtered_ctx = product_ctx
+                c_summary    = f'product search: "{product_name}"'
+            else:
+                # Explicit "not found" — tell Gemini so it doesn't hallucinate
+                filtered_ctx = ''   # empty string → "NO products" branch in prompt
+                c_summary    = f'product search: "{product_name}"'
+
+        # ── Cheapest / most-expensive sort intent ─────────────────────────
+        # Only checked when no specific product name was found.
+        if filtered_ctx is None:
+            sort_intent = extract_sort_intent(message)
+
+            if sort_intent:
+                cat_hint = extract_category_type(message)
+                if sort_intent == 'cheapest':
+                    sort_ctx, found = query_cheapest_products(cat_hint)
+                    label = 'cheapest'
+                else:
+                    sort_ctx, found = query_most_expensive_products(cat_hint)
+                    label = 'most expensive'
+
+                cat_label = f' {cat_hint}s' if cat_hint else ''
+                if found:
+                    filtered_ctx = sort_ctx
+                    c_summary    = f'{label}{cat_label} items'
+                else:
+                    filtered_ctx = ''
+                    c_summary    = f'{label}{cat_label} items'
+
+        # ── Price/category constraint extraction (server-side filtering) ──
+        # Runs when neither a product name nor a sort intent was detected.
+        # A message like "What food below ₱50?" is classified 'menu' but
+        # still carries a price constraint that must be enforced server-side.
+        if filtered_ctx is None:
+            constraints   = extract_price_constraints(message)
+            category_type = extract_category_type(message)
+
+            if _has_price_constraint(constraints) or category_type is not None:
+                filtered_ctx, _ = get_filtered_menu_context(constraints, category_type)
+                c_summary = _build_constraints_summary(constraints, category_type)
+
+    def _filtered_fallback() -> str:
+        """Deterministic fallback for constrained queries (AI unavailable)."""
+        if not filtered_ctx:
+            if language == 'tl':
+                return (f"Pasensya, walang items na tumutugma sa '{c_summary}'. "
+                        "Subukan ang ibang price range o tingnan ang buong menu.")
+            if language == 'ceb':
+                return (f"Pasensya, walay items nga motugma sa '{c_summary}'. "
+                        "Sulayi ang lain nga price range o tan-awa ang tibuok menu.")
+            return (f"Sorry, no items currently match '{c_summary}'. "
+                    "Try a different price range or browse the full menu.")
+        if language == 'tl':
+            return f"Narito ang mga items na tumutugma sa '{c_summary}':\n\n{filtered_ctx}"
+        if language == 'ceb':
+            return f"Ania ang mga items nga motugma sa '{c_summary}':\n\n{filtered_ctx}"
+        return f"Here are the items matching '{c_summary}':\n\n{filtered_ctx}"
+
     # ── Try Gemini AI ──────────────────────────────────────────────────────
     try:
-        response = get_ai_response(message, intent, history, language)
+        response = get_ai_response(
+            message, intent, history, language,
+            filtered_context=filtered_ctx,
+            constraints_summary=c_summary,
+        )
         return response, intent
     except ImportError:
         logger.warning('google-generativeai not installed — using fallback')
@@ -735,4 +1552,9 @@ def get_chatbot_response(message: str, history: list[dict], language: str = 'en'
         logger.exception('Gemini API error: %s', type(e).__name__)
 
     # ── Deterministic fallback ─────────────────────────────────────────────
+    # If a filtered context was built, use the filtered fallback (respects
+    # price/category constraints even without AI).
+    if filtered_ctx is not None:
+        return _filtered_fallback(), intent
+
     return fallback_response(intent, message, language), intent
