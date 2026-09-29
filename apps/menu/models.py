@@ -67,6 +67,21 @@ CategoryManager = models.Manager.from_queryset(CategoryQuerySet)
 
 class Category(models.Model):
     """Food/drink categories"""
+
+    # Semantic type used by the chatbot to classify categories correctly.
+    # This is SEPARATE from is_packaging_required (which drives the ₱6
+    # takeout packaging-fee rule and must not be repurposed for classification).
+    # A category can have any combination of type and packaging flag:
+    #   e.g. Appetizers = type FOOD, is_packaging_required False (no fee)
+    DRINK = 'drink'
+    FOOD  = 'food'
+    OTHER = 'other'
+    CATEGORY_TYPE_CHOICES = [
+        (DRINK, 'Drink / Beverage'),
+        (FOOD,  'Food / Meal'),
+        (OTHER, 'Other'),
+    ]
+
     name = models.CharField(max_length=100, unique=True)
     slug = models.SlugField(max_length=100, unique=True, blank=True)
     icon = models.CharField(max_length=10, default='🍽️')
@@ -79,6 +94,16 @@ class Category(models.Model):
             "Enable for meal/food categories. Adds packaging fee "
             "per item for Take-Out orders. Disable for beverages."
         )
+    )
+    category_type = models.CharField(
+        max_length=10,
+        choices=CATEGORY_TYPE_CHOICES,
+        default=OTHER,
+        help_text=(
+            "Semantic type used by the AI chatbot to classify this category "
+            "as a drink, food, or other. "
+            "Independent of the packaging-fee flag — set both correctly."
+        ),
     )
     order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)

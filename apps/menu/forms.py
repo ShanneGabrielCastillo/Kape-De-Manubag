@@ -49,12 +49,41 @@ class ProductForm(forms.ModelForm):
 
 
 class CategoryForm(forms.ModelForm):
+    # Make category_type explicitly required — the model default is 'other'
+    # which is a valid fallback, but staff should consciously choose the type
+    # so the AI chatbot can filter correctly.  The empty-label prompts them
+    # to pick rather than silently accepting the default.
+    category_type = forms.ChoiceField(
+        choices=[('', '— Select category type —')] + Category.CATEGORY_TYPE_CHOICES,
+        required=True,
+        label='Category Type',
+        help_text=(
+            'Used by the AI chatbot to classify drink vs food queries. '
+            'Select "Other" only if the category does not fit either.'
+        ),
+        widget=forms.Select(attrs={'class': 'form-control'}),
+    )
+
     class Meta:
         model = Category
-        fields = ['name', 'icon', 'description', 'image', 'is_active', 'is_packaging_required', 'order']
+        fields = [
+            'name', 'icon', 'description', 'image',
+            'category_type',          # ← now explicit and required
+            'is_packaging_required',  # packaging fee rule (separate from type)
+            'is_active', 'order',
+        ]
         widgets = {
-            'name': forms.TextInput(attrs={'class': 'form-control'}),
-            'icon': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Emoji icon'}),
+            'name':        forms.TextInput(attrs={'class': 'form-control'}),
+            'icon':        forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Emoji icon'}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
-            'order': forms.NumberInput(attrs={'class': 'form-control'}),
+            'order':       forms.NumberInput(attrs={'class': 'form-control'}),
         }
+
+    def clean_category_type(self):
+        value = self.cleaned_data.get('category_type', '')
+        if not value:
+            raise forms.ValidationError('Please select a category type.')
+        valid = {choice[0] for choice in Category.CATEGORY_TYPE_CHOICES}
+        if value not in valid:
+            raise forms.ValidationError('Invalid category type.')
+        return value

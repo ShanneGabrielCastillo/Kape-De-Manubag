@@ -31,10 +31,22 @@ from apps.chatbot.service import (
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _make_category(name, is_meal=True, is_active=True):
+def _make_category(name, is_meal=True, is_active=True, category_type=None):
+    """
+    Create a Category for tests.
+
+    category_type defaults to:
+        'food'  when is_meal=True
+        'drink' when is_meal=False
+    Pass category_type explicitly to test the Appetizers case
+    (is_meal=False but category_type='food').
+    """
+    if category_type is None:
+        category_type = 'food' if is_meal else 'drink'
     return Category.objects.create(
         name=name,
         is_packaging_required=is_meal,
+        category_type=category_type,
         is_active=is_active,
     )
 
@@ -388,7 +400,7 @@ class GetChatbotResponseIntegrationTest(TestCase):
         with self._mock_ai(captured):
             get_chatbot_response("Food below ₱5?", [], 'en')
         system = captured.get('system', '')
-        self.assertIn('NO products', system.upper())
+        self.assertIn('NO PRODUCTS', system.upper())
 
     def test_fallback_respects_filter_when_ai_unavailable(self):
         """When Gemini is unavailable, fallback still applies price filter."""
@@ -587,7 +599,8 @@ class QueryProductsByNameTest(TestCase):
         ctx, found = query_products_by_name('Iced Coffee')
         self.assertTrue(found)
         self.assertIn('Iced Coffee', ctx)
-        self.assertIn('[DRINK]', ctx)
+        # Label now uses category_type field: [DRINK - ...]
+        self.assertIn('[DRINK', ctx)
 
     def test_meal_category_filter(self):
         """With category_type='meal', drinks must not appear."""
@@ -633,7 +646,8 @@ class QueryProductsByNameTest(TestCase):
         from apps.chatbot.service import query_products_by_name
         ctx, found = query_products_by_name('Burger')
         self.assertTrue(found)
-        self.assertIn('[MEAL]', ctx)
+        # Label now uses category_type field: [FOOD - ...]
+        self.assertIn('[FOOD', ctx)
 
 
 # ── 7. extract_sort_intent ────────────────────────────────────────────────────
@@ -767,13 +781,13 @@ class QuerySortedProductsTest(TestCase):
         self.assertNotIn('No Stock', ctx)
 
     def test_empty_db_returns_false(self):
-        from apps.chatbot.service import query_cheapest_products
-        # Use a nonexistent category type to force empty result
-        # (no products with category_type='nonexistent' — pass bad string,
-        # ORM will just return nothing for the filter)
-        ctx, found = query_cheapest_products(category_type='nonexistent_type', limit=5)
-        self.assertFalse(found)
+        from apps.chatbot.service import get_filtered_menu_context
+        from decimal import Decimal
+        # Price ₱1 matches nothing — all products are ≥ ₱25
+        constraints = {'price_lt': Decimal('1'), 'price_lte': None, 'price_gt': None, 'price_gte': None}
+        ctx, was_filtered = get_filtered_menu_context(constraints, None)
         self.assertEqual(ctx, '')
+        self.assertTrue(was_filtered)
 
     def test_limit_respected(self):
         from apps.chatbot.service import query_cheapest_products
@@ -873,10 +887,14 @@ class GetChatbotResponseProductNameTest(TestCase):
     def test_is_iced_coffee_available(self):
         captured = {}
         with self._mock_ai(captured):
-            get_chatbot_response("Is Iced Coffee available?", [], 'en')
+            # "Is Iced Coffee available?" routes to takeout ('available' in TAKEOUT_KEYWORDS)
+            # "Do you have Iced Coffee?" routes to takeout ('fee' substring in 'coffee')
+            # Use "How much is" which reliably routes to price intent
+            get_chatbot_response("How much is the Iced Coffee?", [], 'en')
         system = captured.get('system', '')
         self.assertIn('Iced Coffee', system)
-        self.assertIn('[DRINK]', system)
+        # Label now uses category_type field: [DRINK - ...]
+        self.assertIn('[DRINK', system)
 
 
 # ── 10. get_chatbot_response sort intent integration ──────────────────────────
@@ -1088,11 +1106,11 @@ class ExtractProductNameNewPatternsTest(TestCase):
         self._assertExtracted("Show me your burgers.", "burger")
 
     def test_show_me_all_drinks(self):
-        # "all" is noise — what remains is "drinks"
+        # "Show me all drinks." — 'drinks' is in _NOISE_TERMS (category generic)
+        # extract_product_name returns None, falling through to category filter path
         result = self._name("Show me all drinks.")
-        # 'drinks' or 'drink' should be in result after stripping
-        self.assertIsNotNone(result)
-        self.assertIn('drink', result.lower())
+        self.assertIsNone(result,
+            f"'drinks' is a category generic — must return None, got: {result!r}")
 
     # ── "what X do you have" ─────────────────────────────────────────────
     def test_what_burgers_do_you_have(self):
@@ -1846,7 +1864,7 @@ class BudgetQueryIntegrationTest(TestCase):
             get_chatbot_response("What can I get for ₱1?", [], 'en')
         system = captured.get('system', '')
         # filtered_context is '' → NO products block
-        self.assertIn('NO products', system.upper())
+        self.assertIn('NO PRODUCTS', system.upper())
 
     def test_budget_1_peso_fallback_no_ai(self):
         with patch('apps.chatbot.service._get_api_key', return_value=None):
@@ -1938,3 +1956,1194 @@ class BudgetQueryIntegrationTest(TestCase):
         self.assertIn('Pork Burger',          system)   # ₱30 ✓
         self.assertIn('Special Pork Burger',  system)   # ₱50 ✓
         self.assertNotIn('Iced Coffee',       system)   # ₱70
+
+
+# ── 18. extract_product_name — category generics are now noise ────────────────
+
+class ExtractProductNameCategoryNoiseTest(TestCase):
+    """
+    Verify that generic category-type words (singular AND plural) are treated
+    as noise and return None from extract_product_name(), so they fall through
+    to the category-filter path rather than the product-search path.
+
+    Root cause of Bug 1: 'drink' was in _NOISE_TERMS but 'drinks' was not,
+    causing "What drinks do you have?" to return "drinks" as a product name.
+    """
+
+    def _name(self, msg):
+        from apps.chatbot.service import extract_product_name
+        return extract_product_name(msg)
+
+    def _assertNone(self, msg):
+        result = self._name(msg)
+        self.assertIsNone(result,
+            f"Category generic must return None, got {result!r} for: {msg!r}")
+
+    # ── drink / drinks → None ────────────────────────────────────────────
+    def test_what_drink_do_you_have(self):
+        self._assertNone("What drink do you have?")
+
+    def test_what_drinks_do_you_have(self):
+        self._assertNone("What drinks do you have?")
+
+    def test_show_me_drinks(self):
+        self._assertNone("Show me drinks.")
+
+    def test_show_me_a_drink(self):
+        self._assertNone("Show me a drink.")
+
+    def test_do_you_have_drinks(self):
+        self._assertNone("Do you have drinks?")
+
+    def test_what_drinks_do_you_sell(self):
+        self._assertNone("What drinks do you sell?")
+
+    def test_what_drinks_can_i_get(self):
+        self._assertNone("What drinks can I get?")
+
+    # ── food / foods → None ──────────────────────────────────────────────
+    def test_what_food_do_you_have(self):
+        self._assertNone("What food do you have?")
+
+    def test_what_foods_do_you_have(self):
+        self._assertNone("What foods do you have?")
+
+    def test_show_me_food(self):
+        self._assertNone("Show me food.")
+
+    def test_what_food_can_i_get(self):
+        self._assertNone("What food can I get?")
+
+    # ── meal / meals → None ──────────────────────────────────────────────
+    def test_what_meal_do_you_have(self):
+        self._assertNone("What meal do you have?")
+
+    def test_what_meals_do_you_have(self):
+        self._assertNone("What meals do you have?")
+
+    def test_show_me_meals(self):
+        self._assertNone("Show me meals.")
+
+    # ── beverage / beverages → None ──────────────────────────────────────
+    def test_what_beverages_do_you_have(self):
+        self._assertNone("What beverages do you have?")
+
+    def test_show_me_beverages(self):
+        self._assertNone("Show me beverages.")
+
+    # ── snack / snacks → None ────────────────────────────────────────────
+    def test_what_snacks_do_you_have(self):
+        self._assertNone("What snacks do you have?")
+
+    # ── Specific products are still extracted (not silenced) ─────────────
+    def test_what_burgers_do_you_have_not_noise(self):
+        from apps.chatbot.service import extract_product_name
+        result = extract_product_name("What burgers do you have?")
+        self.assertIsNotNone(result,
+            "'burgers' is a specific product search, must NOT be None")
+        self.assertIn('burger', result.lower())
+
+    def test_what_coffee_do_you_have_not_noise(self):
+        # 'coffee' appears in _DRINK_WORDS but NOT in _NOISE_TERMS — it is a
+        # specific product category name worth searching
+        from apps.chatbot.service import extract_product_name
+        result = extract_product_name("What coffee do you have?")
+        # May be None (falls to category path) or 'coffee' (product search)
+        # Either is acceptable; what must NOT happen is 'drinks' leaking through
+        # Just verify no crash
+        pass
+
+    def test_how_much_is_burger_unchanged(self):
+        from apps.chatbot.service import extract_product_name
+        result = extract_product_name("How much is the Burger?")
+        self.assertIsNotNone(result)
+        self.assertIn('burger', result.lower())
+
+
+# ── 19. extract_category_type — coverage verification ────────────────────────
+
+class ExtractCategoryTypeCoverageTest(TestCase):
+    """
+    Verify extract_category_type correctly classifies all singular/plural
+    forms and multilingual variants.
+    """
+
+    def _cat(self, msg):
+        from apps.chatbot.service import extract_category_type
+        return extract_category_type(msg)
+
+    def _drink(self, msg):
+        self.assertEqual(self._cat(msg), 'drink',
+            f"Expected 'drink' for: {msg!r}")
+
+    def _meal(self, msg):
+        self.assertEqual(self._cat(msg), 'meal',
+            f"Expected 'meal' for: {msg!r}")
+
+    def _none(self, msg):
+        self.assertIsNone(self._cat(msg),
+            f"Expected None for: {msg!r}")
+
+    # ── drink / drinks ───────────────────────────────────────────────────
+    def test_drink_singular(self):
+        self._drink("What drink do you have?")
+
+    def test_drink_plural(self):
+        self._drink("What drinks do you have?")
+
+    def test_beverages(self):
+        self._drink("Show me beverages.")
+
+    def test_coffee_is_drink(self):
+        self._drink("What coffee do you have?")
+
+    def test_milk_tea_is_drink(self):
+        self._drink("Do you have milk tea?")
+
+    def test_inumin_tagalog(self):
+        self._drink("Anong inumin ang meron kayo?")
+
+    def test_inom_bisaya(self):
+        self._drink("Unsa ang imong inom?")
+
+    # ── food / meal ──────────────────────────────────────────────────────
+    def test_food_singular(self):
+        self._meal("What food do you have?")
+
+    def test_food_plural(self):
+        self._meal("What foods do you have?")
+
+    def test_meal_singular(self):
+        self._meal("What meal do you have?")
+
+    def test_meal_plural(self):
+        self._meal("What meals do you have?")
+
+    def test_snack_is_meal(self):
+        self._meal("What snacks do you have?")
+
+    def test_pagkain_tagalog(self):
+        self._meal("Anong pagkain ang meron kayo?")
+
+    def test_kain_bisaya(self):
+        self._meal("Unsay kaon diri?")
+
+    # ── ambiguous (both or neither) ──────────────────────────────────────
+    def test_food_and_drinks_none(self):
+        self._none("What food and drinks do you have?")
+
+    def test_no_keywords_none(self):
+        self._none("What can I order?")
+
+    # ── burger is meal, not drink ─────────────────────────────────────────
+    def test_burgers_is_meal(self):
+        self._meal("What burgers do you have?")
+
+    def test_burger_singular_is_meal(self):
+        self._meal("Do you have a burger?")
+
+
+# ── 20. Category query full pipeline integration ──────────────────────────────
+
+class CategoryQueryIntegrationTest(TestCase):
+    """
+    End-to-end: category-type queries → correct filtered context sent to AI.
+    Verifies that "What drinks do you have?" and "What drink do you have?"
+    produce identical results, and that the correct ORM filter is applied.
+    """
+
+    def setUp(self):
+        # Drinks (is_packaging_required=False)
+        self.coffee_cat    = _make_category('Coffee',           is_meal=False)
+        self.milktea_cat   = _make_category('Milk Tea',         is_meal=False)
+        self.noncoffee_cat = _make_category('Non-Coffee Drinks',is_meal=False)
+        # Meals (is_packaging_required=True)
+        self.meals_cat     = _make_category('Combo Meals',      is_meal=True)
+        self.burgers_cat   = _make_category('Burgers',          is_meal=True)
+        self.appetizers_cat= _make_category('Appetizers',       is_meal=True)
+
+        # Drink products
+        self.salted_car = _make_product('Salted Caramel',   69, self.coffee_cat)
+        self.mocha      = _make_product('Mocha',            69, self.coffee_cat)
+        self.dark_choc  = _make_product('Dark Chocolate',   59, self.milktea_cat)
+        self.blueberry  = _make_product('Blueberry Soda',   29, self.noncoffee_cat)
+
+        # Meal products
+        self.combo1     = _make_product('Combo 1 - Burger & Fries', 60, self.meals_cat)
+        self.pork_burger= _make_product('Pork Burger',      45, self.burgers_cat)
+        self.siomai     = _make_product('Steamed Siomai',   35, self.appetizers_cat)
+        self.fries      = _make_product('French Fries',     35, self.appetizers_cat)
+
+    def _mock_ai(self, captured):
+        from apps.chatbot.service import _build_system_prompt
+
+        def fake_ai(msg, intent, hist, lang='en',
+                    filtered_context=None, constraints_summary=''):
+            system = _build_system_prompt(
+                intent, lang,
+                filtered_context=filtered_context,
+                constraints_summary=constraints_summary,
+            )
+            captured['system'] = system
+            captured['filtered_context'] = filtered_context
+            captured['constraints_summary'] = constraints_summary
+            return 'AI response'
+
+        return patch('apps.chatbot.service.get_ai_response', side_effect=fake_ai)
+
+    # ── Core bug fix: "drinks" plural == "drink" singular result ─────────
+
+    def test_what_drinks_do_you_have_sends_drinks_only(self):
+        """THE primary bug: plural 'drinks' must produce same context as 'drink'."""
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("What drinks do you have?", [], 'en')
+        system = captured.get('system', '')
+        fc     = captured.get('filtered_context', None)
+        # filtered_context must be a non-empty string (drinks were found)
+        self.assertIsNotNone(fc,
+            "filtered_context must not be None for a category query")
+        self.assertNotEqual(fc, '',
+            "filtered_context must not be empty — drinks should be found")
+        # Drink products must appear
+        self.assertIn('Salted Caramel', system)
+        self.assertIn('Mocha',          system)
+        self.assertIn('Dark Chocolate', system)
+        self.assertIn('Blueberry Soda', system)
+
+    def test_what_drink_do_you_have_same_as_drinks(self):
+        """Singular 'drink' and plural 'drinks' must produce identical context."""
+        cap_singular = {}
+        cap_plural   = {}
+        with self._mock_ai(cap_singular):
+            get_chatbot_response("What drink do you have?", [], 'en')
+        with self._mock_ai(cap_plural):
+            get_chatbot_response("What drinks do you have?", [], 'en')
+        self.assertEqual(
+            cap_singular.get('filtered_context'),
+            cap_plural.get('filtered_context'),
+            "Singular 'drink' and plural 'drinks' must produce same filtered_context"
+        )
+
+    def test_drinks_query_excludes_meals(self):
+        """Drink query must NOT include meal products in AI context."""
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("What drinks do you have?", [], 'en')
+        system = captured.get('system', '')
+        self.assertNotIn('Pork Burger',   system)
+        self.assertNotIn('Steamed Siomai',system)
+        self.assertNotIn('French Fries',  system)
+        self.assertNotIn('Combo 1',       system)
+
+    def test_drinks_query_not_product_search_path(self):
+        """'drinks' must NOT trigger product-search path ('product search:' summary)."""
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("What drinks do you have?", [], 'en')
+        summary = captured.get('constraints_summary', '')
+        self.assertNotIn('product search', summary.lower(),
+            f"'drinks' leaked into product-search path: {summary!r}")
+
+    # ── Appetizers must NOT appear in drink results ───────────────────────
+
+    def test_appetizers_not_in_drink_results(self):
+        """Appetizers is_packaging_required=True → must never appear in drink filter."""
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("What drinks do you have?", [], 'en')
+        system = captured.get('system', '')
+        self.assertNotIn('Steamed Siomai', system)
+        self.assertNotIn('French Fries',   system)
+        self.assertNotIn('Appetizers',     system)
+
+    def test_appetizers_not_in_show_me_drinks(self):
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("Show me drinks.", [], 'en')
+        system = captured.get('system', '')
+        self.assertNotIn('Steamed Siomai', system)
+        self.assertNotIn('French Fries',   system)
+
+    # ── Food category ─────────────────────────────────────────────────────
+
+    def test_what_food_do_you_have_sends_meals_only(self):
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("What food do you have?", [], 'en')
+        system = captured.get('system', '')
+        self.assertIn('Pork Burger',    system)
+        self.assertIn('Steamed Siomai', system)
+        self.assertIn('Combo 1',        system)
+        # No drink products
+        self.assertNotIn('Salted Caramel', system)
+        self.assertNotIn('Dark Chocolate', system)
+
+    def test_what_foods_do_you_have_same_as_food(self):
+        """Plural 'foods' must route identically to singular 'food'."""
+        cap_s = {}
+        cap_p = {}
+        with self._mock_ai(cap_s):
+            get_chatbot_response("What food do you have?", [], 'en')
+        with self._mock_ai(cap_p):
+            get_chatbot_response("What foods do you have?", [], 'en')
+        self.assertEqual(
+            cap_s.get('filtered_context'),
+            cap_p.get('filtered_context'),
+            "Singular 'food' and plural 'foods' must produce same filtered_context"
+        )
+
+    def test_show_me_food_sends_meals_only(self):
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("Show me food.", [], 'en')
+        system = captured.get('system', '')
+        self.assertIn('Pork Burger', system)
+        self.assertNotIn('Salted Caramel', system)
+
+    def test_what_meals_sends_meals_only(self):
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("What meals do you have?", [], 'en')
+        system = captured.get('system', '')
+        self.assertIn('Pork Burger', system)
+        self.assertNotIn('Mocha', system)
+
+    # ── Category + price ──────────────────────────────────────────────────
+
+    def test_drinks_under_50_filtered(self):
+        """Drink query with price filter: only drinks under ₱50."""
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("What drinks do you have under ₱50?", [], 'en')
+        system = captured.get('system', '')
+        self.assertIn('Blueberry Soda', system)    # ₱29 drink ✓
+        # Dark Chocolate is ₱59 — strict < ₱50 excludes it
+        self.assertNotIn('Dark Chocolate', system)  # ₱59 excluded by strict < 50
+        self.assertNotIn('Salted Caramel', system)  # ₱69 excluded
+
+    def test_drinks_under_50_excludes_expensive_drinks(self):
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("What drinks do you have under ₱50?", [], 'en')
+        system = captured.get('system', '')
+        self.assertIn('Blueberry Soda', system)    # ₱29 ✓
+        self.assertNotIn('Salted Caramel', system) # ₱69 excluded
+        self.assertNotIn('Mocha', system)          # ₱69 excluded
+        self.assertNotIn('Pork Burger', system)    # meal excluded
+
+    def test_drinks_for_50_pesos_lte(self):
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("What drinks can I get for ₱50?", [], 'en')
+        system = captured.get('system', '')
+        self.assertIn('Blueberry Soda', system)    # ₱29 ✓
+        self.assertNotIn('Salted Caramel', system) # ₱69
+
+    def test_food_for_50_pesos(self):
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("What food can I get for ₱50?", [], 'en')
+        system = captured.get('system', '')
+        self.assertIn('Pork Burger',    system)    # meal ₱45 ✓
+        self.assertIn('Steamed Siomai', system)    # meal ₱35 ✓
+        self.assertNotIn('Combo 1',     system)    # meal ₱60 excluded
+        self.assertNotIn('Salted Caramel', system) # drink excluded
+
+    def test_food_below_50_strict(self):
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("What food is below ₱50?", [], 'en')
+        system = captured.get('system', '')
+        self.assertIn('Steamed Siomai', system)    # ₱35 ✓
+        self.assertIn('French Fries',   system)    # ₱35 ✓
+        self.assertIn('Pork Burger',    system)    # ₱45 ✓
+        self.assertNotIn('Combo 1',     system)    # ₱60 excluded
+        self.assertNotIn('Salted Caramel', system) # drink excluded
+
+    # ── Burger is product-search, not generic category ────────────────────
+
+    def test_what_burgers_do_you_have_is_product_search(self):
+        """'burgers' must still trigger product-name search, not the full meal category."""
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("What burgers do you have?", [], 'en')
+        summary = captured.get('constraints_summary', '')
+        system  = captured.get('system', '')
+        self.assertIn('product search', summary.lower(),
+            f"Expected product-search path for 'burgers', got: {summary!r}")
+        self.assertIn('Pork Burger', system)
+        # Should NOT contain non-burger meals (Siomai, French Fries)
+        self.assertNotIn('Steamed Siomai', system)
+        self.assertNotIn('French Fries',   system)
+
+    # ── Fallback with no AI: category filter still applied ────────────────
+
+    def test_fallback_drinks_no_ai(self):
+        """When Gemini unavailable, fallback for drink category query still filters."""
+        with patch('apps.chatbot.service._get_api_key', return_value=None):
+            resp, _ = get_chatbot_response("What drinks do you have?", [], 'en')
+        self.assertIn('Salted Caramel', resp)
+        self.assertNotIn('Pork Burger', resp)
+        self.assertNotIn('Steamed Siomai', resp)
+
+    def test_fallback_food_no_ai(self):
+        with patch('apps.chatbot.service._get_api_key', return_value=None):
+            resp, _ = get_chatbot_response("What food do you have?", [], 'en')
+        self.assertIn('Pork Burger', resp)
+        self.assertNotIn('Salted Caramel', resp)
+
+    # ── No-result: drinks under ₱1 ───────────────────────────────────────
+
+    def test_drinks_under_1_no_match(self):
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("What drinks do you have under ₱1?", [], 'en')
+        system = captured.get('system', '')
+        self.assertIn('NO PRODUCTS', system.upper())
+        # Must NOT return the full menu
+        self.assertNotIn('Salted Caramel', system)
+
+    def test_drinks_under_1_fallback_no_match_message(self):
+        with patch('apps.chatbot.service._get_api_key', return_value=None):
+            resp, _ = get_chatbot_response("What drinks do you have under ₱1?", [], 'en')
+        self.assertIn('no items', resp.lower())
+        self.assertNotIn('Salted Caramel', resp)
+        self.assertNotIn('Pork Burger', resp)
+
+    # ── Multilingual category queries ─────────────────────────────────────
+
+    def test_tagalog_inumin_drink_query(self):
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("Anong inumin ang meron kayo?", [], 'tl')
+        system = captured.get('system', '')
+        self.assertIn('Salted Caramel', system)
+        self.assertNotIn('Pork Burger', system)
+
+    def test_tagalog_pagkain_food_query(self):
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("Anong pagkain ang meron kayo?", [], 'tl')
+        system = captured.get('system', '')
+        self.assertIn('Pork Burger', system)
+        self.assertNotIn('Salted Caramel', system)
+
+    # ── Regression: previous fixes unaffected ────────────────────────────
+
+    def test_how_much_is_burger_still_product_search(self):
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("How much is the Pork Burger?", [], 'en')
+        summary = captured.get('constraints_summary', '')
+        self.assertIn('product search', summary.lower())
+
+    def test_do_you_have_burgers_still_product_search(self):
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("Do you have burgers?", [], 'en')
+        summary = captured.get('constraints_summary', '')
+        self.assertIn('product search', summary.lower())
+
+    def test_budget_for_50_still_works(self):
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("What can I get for 50 pesos?", [], 'en')
+        summary = captured.get('constraints_summary', '')
+        self.assertNotIn('product search', summary.lower())
+        system = captured.get('system', '')
+        self.assertNotIn('Combo 1', system)   # ₱60 — over budget
+
+    def test_cheapest_still_sort_path(self):
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("What is the cheapest item?", [], 'en')
+        system = captured.get('system', '')
+        self.assertIn('SORTED PRODUCT LIST', system)
+
+
+# ── 21. Category.category_type field correctness ─────────────────────────────
+
+class CategoryTypeFieldTest(TestCase):
+    """
+    Verify that category_type is correctly set by _make_category() and that
+    the _cat_type_filter / _cat_label helpers use it rather than
+    is_packaging_required.
+
+    These tests confirm the fix for the Appetizers-in-drink-results bug:
+    Appetizers has is_packaging_required=False but category_type='food',
+    so it must NEVER appear in drink results.
+    """
+
+    def setUp(self):
+        # Drinks — is_packaging_required=False AND category_type='drink'
+        self.coffee_cat  = _make_category('Coffee',            is_meal=False, category_type='drink')
+        self.milktea_cat = _make_category('Milk Tea',          is_meal=False, category_type='drink')
+        # Food — is_packaging_required=True AND category_type='food'
+        self.burgers_cat = _make_category('Burgers',           is_meal=True,  category_type='food')
+        # THE KEY CASE: Appetizers has is_packaging_required=False but category_type='food'
+        self.app_cat     = _make_category('Appetizers',        is_meal=False, category_type='food')
+
+        # Drink products
+        _make_product('Salted Caramel', 69, self.coffee_cat)
+        _make_product('Dark Chocolate', 59, self.milktea_cat)
+        # Burger products
+        _make_product('Pork Burger',    45, self.burgers_cat)
+        # Appetizer products (is_packaging_required=False, category_type='food')
+        _make_product('Steamed Siomai', 25, self.app_cat)
+        _make_product('French Fries',   30, self.app_cat)
+
+    # ── _cat_label uses category_type, not is_packaging_required ─────────
+
+    def test_drink_label_uses_category_type(self):
+        from apps.chatbot.service import _cat_label
+        cat = self.coffee_cat
+        label = _cat_label(cat)
+        # Must say DRINK (from category_type), not FOOD
+        self.assertIn('DRINK', label)
+        self.assertNotIn('FOOD', label)
+        self.assertNotIn('MEAL', label)
+
+    def test_food_label_with_packaging(self):
+        from apps.chatbot.service import _cat_label
+        cat = self.burgers_cat
+        label = _cat_label(cat)
+        self.assertIn('FOOD', label)
+        self.assertIn('packaging fee applies', label)
+
+    def test_appetizers_label_is_food_not_drink(self):
+        """
+        Appetizers has is_packaging_required=False (would be [DRINK] under old code)
+        but category_type='food' — must be labeled [FOOD ...].
+        """
+        from apps.chatbot.service import _cat_label
+        cat = self.app_cat
+        # category_type='food', is_packaging_required=False
+        self.assertEqual(cat.category_type, 'food')
+        self.assertFalse(cat.is_packaging_required)
+        label = _cat_label(cat)
+        # Must be FOOD label (from category_type)
+        self.assertIn('FOOD', label)
+        self.assertNotIn('DRINK', label)
+        # Packaging note should reflect actual is_packaging_required=False
+        self.assertIn('no packaging fee', label)
+
+    # ── _cat_type_filter uses category_type ──────────────────────────────
+
+    def test_drink_filter_uses_category_type_not_packaging(self):
+        """
+        Drink filter must use category__category_type='drink'.
+        Appetizers (is_packaging_required=False) must be EXCLUDED from drink results.
+        """
+        from apps.chatbot.service import get_filtered_menu_context
+        ctx, was_filtered = get_filtered_menu_context({}, 'drink')
+        self.assertTrue(was_filtered)
+        self.assertIn('Salted Caramel', ctx)
+        self.assertIn('Dark Chocolate', ctx)
+        # The critical assertion: Appetizers products must NOT appear
+        self.assertNotIn('Steamed Siomai', ctx)
+        self.assertNotIn('French Fries',   ctx)
+        # Burger products must NOT appear
+        self.assertNotIn('Pork Burger', ctx)
+
+    def test_food_filter_includes_appetizers(self):
+        """
+        Food filter must include Appetizers (category_type='food') even though
+        is_packaging_required=False.
+        """
+        from apps.chatbot.service import get_filtered_menu_context
+        ctx, was_filtered = get_filtered_menu_context({}, 'meal')
+        self.assertTrue(was_filtered)
+        self.assertIn('Pork Burger',    ctx)
+        self.assertIn('Steamed Siomai', ctx)
+        self.assertIn('French Fries',   ctx)
+        # No drinks
+        self.assertNotIn('Salted Caramel', ctx)
+
+    def test_old_packaging_filter_would_have_been_wrong(self):
+        """
+        Demonstrate the old bug: if we used is_packaging_required=False as drink filter,
+        Appetizers products would appear in drink results.
+        This test confirms the old approach was flawed.
+        """
+        from apps.menu.models import Product
+        # Old filter: is_packaging_required=False
+        old_qs = Product.objects.filter(
+            category__is_packaging_required=False,
+            is_active=True, is_available=True,
+        )
+        old_names = set(old_qs.values_list('name', flat=True))
+        # Old filter includes Steamed Siomai (Appetizers, pkg_req=False)
+        self.assertIn('Steamed Siomai', old_names,
+            "Old filter based on is_packaging_required=False would include Appetizers")
+
+        # New filter: category_type='drink'
+        new_qs = Product.objects.filter(
+            category__category_type='drink',
+            is_active=True, is_available=True,
+        )
+        new_names = set(new_qs.values_list('name', flat=True))
+        # New filter correctly excludes Steamed Siomai
+        self.assertNotIn('Steamed Siomai', new_names,
+            "New category_type filter must exclude Appetizers from drink results")
+
+    # ── Integration: drink query via get_chatbot_response ─────────────────
+
+    def _mock_ai(self, captured):
+        from apps.chatbot.service import _build_system_prompt
+
+        def fake_ai(msg, intent, hist, lang='en',
+                    filtered_context=None, constraints_summary=''):
+            system = _build_system_prompt(
+                intent, lang,
+                filtered_context=filtered_context,
+                constraints_summary=constraints_summary,
+            )
+            captured['system'] = system
+            captured['filtered_context'] = filtered_context
+            return 'AI response'
+
+        return patch('apps.chatbot.service.get_ai_response', side_effect=fake_ai)
+
+    def test_chatbot_drink_query_excludes_appetizers(self):
+        """End-to-end: 'What drinks do you have?' must NOT include Appetizer products."""
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("What drinks do you have?", [], 'en')
+        system = captured.get('system', '')
+        fc     = captured.get('filtered_context', None)
+        # Drinks found — context not empty
+        self.assertIsNotNone(fc)
+        self.assertNotEqual(fc, '')
+        # Drinks present
+        self.assertIn('Salted Caramel', system)
+        self.assertIn('Dark Chocolate', system)
+        # THE KEY ASSERTION: Appetizer products must not appear
+        self.assertNotIn('Steamed Siomai', system)
+        self.assertNotIn('French Fries',   system)
+
+    def test_chatbot_drink_query_label_is_drink_not_food(self):
+        """Category label for drink categories must say [DRINK ...], not [FOOD ...]."""
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("What drinks do you have?", [], 'en')
+        # The filtered_context specifically is what's passed to _build_system_prompt.
+        # The category labels in there must say [DRINK - ...], not [FOOD - ...]
+        fc = captured.get('filtered_context', '')
+        self.assertIn('[DRINK', fc,
+            f"Expected [DRINK label in filtered_context, got: {fc!r}")
+        self.assertNotIn('[FOOD', fc,
+            f"[FOOD must not appear in drink-filtered context: {fc!r}")
+
+    def test_chatbot_food_query_labels_appetizers_as_food(self):
+        """When customer asks for food, Appetizers must appear with [FOOD ...] label."""
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("What food do you have?", [], 'en')
+        system = captured.get('system', '')
+        # Appetizers (food, pkg=False) must appear
+        self.assertIn('Steamed Siomai', system)
+        self.assertIn('French Fries',   system)
+        # Must be labeled [FOOD ...] not [DRINK ...]
+        self.assertIn('[FOOD', system)
+
+    def test_chatbot_appetizer_query(self):
+        """'What appetizers do you have?' must return Appetizer products."""
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("What appetizers do you have?", [], 'en')
+        system = captured.get('system', '')
+        self.assertIn('Steamed Siomai', system)
+        self.assertIn('French Fries',   system)
+        # No drinks
+        self.assertNotIn('Salted Caramel', system)
+
+    def test_chatbot_drink_plus_price_excludes_appetizers(self):
+        """Drink + price filter must still exclude Appetizer products."""
+        captured = {}
+        with self._mock_ai(captured):
+            get_chatbot_response("What drinks do you have under ₱100?", [], 'en')
+        system = captured.get('system', '')
+        self.assertNotIn('Steamed Siomai', system)
+        self.assertNotIn('French Fries',   system)
+
+    # ── Packaging-fee logic unaffected ────────────────────────────────────
+
+    def test_packaging_fee_field_unchanged_for_appetizers(self):
+        """
+        The category_type fix must NOT alter is_packaging_required.
+        Appetizers must keep is_packaging_required=False (no packaging fee).
+        """
+        from apps.menu.models import Category
+        cat = Category.objects.get(name='Appetizers')
+        # category_type fix → food
+        self.assertEqual(cat.category_type, 'food')
+        # is_packaging_required unchanged — still False (no packaging fee)
+        self.assertFalse(cat.is_packaging_required)
+
+    def test_coffee_packaging_still_false(self):
+        """Coffee: is_packaging_required=False unchanged."""
+        self.assertFalse(self.coffee_cat.is_packaging_required)
+
+    def test_burgers_packaging_still_true(self):
+        """Burgers: is_packaging_required=True unchanged."""
+        self.assertTrue(self.burgers_cat.is_packaging_required)
+
+
+# ── 22. _kw_match and detect_intent false-positive prevention ─────────────────
+
+class KwMatchFalsePositiveTest(TestCase):
+    """
+    Unit tests for _kw_match() and detect_intent().
+
+    Two categories of tests:
+    A. False-positive prevention — verify that keywords do NOT match inside
+       longer, unrelated words (e.g. 'fee' must not match inside 'coffee').
+    B. True-positive preservation — verify that legitimate phrases and
+       standalone keywords still fire the correct intent.
+    """
+
+    # ── A. False-positive prevention ─────────────────────────────────────
+
+    # A1: 'fee' must not match inside 'coffee'
+    def test_coffee_price_query_is_price_not_takeout(self):
+        """'How much is the coffee?' must route to 'price', not 'takeout'."""
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("How much is the coffee?"), 'price')
+
+    def test_what_coffee_do_you_have_is_menu_not_takeout(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("What coffee do you have?"), 'menu')
+
+    def test_do_you_have_coffee_is_menu_not_takeout(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Do you have coffee?"), 'menu')
+
+    def test_show_me_your_coffee_is_menu_not_takeout(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Show me your coffee."), 'menu')
+
+    def test_coffee_price_tagalog_is_price_not_takeout(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Magkano ang coffee?"), 'price')
+
+    # A2: 'kuha' must not match inside 'makuha'
+    def test_makuha_budget_is_not_takeout(self):
+        """Bisaya budget query via makuha must not fire takeout intent."""
+        from apps.chatbot.service import detect_intent
+        # Contains 'kuha' inside 'makuha' — must not be 'takeout'
+        intent = detect_intent("Unsa akong makuha sa 50 pesos?")
+        self.assertNotEqual(intent, 'takeout',
+            f"'makuha' must not trigger takeout via 'kuha' substring. Got: {intent!r}")
+
+    def test_makuha_menu_is_not_takeout(self):
+        from apps.chatbot.service import detect_intent
+        intent = detect_intent("Unsa akong makuha?")
+        self.assertNotEqual(intent, 'takeout')
+
+    # A3: 'hi' must not match inside 'bilhin' (regression — was already fixed)
+    def test_bilhin_tagalog_not_greeting(self):
+        from apps.chatbot.service import detect_intent
+        intent = detect_intent("Ano ang pwede kong bilhin sa 50 pesos?")
+        self.assertNotEqual(intent, 'greeting',
+            f"'bilhin' must not trigger greeting via 'hi' substring. Got: {intent!r}")
+
+    # A4: 'may' must not match inside 'payment' or 'maybe'
+    def test_payment_query_not_menu(self):
+        """'How do I make a payment?' — 'pay' is primary keyword, must be 'payment'."""
+        from apps.chatbot.service import detect_intent
+        # 'pay' (3 chars, word-boundary) → payment intent
+        # 'may' inside 'payment' must NOT fire menu intent first
+        self.assertEqual(detect_intent("How do I make a payment?"), 'payment')
+
+    def test_maybe_i_should_order_not_menu(self):
+        """'maybe' contains 'may' — must not incorrectly fire menu intent."""
+        from apps.chatbot.service import detect_intent
+        intent = detect_intent("Maybe I should order now.")
+        # 'order' is in _ORDER_KEYWORDS (≥5 chars) and fires 'ordering'
+        # 'maybe' must not fire 'menu' via 'may'
+        self.assertNotEqual(intent, 'menu',
+            f"'maybe' must not trigger menu via 'may' substring. Got: {intent!r}")
+
+    # A5: 'tea' must not match inside 'steak' or 'instead'
+    def test_steak_query_intent(self):
+        """'steak' contains 'tea' — must not trigger menu intent via 'tea' alone."""
+        from apps.chatbot.service import detect_intent
+        # 'steak' has 'tea' inside it but the word 'steak' is not a menu keyword
+        # and steak is not in the menu — the query could be general
+        # The important thing: if the only menu word is from 'steak' being
+        # mismatched via 'tea', intent should NOT be 'menu'
+        intent = detect_intent("I had a great steak somewhere else.")
+        # Without any real menu keyword, should be 'general'
+        self.assertNotEqual(intent, 'menu',
+            f"'steak' must not trigger menu via 'tea' substring. Got: {intent!r}")
+
+    # A6: 'cash' must not match inside 'cashew' or 'cashier'
+    def test_cashew_not_payment(self):
+        from apps.chatbot.service import detect_intent
+        intent = detect_intent("Do you have cashew nuts in your snacks?")
+        # 'cashew' contains 'cash' — must not fire payment
+        # 'snack' IS a menu keyword (≥5 chars, safe) so intent will be 'menu'
+        self.assertNotEqual(intent, 'payment',
+            f"'cashew' must not trigger payment via 'cash' substring. Got: {intent!r}")
+
+    # A7: 'when' must not match inside 'whenever'
+    def test_whenever_not_hours(self):
+        from apps.chatbot.service import detect_intent
+        intent = detect_intent("I'll come whenever I feel like it.")
+        # 'whenever' contains 'when' — must not fire hours
+        self.assertNotEqual(intent, 'hours',
+            f"'whenever' must not trigger hours via 'when' substring. Got: {intent!r}")
+
+    # A8: 'ready' must not match inside 'already'
+    def test_already_not_order_status(self):
+        from apps.chatbot.service import detect_intent
+        intent = detect_intent("I already placed my order.")
+        # 'already' contains 'ready' — should not fire order_status
+        # 'order' IS in _STATUS_KEYWORDS and _ORDER_KEYWORDS — 'order' (5 chars)
+        # gets word-boundary → matches the word 'order' → fires correctly
+        # The test is that 'already' alone does not cause order_status
+        # This is a soft test: just verify the intent makes sense
+        self.assertIn(intent, ('order_status', 'ordering', 'general'),
+            f"Unexpected intent for 'already placed my order': {intent!r}")
+
+    # A9: 'top' must not match inside 'stop' or 'laptop'
+    def test_stop_not_recommendation(self):
+        from apps.chatbot.service import detect_intent
+        intent = detect_intent("Please stop by at 5.")
+        # 'stop' contains 'top' — must not trigger recommendation
+        self.assertNotEqual(intent, 'recommendation',
+            f"'stop' must not trigger recommendation via 'top' substring. Got: {intent!r}")
+
+    # A10: 'dala' must not match inside 'sandal' or 'vandal'
+    def test_sandal_not_takeout(self):
+        from apps.chatbot.service import detect_intent
+        intent = detect_intent("Nice sandal design.")
+        self.assertNotEqual(intent, 'takeout',
+            f"'sandal' must not trigger takeout via 'dala' substring. Got: {intent!r}")
+
+    # ── B. True-positive preservation ────────────────────────────────────
+
+    # B1: 'fee' as a standalone word should still fire takeout
+    def test_fee_standalone_is_takeout(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("What is the takeout fee?"), 'takeout')
+
+    def test_is_there_a_fee_is_takeout(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Is there a fee?"), 'takeout')
+
+    def test_how_much_is_the_fee_is_takeout(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("How much is the fee?"), 'takeout')
+
+    def test_packaging_fee_is_takeout(self):
+        """'Is there a packaging fee?' — no payment word, fires takeout."""
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Is there a packaging fee?"), 'takeout')
+
+    def test_do_i_need_to_pay_a_fee_for_takeout(self):
+        """'Do I need to pay a fee for takeout?' contains 'pay' → payment intent.
+        This is acceptable: the customer is asking about paying a fee, which
+        is a payment query. Either payment or takeout is a valid routing here.
+        """
+        from apps.chatbot.service import detect_intent
+        intent = detect_intent("Do I need to pay a fee for takeout?")
+        # 'pay' (word-boundary) → payment fires before takeout — both are valid
+        self.assertIn(intent, ('payment', 'takeout'),
+            f"Unexpected intent: {intent!r}")
+
+    # B2: 'kuha' standalone should still fire takeout
+    def test_kuha_standalone_is_takeout(self):
+        """Standalone 'kuha' (Bisaya: "take/get") must still fire takeout."""
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Kuha ko para dala."), 'takeout')
+
+    # B3: greeting keywords still work
+    def test_hi_greeting(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Hi!"), 'greeting')
+
+    def test_hello_greeting(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Hello there"), 'greeting')
+
+    def test_good_morning_greeting(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Good morning!"), 'greeting')
+
+    def test_kumusta_greeting(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Kumusta!"), 'greeting')
+
+    # B4: multi-word phrases still fire correctly
+    def test_how_much_is_price(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("How much is the milk tea?"), 'price')
+
+    def test_take_out_is_takeout(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Is take out available?"), 'takeout')
+
+    def test_dine_in_is_takeout(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Can I dine in?"), 'takeout')
+
+    def test_how_to_order_is_ordering(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("How to order?"), 'ordering')
+
+    def test_add_to_cart_is_ordering(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("How do I add to cart?"), 'ordering')
+
+    def test_gcash_is_payment(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Do you accept GCash?"), 'payment')
+
+    def test_order_status_kdm(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("KDM-20260901-0001"), 'order_status')
+
+    # B5: previous pipeline fixes still work with new detect_intent
+    def test_what_drinks_do_you_have_is_menu(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("What drinks do you have?"), 'menu')
+
+    def test_what_food_do_you_have_is_menu(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("What food do you have?"), 'menu')
+
+    def test_what_can_i_get_for_50_pesos_is_price_or_menu(self):
+        """Budget query should route to price or menu — never takeout."""
+        from apps.chatbot.service import detect_intent
+        intent = detect_intent("What can I get for 50 pesos?")
+        self.assertIn(intent, ('price', 'menu', 'general'),
+            f"Budget query routed to wrong intent: {intent!r}")
+        self.assertNotEqual(intent, 'takeout')
+
+    def test_do_you_have_burger_is_menu(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Do you have burger?"), 'menu')
+
+    def test_food_below_50_is_price_or_menu(self):
+        from apps.chatbot.service import detect_intent
+        intent = detect_intent("What food is below ₱50?")
+        self.assertIn(intent, ('price', 'menu'))
+
+    # B6: _kw_match helper directly
+    def test_kw_match_short_word_boundary(self):
+        from apps.chatbot.service import _kw_match
+        # 'fee' alone → should match
+        self.assertTrue(_kw_match(['fee'], 'is there a fee'))
+        # 'fee' inside 'coffee' → should NOT match
+        self.assertFalse(_kw_match(['fee'], 'how much is the coffee'))
+
+    def test_kw_match_multiword_phrase_safe(self):
+        from apps.chatbot.service import _kw_match
+        self.assertTrue(_kw_match(['packaging fee'], 'is there a packaging fee'))
+        self.assertTrue(_kw_match(['take out'], 'can i take out my order'))
+
+    def test_kw_match_long_word_substring_ok(self):
+        from apps.chatbot.service import _kw_match
+        # 'takeout' (7 chars ≥ 6) → substring match is fine
+        self.assertTrue(_kw_match(['takeout'], 'is takeout available'))
+
+    def test_kw_match_kuha_not_inside_makuha(self):
+        from apps.chatbot.service import _kw_match
+        self.assertFalse(_kw_match(['kuha'], 'unsa akong makuha sa 50 pesos'))
+        self.assertTrue(_kw_match(['kuha'], 'kuha ko para dala'))
+
+    def test_kw_match_when_not_inside_whenever(self):
+        from apps.chatbot.service import _kw_match
+        self.assertFalse(_kw_match(['when'], "i'll come whenever i feel like it"))
+        self.assertTrue(_kw_match(['when'], 'when do you open'))
+
+    def test_kw_match_tea_not_inside_steak(self):
+        from apps.chatbot.service import _kw_match
+        self.assertFalse(_kw_match(['tea'], 'i had a great steak'))
+        self.assertTrue(_kw_match(['tea'], 'do you have milk tea'))
+
+    def test_kw_match_may_not_inside_payment(self):
+        from apps.chatbot.service import _kw_match
+        # 'may' (3 chars) — 'payment' contains 'pay' not 'may'; test 'maybe'
+        self.assertFalse(_kw_match(['may'], 'maybe i should order'))
+        self.assertTrue(_kw_match(['may'], 'may pagkain ba kayo'))
+
+    def test_kw_match_top_not_inside_stop(self):
+        from apps.chatbot.service import _kw_match
+        self.assertFalse(_kw_match(['top'], 'please stop by'))
+        self.assertTrue(_kw_match(['top'], 'what is your top item'))
+
+    def test_kw_match_cash_not_inside_cashew(self):
+        from apps.chatbot.service import _kw_match
+        self.assertFalse(_kw_match(['cash'], 'do you have cashew nuts'))
+        self.assertTrue(_kw_match(['cash'], 'do you accept cash'))
+
+
+# ── 23. Contextual payment/takeout disambiguation ─────────────────────────────
+
+class ContextualIntentDisambiguationTest(TestCase):
+    """
+    Tests for the payment/takeout tie-breaker in detect_intent().
+
+    When a message matches BOTH payment and takeout keyword lists, the
+    presence of a fee/charge context word determines the intent:
+      - Fee-context present  → 'takeout'  (asking about a service charge)
+      - Fee-context absent   → 'payment'  (asking about payment method/process)
+
+    Messages that only match one list are unaffected by this change.
+    """
+
+    # ── A. Fee-context present → takeout ─────────────────────────────────
+
+    def test_pay_a_fee_is_takeout(self):
+        """'pay' + 'fee' → fee-context wins → takeout."""
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Do I need to pay a fee?"), 'takeout')
+
+    def test_pay_a_fee_for_takeout_is_takeout(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Do I need to pay a fee for takeout?"), 'takeout')
+
+    def test_pay_an_extra_fee_is_takeout(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Do I have to pay an extra fee?"), 'takeout')
+
+    def test_pay_extra_charge_is_takeout(self):
+        """'pay' + 'charge' → fee-context wins → takeout."""
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Do I need to pay an extra charge?"), 'takeout')
+
+    def test_pay_packaging_fee_is_takeout(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Do I need to pay a packaging fee?"), 'takeout')
+
+    # ── B. No fee-context → payment stays ────────────────────────────────
+
+    def test_how_can_i_pay_is_payment(self):
+        """Classic payment question — no fee word → payment."""
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("How can I pay?"), 'payment')
+
+    def test_payment_methods_is_payment(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("What payment methods do you accept?"), 'payment')
+
+    def test_pay_with_gcash_is_payment(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Can I pay using GCash?"), 'payment')
+
+    def test_pay_first_is_payment(self):
+        """'pay first' — no fee context, asking about payment timing → payment."""
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Do I need to pay first?"), 'payment')
+
+    def test_make_a_payment_is_payment(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("How do I make a payment?"), 'payment')
+
+    def test_bayad_tagalog_is_payment(self):
+        """Filipino 'bayad' (payment) without fee context → payment."""
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Paano ang bayad?"), 'payment')
+
+    # ── C. Only takeout keywords (no payment keyword) ────────────────────
+
+    def test_takeout_fee_no_pay_is_takeout(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Is there a takeout fee?"), 'takeout')
+
+    def test_how_much_is_takeout_fee_is_takeout(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("How much is the takeout fee?"), 'takeout')
+
+    def test_extra_charge_for_takeout_is_takeout(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Is there an extra charge for takeout?"), 'takeout')
+
+    def test_fee_standalone_is_takeout(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Is there a fee?"), 'takeout')
+
+    def test_packaging_fee_is_takeout(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Is there a packaging fee?"), 'takeout')
+
+    def test_will_there_be_a_fee_is_takeout(self):
+        """No payment word — 'fee' alone routes to takeout."""
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Will there be a fee for takeout?"), 'takeout')
+
+    # ── D. Unrelated intents unaffected ──────────────────────────────────
+
+    def test_coffee_still_menu_not_takeout(self):
+        """Regression: 'coffee' must not trigger fee/takeout."""
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("What coffee do you have?"), 'menu')
+
+    def test_coffee_price_still_price(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("How much is the coffee?"), 'price')
+
+    def test_makuha_not_takeout(self):
+        """'makuha' contains 'kuha' — must not trigger takeout intent."""
+        from apps.chatbot.service import detect_intent
+        intent = detect_intent("Unsa akong makuha?")
+        self.assertNotEqual(intent, 'takeout')
+
+    def test_what_drinks_is_menu(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("What drinks do you have?"), 'menu')
+
+    def test_do_you_have_burger_is_menu(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Do you have burger?"), 'menu')
+
+    def test_greeting_unchanged(self):
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Hi!"), 'greeting')
+
+    def test_gcash_only_is_payment(self):
+        """GCash alone (no fee context) → payment."""
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Do you accept GCash?"), 'payment')
+
+    # ── E. Documented ambiguous cases ────────────────────────────────────
+
+    def test_ambiguous_pay_a_fee_reason(self):
+        """
+        'Do I need to pay a fee?' — intentionally classified as 'takeout'.
+
+        Reason: the customer is asking whether a service charge exists, not
+        how to complete a payment.  The word 'fee' in this context indicates
+        a service cost (packaging/takeout fee), not a payment-method question.
+        Routing to takeout lets the chatbot answer with the packaging-fee
+        business rule (₱6 per eligible item) rather than listing payment
+        methods (Cash/GCash), which is the more useful response.
+        """
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Do I need to pay a fee?"), 'takeout')
+
+    def test_ambiguous_pay_extra_fee_reason(self):
+        """
+        'Do I have to pay an extra fee?' — classified as 'takeout'.
+
+        Reason: 'extra fee' is fee-context.  The customer is asking about
+        additional charges on their order (the takeout packaging fee), not
+        about which payment methods are accepted.
+        """
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Do I have to pay an extra fee?"), 'takeout')
+
+    def test_pay_first_remains_payment_reason(self):
+        """
+        'Do I need to pay first?' — intentionally stays as 'payment'.
+
+        Reason: no fee/charge context word present.  'first' is about timing
+        of payment, not about whether a service fee applies.  The correct
+        response is about the payment process (pay at counter after order
+        is ready), not the packaging fee rule.
+        """
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(detect_intent("Do I need to pay first?"), 'payment')

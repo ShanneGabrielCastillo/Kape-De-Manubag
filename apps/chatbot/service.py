@@ -176,31 +176,109 @@ _RECOMMENDATION_KEYWORDS = [
 ]
 
 
+def _kw_match(keyword_list: list[str], text: str) -> bool:
+    """
+    Return True if *text* (pre-lowercased message) matches any keyword in
+    *keyword_list*, using the safest matching rule for each keyword:
+
+    - Multi-word phrases (contain a space or hyphen) → plain substring ``in``
+      check.  A phrase like 'packaging fee' or 'take out' can never appear
+      accidentally inside a single, unrelated word, so substring matching is
+      perfectly safe for them.
+
+    - Single words ≤ 5 characters → ``\\b`` word-boundary regex.  Short words
+      are the primary source of false positives ('fee' inside 'coffee',
+      'kuha' inside 'makuha', 'when' inside 'whenever', etc.).  The boundary
+      check ensures the keyword is a complete token.
+
+    - Single words ≥ 6 characters → plain substring ``in`` check.  A 6-char
+      word is unlikely to appear coincidentally inside another common word in
+      a café customer-service context; this keeps the common path fast.
+
+    The split at 5/6 chars is deliberate and conservative — if a word is
+    only 5 chars or fewer it can easily be a substring of a longer word.
+
+    Note on Filipino/Bisaya: keywords such as 'kuha' (4 chars, "get/take")
+    must NOT match inside 'makuha' ("to get"), so they get word-boundary
+    treatment like any other short English word.
+
+    This function replaces the ad-hoc ``any(k in m for k in list)`` pattern
+    that was used in detect_intent() and caused false positives.
+    """
+    for kw in keyword_list:
+        # Multi-word phrase (space or hyphen inside) → substring match is safe
+        if ' ' in kw or ('-' in kw and len(kw) > 4):
+            if kw in text:
+                return True
+        # Short single word → require word boundary
+        elif len(kw) <= 5:
+            if re.search(r'\b' + re.escape(kw) + r'\b', text):
+                return True
+        # Longer single word → substring match is safe
+        else:
+            if kw in text:
+                return True
+    return False
+
+
 def detect_intent(message: str) -> str:
     """
     Return a coarse intent label for the message.
     Deterministic, no DB, no AI call.
     Covers English, Filipino/Tagalog, and Cebuano/Bisaya.
+
+    Uses _kw_match() for all intent checks, which applies word-boundary
+    matching for short keywords (≤ 5 chars) to prevent false positives such
+    as 'fee' matching inside 'coffee' or 'kuha' matching inside 'makuha'.
+
+    Contextual tie-breaker: when a message matches BOTH payment and takeout
+    keywords, the presence of a fee/charge context word signals the question
+    is about the cost of a takeout service rather than a payment method —
+    "Do I need to pay a fee?" → takeout; "Can I pay with GCash?" → payment.
     """
     m = message.lower()
 
-    if any(k in m for k in _GREETING_KEYWORDS) and len(m) < 50:
+    # Greeting is special: short messages only (< 50 chars) to avoid
+    # triggering on product queries that happen to start with a greeting word.
+    if _kw_match(_GREETING_KEYWORDS, m) and len(m) < 50:
         return 'greeting'
-    if any(k in m for k in _STATUS_KEYWORDS):
+    if _kw_match(_STATUS_KEYWORDS, m):
         return 'order_status'
-    if any(k in m for k in _PAYMENT_KEYWORDS):
+
+    # ── Payment / takeout contextual disambiguation ────────────────────────
+    # Both lists are checked together so whichever fires second isn't silently
+    # lost.  If only one matches, return it directly.  If both match, a
+    # fee-context word decides: the customer is asking about a service charge
+    # (takeout) rather than about payment method or process (payment).
+    #
+    # Fee-context indicators (all ≤ 5 chars → word-boundary match via _kw_match):
+    #   'fee', 'charge', 'extra charge', 'extra fee', 'packaging fee'
+    # These are already in _TAKEOUT_KEYWORDS so _kw_match handles them correctly.
+    _hits_payment = _kw_match(_PAYMENT_KEYWORDS, m)
+    _hits_takeout = _kw_match(_TAKEOUT_KEYWORDS, m)
+
+    if _hits_payment and _hits_takeout:
+        # Both match — use fee/charge context to break the tie
+        _FEE_CONTEXT = ['fee', 'charge', 'extra charge', 'extra fee',
+                        'packaging fee', 'packaging', 'bayad sa takeout',
+                        'bayad sa fee', 'charge sa', 'bayad ng']
+        if _kw_match(_FEE_CONTEXT, m):
+            return 'takeout'
         return 'payment'
-    if any(k in m for k in _TAKEOUT_KEYWORDS):
+    if _hits_payment:
+        return 'payment'
+    if _hits_takeout:
         return 'takeout'
-    if any(k in m for k in _RECOMMENDATION_KEYWORDS):
+
+    if _kw_match(_RECOMMENDATION_KEYWORDS, m):
         return 'recommendation'
-    if any(k in m for k in _PRICE_KEYWORDS):
+    if _kw_match(_PRICE_KEYWORDS, m):
         return 'price'
-    if any(k in m for k in _MENU_KEYWORDS):
+    if _kw_match(_MENU_KEYWORDS, m):
         return 'menu'
-    if any(k in m for k in _ORDER_KEYWORDS):
+    if _kw_match(_ORDER_KEYWORDS, m):
         return 'ordering'
-    if any(k in m for k in _HOURS_KEYWORDS):
+    if _kw_match(_HOURS_KEYWORDS, m):
         return 'hours'
     return 'general'
 
@@ -359,23 +437,45 @@ def extract_category_type(message: str) -> str | None:
 
     Uses keyword matching only — does not call the DB or AI.
     Covers English, Filipino, and Cebuano/Bisaya.
+
+    The returned value is used as a filter key in _cat_type_filter(), which
+    maps:
+        'drink' → Category.category_type = 'drink'
+                  (Coffee, Milk Tea, Non-Coffee Drinks, ...)
+        'meal'  → Category.category_type = 'food'
+                  (Combo Meals, Pastil Meals, Burgers, Snacks,
+                   Appetizers, Ala Carte, Rice Meals, ...)
+
+    This uses Category.category_type (the explicit semantic field added in
+    migration 0006), NOT is_packaging_required.  Appetizers have
+    is_packaging_required=False but category_type='food', so they are
+    correctly excluded from drink results.
+
+    NOTE: 'drink'/'drinks' are category-type signals here, separate from
+    _NOISE_TERMS.  Both must be present so:
+      - extract_product_name("What drinks do you have?") → None  (noise → skip)
+      - extract_category_type("What drinks do you have?") → 'drink' (correct)
+    Together they ensure "drinks" queries reach the category-filtered DB path.
     """
     m = message.lower()
 
     _MEAL_WORDS = [
-        # English
-        'food', 'meal', 'meals', 'rice', 'burger', 'burgers', 'snack', 'snacks',
+        # English — both singular and plural explicit for clarity
+        'food', 'foods', 'meal', 'meals',
+        'rice', 'burger', 'burgers', 'snack', 'snacks',
         'pastil', 'combo', 'combos', 'dish', 'dishes', 'eat', 'eating',
+        'appetizer', 'appetizers',
         'viand', 'ulam', 'meryenda', 'lunch', 'dinner', 'breakfast',
         # Filipino
         'pagkain', 'pagkaon', 'kain', 'kanin', 'almusal', 'tanghalian', 'hapunan',
         # Cebuano/Bisaya
-        'sud-an', 'sud-an', 'sud an', 'pagkaon', 'kaon',
+        'sud-an', 'sud an', 'kaon',
     ]
 
     _DRINK_WORDS = [
-        # English
-        'drink', 'drinks', 'beverage', 'beverages', 'coffee', 'tea', 'juice',
+        # English — singular form sufficient (substring matches plural)
+        'drink', 'drinks', 'beverage', 'beverages',
+        'coffee', 'tea', 'juice',
         'shake', 'shakes', 'smoothie', 'milk tea', 'milktea', 'frappe',
         'latte', 'cappuccino', 'americano', 'espresso', 'hot drink',
         # Filipino
@@ -475,8 +575,8 @@ _PRODUCT_QUERY_PATTERNS = [
 
 # Words to strip from the end of an extracted product name
 _NAME_TAIL_NOISE = re.compile(
-    r'\s*\??\s*$'
-    r'|(?:\s+please|\s+po|\s+ba|\s+nga|\s+lang|\s+ha|\s+ha\?|\s+noh?|\s+din|\s+daw)\s*$',
+    r'[\.\!\?]*\s*$'
+    r'|(?:\s+please|\s+po|\s+ba|\s+nga|\s+lang|\s+ha|\s+ha\?|\s+noh?|\s+din|\s+daw)\s*[\.\!\?]*\s*$',
     re.IGNORECASE,
 )
 
@@ -520,16 +620,54 @@ _NAME_LEAD_NOISE = re.compile(
     re.IGNORECASE,
 )
 
-# Short stop-words that, if they make up the entire extracted term, are noise
+# Short stop-words that, if they make up the entire extracted term, are noise.
+# These are CATEGORY-TYPE generics — saying one of these alone means the
+# customer is asking about a category, not a specific product by name.
+# CRITICAL: both singular AND plural forms must be listed here, otherwise
+# "drinks" (plural of noise-term "drink") slips through as a product name
+# and triggers a product search that finds nothing.
 _NOISE_TERMS = {
-    'something', 'anything', 'food', 'meal', 'drink', 'item', 'product',
-    'menu', 'eat', 'order', 'available', 'cheap', 'cheaper', 'expensive',
-    'recommend', 'suggestion', 'suggestions', 'good', 'best',
-    # Filipino — generic action verbs that are NOT product names
-    'pagkain', 'inumin', 'pagkaon', 'sud-an', 'kain', 'inom',
+    # ── English generic category/type words ──────────────────────────────
+    # food / meal
+    'food', 'foods', 'meal', 'meals',
+    # drink / beverage
+    'drink', 'drinks', 'beverage', 'beverages',
+    # appetizer
+    'appetizer', 'appetizers',
+    # catch-all
+    'item', 'items', 'product', 'products', 'menu',
+    'snack', 'snacks',
+    # action/intent verbs — not product names
+    'something', 'anything', 'eat', 'eating', 'order', 'ordering',
+    'available',
+    # quality adjectives / superlatives — not product names
+    'cheap', 'cheaper', 'cheapest', 'cheapest item', 'most affordable',
+    'expensive', 'most expensive', 'most expensive item', 'priciest',
+    'good', 'best',
+    'recommend', 'recommendation', 'suggestion', 'suggestions',
+    # Filipino/Bisaya superlatives — not product names
+    'pinakamura', 'pinaka mura', 'pinakabarato', 'pinaka barato',
+    'pinakamahal', 'pinaka mahal', 'pinakamataas', 'pinakamababa',
+
+    # ── Filipino generic category/type words ─────────────────────────────
+    'pagkain',   # food (Tagalog)
+    'inumin',    # drink (Tagalog)
+    # Filipino action verbs extracted by patterns — not product names
     'mabibili', 'makukuha', 'makuha', 'bilhin', 'paliton',
     'mabibili ko', 'makukuha ko', 'makuha ko', 'bilhin ko',
-    # Bisaya — same pattern
+    # Multi-word Filipino action phrases that survive budget-suffix stripping
+    'pwede kong bilhin', 'pwede kong makuha', 'pwede kong gawin',
+    'pwede kong i-order', 'mabibili ko dito', 'makukuha ko dito',
+    'makukuha ko', 'pwede kong',
+    # Filipino generic pronouns/words that can be extracted from patterns
+    'kayo', 'kayong', 'kayo ba', 'ba kayo', 'ninyo', 'nila',
+
+    # ── Bisaya/Cebuano generic category/type words ────────────────────────
+    'pagkaon',   # food (Bisaya)
+    'sud-an',    # viand/food (Bisaya)
+    'kain',      # eat/food (Tagalog/Bisaya)
+    'inom',      # drink (Bisaya)
+    # Bisaya action verbs — not product names
     'mapalit', 'makuha nako', 'mapalit nako', 'paliton nako',
     'akong makuha', 'akong mapalit', 'nako makuha',
 }
@@ -656,9 +794,14 @@ def normalize_search_term(term: str) -> list[str]:
         # burgers → burger
         _add(last[:-1])
 
-    # 4. Term ends in consonant (not 's') → try adding 's'
+    # 4. Term ends in a consonant (not 's') → try adding 's'
     _VOWELS = set('aeiou')
     if last and last[-1] not in _VOWELS and last[-1] != 's':
+        _add(last + 's')
+
+    # 4b. Term ends in a vowel (not 's') → also try adding 's'
+    #     Covers regular English plurals like 'tea' → 'teas', 'latte' → 'lattes'.
+    if last and last[-1] in _VOWELS:
         _add(last + 's')
 
     # 5. Term ends in 'y' → try 'ies'
@@ -666,6 +809,58 @@ def normalize_search_term(term: str) -> list[str]:
         _add(last[:-1] + 'ies')
 
     return candidates
+
+
+# ── Category type helpers ─────────────────────────────────────────────────────
+
+def _cat_type_filter(qs, category_type: str | None):
+    """
+    Apply a chatbot category_type filter to a Product queryset.
+
+    Uses Category.category_type (the semantic drink/food field added in
+    migration 0006) — NOT is_packaging_required, which is the packaging-fee
+    business rule and must not be repurposed as a food/drink discriminator.
+
+    Args:
+        qs:            Product queryset already filtered for active/available.
+        category_type: 'meal' / 'drink' / None
+
+    Returns the (possibly further filtered) queryset.
+    """
+    if category_type == 'meal':
+        return qs.filter(category__category_type='food')
+    if category_type == 'drink':
+        return qs.filter(category__category_type='drink')
+    return qs
+
+
+def _cat_label(cat) -> str:
+    """
+    Return the chatbot context label for a Category instance.
+
+    Uses Category.category_type (semantic field) for the drink/food label,
+    and Category.is_packaging_required only for the packaging-fee note.
+
+    Examples:
+        Coffee (type=drink, pkg=False)   → '[DRINK - no packaging fee]'
+        Burgers (type=food, pkg=True)    → '[FOOD - packaging fee applies for takeout]'
+        Appetizers (type=food, pkg=False)→ '[FOOD - no packaging fee]'
+        DraftCat (type=drink, pkg=False) → '[DRINK - no packaging fee]'
+    """
+    from apps.menu.models import Category as _Cat
+    if cat.category_type == _Cat.DRINK:
+        type_label = 'DRINK'
+    elif cat.category_type == _Cat.FOOD:
+        type_label = 'FOOD'
+    else:
+        type_label = 'OTHER'
+
+    if cat.is_packaging_required:
+        pkg_note = 'packaging fee applies for takeout'
+    else:
+        pkg_note = 'no packaging fee'
+
+    return f'[{type_label} - {pkg_note}]'
 
 
 # ── Product name ORM lookup ───────────────────────────────────────────────────
@@ -722,10 +917,7 @@ def query_products_by_name(
             .distinct()
         )
 
-        if category_type == 'meal':
-            qs = qs.filter(category__is_packaging_required=True)
-        elif category_type == 'drink':
-            qs = qs.filter(category__is_packaging_required=False)
+        qs = _cat_type_filter(qs, category_type)
 
         # Optional price constraints (hybrid: "What burgers can I get for ₱50?")
         if constraints:
@@ -746,7 +938,7 @@ def query_products_by_name(
         lines = []
         for p in products:
             cat = p.category
-            pkg = '[MEAL]' if cat.is_packaging_required else '[DRINK]'
+            label = _cat_label(cat)
             price_str = f'₱{p.price}'
             if p.has_sizes:
                 extras = []
@@ -757,7 +949,7 @@ def query_products_by_name(
                 if extras:
                     price_str += f' ({" / ".join(extras)})'
             desc = f' — {p.description[:80]}' if p.description else ''
-            lines.append(f'  - {p.name} {pkg} ({cat.name}): {price_str}{desc}')
+            lines.append(f'  - {p.name} {label} ({cat.name}): {price_str}{desc}')
 
         return '\n'.join(lines), True
 
@@ -831,10 +1023,7 @@ def _sorted_products_context(
             .select_related('category')
         )
 
-        if category_type == 'meal':
-            qs = qs.filter(category__is_packaging_required=True)
-        elif category_type == 'drink':
-            qs = qs.filter(category__is_packaging_required=False)
+        qs = _cat_type_filter(qs, category_type)
 
         products = list(qs.order_by(order_field, 'name')[:limit])
 
@@ -844,7 +1033,7 @@ def _sorted_products_context(
         lines = []
         for p in products:
             cat = p.category
-            pkg = '[MEAL]' if cat.is_packaging_required else '[DRINK]'
+            label = _cat_label(cat)
             price_str = f'₱{p.price}'
             if p.has_sizes:
                 extras = []
@@ -855,7 +1044,7 @@ def _sorted_products_context(
                 if extras:
                     price_str += f' ({" / ".join(extras)})'
             desc = f' — {p.description[:80]}' if p.description else ''
-            lines.append(f'  - {p.name} {pkg} ({cat.name}): {price_str}{desc}')
+            lines.append(f'  - {p.name} {label} ({cat.name}): {price_str}{desc}')
 
         return '\n'.join(lines), True
 
@@ -926,11 +1115,9 @@ def get_filtered_menu_context(
             category__is_active=True,
         )
 
-        # Category type filter
-        if category_type == 'meal':
-            qs = qs.filter(category__is_packaging_required=True)
-        elif category_type == 'drink':
-            qs = qs.filter(category__is_packaging_required=False)
+        # Category type filter — uses Category.category_type (semantic field),
+        # NOT is_packaging_required (packaging-fee rule, unrelated to food/drink).
+        qs = _cat_type_filter(qs, category_type)
 
         # Price filters — applied to the base price field
         # For products with size variants we use the base price as the
@@ -959,8 +1146,7 @@ def get_filtered_menu_context(
             cat = p.category
             if cat.pk != (current_cat.pk if current_cat else None):
                 current_cat = cat
-                pkg = ' [MEAL - packaging fee applies for takeout]' if cat.is_packaging_required else ' [DRINK - no packaging fee]'
-                lines.append(f'{cat.name}{pkg}:')
+                lines.append(f'{cat.name} {_cat_label(cat)}:')
 
             price_str = f'₱{p.price}'
             if p.has_sizes:
@@ -1022,9 +1208,8 @@ def get_menu_context() -> str:
                     desc = f' — {p.description[:60]}'
                 items.append(f'  - {p.name}: {price_str}{desc}')
             if items:
-                # Include category packaging info so AI knows meal vs drink
-                packaging_note = ' [MEAL - packaging fee applies for takeout]' if cat.is_packaging_required else ' [DRINK - no packaging fee]'
-                lines.append(f'{cat.name}{packaging_note}:')
+                # Label uses category_type (semantic field), not is_packaging_required
+                lines.append(f'{cat.name} {_cat_label(cat)}:')
                 lines.extend(items)
 
         return '\n'.join(lines) if lines else 'Menu is currently unavailable.'
@@ -1665,7 +1850,11 @@ def get_chatbot_response(message: str, history: list[dict], language: str = 'en'
     constraints   = {}
     category_type = None
 
-    if intent in ('menu', 'price', 'recommendation', 'general'):
+    # Run product/price extraction for all intents that could carry product or
+    # price information — including 'takeout' and 'ordering' because Bisaya/Filipino
+    # phrases like "makuha" trigger the takeout intent via substring match on 'kuha',
+    # but they may actually be budget or product queries.
+    if intent in ('menu', 'price', 'recommendation', 'general', 'takeout', 'ordering'):
         product_name = extract_product_name(message)
 
         if product_name:

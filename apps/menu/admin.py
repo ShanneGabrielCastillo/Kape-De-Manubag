@@ -10,8 +10,9 @@ from .services import annotate_order_reference_counts
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ['name', 'icon', 'is_active', 'order']
-    list_editable = ['is_active', 'order']
+    list_display  = ['name', 'icon', 'category_type', 'is_packaging_required', 'is_active', 'order']
+    list_editable = ['category_type', 'is_packaging_required', 'is_active', 'order']
+    list_filter   = ['category_type', 'is_packaging_required', 'is_active']
     prepopulated_fields = {'slug': ('name',)}
 
     def delete_view(self, request, object_id, extra_context=None):
