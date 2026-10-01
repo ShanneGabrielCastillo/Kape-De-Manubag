@@ -335,11 +335,14 @@ class DashboardStatisticsTests(TestCase):
         data = response.context['chart_data']
         self.assertEqual(len(labels), 7)
         self.assertEqual(len(data), 7)
+        self.assertEqual(labels, ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'])
+        # Compute the Sunday-start week_start using the same formula as the view.
+        week_start = self.today - timedelta(days=self.today.isoweekday() % 7)
         expected = []
-        for i in range(6, -1, -1):
-            day = self.today - timedelta(days=i)
+        for i in range(7):
+            day = week_start + timedelta(days=i)
             total = Order.objects.filter(
-                is_paid=True, created_at__date=day,
+                is_paid=True, status='completed', created_at__date=day,
             ).aggregate(t=Sum('total'))['t'] or 0
             expected.append(float(total))
         self.assertEqual(data, expected)
@@ -477,7 +480,9 @@ class DashboardSummaryEndpointTests(TestCase):
         # Chart series for the requested period (7 days for week)
         self.assertEqual(len(data['chart_labels']), 7)
         self.assertEqual(len(data['chart_data']), 7)
-        self.assertEqual(data['chart_data'][-1], 100.0)  # today's paid sales
+        # today's sales appear at today's index within the Sun–Sat week
+        today_index = timezone.localdate().isoweekday() % 7  # Sun=0 … Sat=6
+        self.assertEqual(data['chart_data'][today_index], 100.0)
 
         # Top products (Americano 6 sold / ₱260; Latte 1 / ₱40)
         self.assertEqual(data['top_products'][0]['product_name'], 'Americano')

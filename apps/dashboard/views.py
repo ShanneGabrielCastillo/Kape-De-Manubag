@@ -140,7 +140,7 @@ def _chart_series(period='week', label_fmt=None):
     whole range instead of one per day.
 
     Period boundaries come from _period_start() — the single source of truth:
-      'week'  → Sunday of the current calendar week … today  (Sun–Sat)
+      'week'  → Sunday of the current calendar week … Saturday (always 7 days)
       'month' → 1st of the current calendar month  … today
 
     Filters: is_paid=True AND status='completed' — matches _sales_stats() and
@@ -149,11 +149,20 @@ def _chart_series(period='week', label_fmt=None):
     today = timezone.localdate()
     start = _period_start(period, today)
 
+    if period == 'week':
+        end = start + timedelta(days=6)   # always Saturday (Sun + 6 = Sat)
+    else:
+        end = today                        # month: up to today only
+
     if label_fmt is None:
         label_fmt = '%b %d' if period == 'month' else '%a'
 
     day_sales = (
-        Order.objects.filter(is_paid=True, status='completed', created_at__date__gte=start)
+        Order.objects.filter(
+            is_paid=True, status='completed',
+            created_at__date__gte=start,
+            created_at__date__lte=end,
+        )
         .annotate(day=TruncDate('created_at'))
         .values('day')
         .annotate(total=Sum('total'))
@@ -162,7 +171,7 @@ def _chart_series(period='week', label_fmt=None):
 
     labels = []
     data = []
-    for i in range((today - start).days + 1):
+    for i in range((end - start).days + 1):
         day = start + timedelta(days=i)
         labels.append(day.strftime(label_fmt))
         data.append(float(sales_by_day.get(day, 0) or 0))
@@ -300,7 +309,7 @@ def dashboard_index(request):
     # the failed labels are passed to the template so it can show a friendly
     # fallback per widget.
     widgets, widget_errors = _load_widgets(
-        'week', chart_label_fmt='%b %d', include_recent=True,
+        'week', chart_label_fmt=None, include_recent=True,
     )
     context = dict(widgets)
     context['widget_errors'] = widget_errors
