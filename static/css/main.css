@@ -1405,6 +1405,8 @@ tbody tr:last-child { border-bottom: none; }
   grid-template-columns: 1fr 320px;
   gap: 24px;
   margin-bottom: 24px;
+  align-items: start;   /* cards size to their own content — prevents chart card
+                           from stretching to match a taller Sales by Category card */
 }
 .reports-grid-bottom {
   display: grid;
