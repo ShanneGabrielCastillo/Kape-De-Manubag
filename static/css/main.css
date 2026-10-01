@@ -1382,6 +1382,23 @@ tbody tr:last-child { border-bottom: none; }
 /* ── Logout text hidden on desktop (shown on mobile via responsive.css) ── */
 .logout-text { display: none; }
 
+/* ── Reports date filter — desktop layout ── */
+/* Both wrappers are flex items inside the form's flex row.
+   No width set so they size to content; form handles wrapping. */
+.reports-filter-dates {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+.reports-filter-dates .form-group {
+  margin: 0;
+}
+.reports-filter-actions {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
 /* ── Reports page grid layouts ── */
 .reports-grid-top {
   display: grid;

@@ -1,0 +1,8 @@
+{
+  "verdict": "APPROVED",
+  "findings": [
+    "Top Products / chart window mismatch — _top_products uses created_at__date__gte=start with no upper bound (covers Sun–today), while the chart now covers Sun–Sat. On any day before Saturday, Top Products and the Sales Overview bars reflect different time windows. Add order__created_at__date__lte=end to _top_products to align the two widgets.",
+    "test_summary_month_period_returns_thirty_days hardcodes 30 — this pre-existing test asserts len(data['chart_labels']) == 30, but _chart_series for month generates (today - month_start).days + 1 points, which varies from 1 to 31 depending on the day of the month. The test is fragile and will fail on any day that is not the 30th."
+  ],
+  "reviewDoc": "c:\\Users\\Shecile\\kape_de_manubag_system\\.agents\\tasks\\weekly-axis-review.md"
+}
