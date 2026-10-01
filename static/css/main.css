@@ -1877,6 +1877,40 @@ tbody tr:last-child { border-bottom: none; }
 }
 /* END SIDEBAR SCROLLBAR STYLING */
 
+/* =====================================================
+   DAILY BREAKDOWN SCROLLBAR — scoped to #daily-breakdown-scroll
+   Matches the sidebar scrollbar: ~5px, rounded, caramel-themed.
+   Does NOT affect body, html, or any other scrollable area.
+   ===================================================== */
+
+/* Firefox */
+#daily-breakdown-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(193, 122, 59, 0.4) rgba(0, 0, 0, 0.05);
+}
+
+/* WebKit: Chrome, Edge, Safari */
+#daily-breakdown-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+#daily-breakdown-scroll::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 999px;
+}
+#daily-breakdown-scroll::-webkit-scrollbar-thumb {
+  background: rgba(193, 122, 59, 0.4);
+  border-radius: 999px;
+}
+#daily-breakdown-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(193, 122, 59, 0.7);
+}
+#daily-breakdown-scroll::-webkit-scrollbar-button {
+  display: none;
+  height: 0;
+}
+
+/* END DAILY BREAKDOWN SCROLLBAR STYLING */
+
 /* ── Mobile topbar: Order Management awaiting-payment badge ── */
 
 /*

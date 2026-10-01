@@ -96,15 +96,25 @@
   <div class="card">
     <div class="card-header"><h3>🏆 Top Products</h3></div>
     <div class="table-wrapper reports-table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:36px">#</th>
+            <th>Product</th>
+            <th>Sold</th>
+            <th>Revenue</th>
+          </tr>
+        </thead>
         <tbody>
           {% for p in top_products %}
           <tr>
+            <td style="color:#aaa;font-size:0.8rem">{{ forloop.counter }}</td>
             <td style="font-weight:600">{{ p.product_name }}</td>
             <td>{{ p.total_qty }}</td>
             <td style="font-weight:700;color:var(--caramel)">₱{{ p.total_revenue|floatformat:2 }}</td>
           </tr>
           {% empty %}
-          <tr><td colspan="3" style="text-align:center;color:#aaa;padding:20px">No data</td></tr>
+          <tr><td colspan="4" style="text-align:center;color:#aaa;padding:20px">No data</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -127,7 +137,7 @@
 
   <div class="card">
     <div class="card-header"><h3>📅 Daily Breakdown</h3></div>
-    <div class="table-wrapper reports-table-wrapper" style="max-height:340px;overflow-y:auto">
+    <div id="daily-breakdown-scroll" class="table-wrapper reports-table-wrapper" style="max-height:340px;overflow-y:auto">
       <table>
         <thead><tr><th>Date</th><th>Orders</th><th>Sales</th></tr></thead>
         <tbody>
