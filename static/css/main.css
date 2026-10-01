@@ -1913,6 +1913,66 @@ tbody tr:last-child { border-bottom: none; }
 
 /* END DAILY BREAKDOWN SCROLLBAR STYLING */
 
+/* =====================================================
+   TOP PRODUCTS + SALES BY CATEGORY — desktop scroll
+   Both containers get a fixed max-height so their
+   content scrolls internally on desktop. The same
+   caramel scrollbar style used for Daily Breakdown
+   is applied here so all three sections are consistent.
+   Mobile: these IDs are only visible on desktop
+   (#top-products-scroll is the .reports-table-wrapper
+   which is display:none on mobile; #category-sales-scroll
+   is the .card-body which is always visible but the card
+   itself stacks naturally on mobile — max-height is fine
+   on mobile too since the card scrolls inside).
+   ===================================================== */
+
+/* ── Scroll containers ── */
+#top-products-scroll {
+  max-height: 340px;
+  overflow-y: auto;
+  overflow-x: hidden;          /* table already has its own x-scroll if needed */
+}
+
+#category-sales-scroll {
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+/* ── Firefox scrollbar ── */
+#top-products-scroll,
+#category-sales-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(193, 122, 59, 0.4) rgba(0, 0, 0, 0.05);
+}
+
+/* ── WebKit scrollbar (Chrome, Edge, Safari) ── */
+#top-products-scroll::-webkit-scrollbar,
+#category-sales-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+#top-products-scroll::-webkit-scrollbar-track,
+#category-sales-scroll::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 999px;
+}
+#top-products-scroll::-webkit-scrollbar-thumb,
+#category-sales-scroll::-webkit-scrollbar-thumb {
+  background: rgba(193, 122, 59, 0.4);
+  border-radius: 999px;
+}
+#top-products-scroll::-webkit-scrollbar-thumb:hover,
+#category-sales-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(193, 122, 59, 0.7);
+}
+#top-products-scroll::-webkit-scrollbar-button,
+#category-sales-scroll::-webkit-scrollbar-button {
+  display: none;
+  height: 0;
+}
+
+/* END TOP PRODUCTS + SALES BY CATEGORY SCROLLBAR STYLING */
+
 /* ── Mobile topbar: Order Management awaiting-payment badge ── */
 
 /*

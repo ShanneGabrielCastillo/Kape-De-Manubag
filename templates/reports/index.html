@@ -75,7 +75,7 @@
   <!-- Category Sales -->
   <div class="card">
     <div class="card-header"><h3>Sales by Category</h3></div>
-    <div class="card-body" style="padding:0">
+    <div id="category-sales-scroll" class="card-body" style="padding:0">
       {% for cat in category_sales %}
       <div style="padding:12px 20px;border-bottom:1px solid var(--cream)">
         <div style="display:flex;justify-content:space-between;margin-bottom:4px">
@@ -95,7 +95,7 @@
 <div class="reports-grid-bottom">
   <div class="card">
     <div class="card-header"><h3>🏆 Top Products</h3></div>
-    <div class="table-wrapper reports-table-wrapper">
+    <div id="top-products-scroll" class="table-wrapper reports-table-wrapper">
       <table>
         <thead>
           <tr>
