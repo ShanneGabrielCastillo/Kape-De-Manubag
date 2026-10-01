@@ -3147,3 +3147,214 @@ class ContextualIntentDisambiguationTest(TestCase):
         """
         from apps.chatbot.service import detect_intent
         self.assertEqual(detect_intent("Do I need to pay first?"), 'payment')
+
+
+# ── 24. Takeout/packaging FAQ vs product search boundary ──────────────────────
+
+class TakeoutFaqVsProductSearchTest(TestCase):
+    """
+    Tests for the fix: FAQ questions about takeout/packaging must NOT enter
+    the product-search pipeline.
+
+    Root cause that was fixed:
+    1. 'takeout' intent was included in the extraction routing, so
+       extract_product_name() ran even for pure FAQ questions.
+    2. 'packaging fee', 'fee', 'charge' etc. were not in _NOISE_TERMS, so
+       "Tell me about the packaging fee" returned "packaging fee" as a product.
+    3. The 'tell me about' pattern has no built-in FAQ-subject awareness —
+       it captures everything after the phrase trigger.
+
+    These tests verify the exact reported bug and its natural variations.
+    """
+
+    # ── A. Reported exact bug ─────────────────────────────────────────────
+
+    def test_exact_reported_message_intent(self):
+        """Intent for the exact reported message must be 'takeout'."""
+        from apps.chatbot.service import detect_intent
+        self.assertEqual(
+            detect_intent("Is takeout available? Tell me about the packaging fee."),
+            'takeout',
+        )
+
+    def test_exact_reported_message_no_product_search(self):
+        """The exact reported message must NOT produce a product name."""
+        from apps.chatbot.service import extract_product_name
+        result = extract_product_name(
+            "Is takeout available? Tell me about the packaging fee."
+        )
+        self.assertIsNone(result,
+            f"FAQ message must not become a product search, got: {result!r}")
+
+    # ── B. Standalone FAQ questions → no product search ──────────────────
+
+    def test_is_takeout_available_no_product(self):
+        from apps.chatbot.service import extract_product_name
+        self.assertIsNone(extract_product_name("Is takeout available?"))
+
+    def test_tell_me_about_packaging_fee_no_product(self):
+        """'Tell me about the packaging fee.' must not produce a product name."""
+        from apps.chatbot.service import extract_product_name
+        result = extract_product_name("Tell me about the packaging fee.")
+        self.assertIsNone(result,
+            f"'packaging fee' is a FAQ subject, not a product. Got: {result!r}")
+
+    def test_what_is_the_packaging_fee_no_product(self):
+        from apps.chatbot.service import extract_product_name
+        self.assertIsNone(extract_product_name("What is the packaging fee?"))
+
+    def test_how_much_is_the_packaging_fee_no_product(self):
+        from apps.chatbot.service import extract_product_name
+        self.assertIsNone(extract_product_name("How much is the packaging fee?"))
+
+    def test_is_there_a_packaging_fee_no_product(self):
+        from apps.chatbot.service import extract_product_name
+        self.assertIsNone(extract_product_name("Is there a packaging fee?"))
+
+    def test_do_i_need_to_pay_a_packaging_fee_no_product(self):
+        from apps.chatbot.service import extract_product_name
+        self.assertIsNone(extract_product_name("Do I need to pay a packaging fee?"))
+
+    def test_extra_charge_for_takeout_no_product(self):
+        from apps.chatbot.service import extract_product_name
+        self.assertIsNone(extract_product_name("Is there an extra charge for takeout?"))
+
+    def test_how_much_is_takeout_fee_no_product(self):
+        from apps.chatbot.service import extract_product_name
+        self.assertIsNone(extract_product_name("How much is the takeout fee?"))
+
+    def test_do_you_charge_extra_no_product(self):
+        from apps.chatbot.service import extract_product_name
+        self.assertIsNone(extract_product_name("Do you charge extra for takeout?"))
+
+    def test_do_you_offer_takeout_no_product(self):
+        from apps.chatbot.service import extract_product_name
+        self.assertIsNone(extract_product_name("Do you offer takeout?"))
+
+    def test_can_i_order_takeout_no_product(self):
+        from apps.chatbot.service import extract_product_name
+        self.assertIsNone(extract_product_name("Can I order takeout?"))
+
+    # ── C. Combined FAQ questions → no product search ─────────────────────
+
+    def test_combined_takeout_and_fee_no_product(self):
+        """Multi-sentence FAQ must not produce a product name."""
+        from apps.chatbot.service import extract_product_name
+        result = extract_product_name(
+            "Can I order takeout and is there an extra fee?"
+        )
+        self.assertIsNone(result,
+            f"Combined FAQ must not become product search. Got: {result!r}")
+
+    def test_combined_offer_takeout_packaging_no_product(self):
+        from apps.chatbot.service import extract_product_name
+        result = extract_product_name(
+            "Do you offer takeout? How much is the packaging fee?"
+        )
+        self.assertIsNone(result,
+            f"Combined FAQ must not become product search. Got: {result!r}")
+
+    def test_combined_get_takeout_additional_charge_no_product(self):
+        from apps.chatbot.service import extract_product_name
+        result = extract_product_name(
+            "Can I get takeout? Is there an additional charge?"
+        )
+        self.assertIsNone(result,
+            f"Combined FAQ must not become product search. Got: {result!r}")
+
+    # ── D. FAQ intent routing ─────────────────────────────────────────────
+
+    def test_faq_messages_have_takeout_intent(self):
+        from apps.chatbot.service import detect_intent
+        faq_msgs = [
+            "Is takeout available?",
+            "Tell me about the packaging fee.",
+            "What is the packaging fee?",
+            "How much is the packaging fee?",
+            "Is there a packaging fee?",
+            "Is there an extra charge for takeout?",
+            "How much is the takeout fee?",
+            "Do you offer takeout?",
+        ]
+        for msg in faq_msgs:
+            intent = detect_intent(msg)
+            self.assertEqual(intent, 'takeout',
+                f"Expected 'takeout' intent for FAQ msg: {msg!r}, got {intent!r}")
+
+    # ── E. Product search NOT broken ──────────────────────────────────────
+
+    def test_tell_me_about_chicken_burger_still_works(self):
+        """'Tell me about' with a real product name must still work."""
+        from apps.chatbot.service import extract_product_name
+        result = extract_product_name("Tell me about the Chicken Burger.")
+        self.assertIsNotNone(result)
+        self.assertIn('Chicken', result)
+
+    def test_do_you_have_burger_still_works(self):
+        from apps.chatbot.service import extract_product_name
+        result = extract_product_name("Do you have burger?")
+        self.assertIsNotNone(result)
+        self.assertIn('burger', result.lower())
+
+    def test_do_you_have_burgers_still_works(self):
+        from apps.chatbot.service import extract_product_name
+        result = extract_product_name("Do you have burgers?")
+        self.assertIsNotNone(result)
+        self.assertIn('burger', result.lower())
+
+    def test_how_much_is_chicken_burger_still_works(self):
+        from apps.chatbot.service import extract_product_name
+        result = extract_product_name("How much is the Chicken Burger?")
+        self.assertIsNotNone(result)
+        self.assertIn('Chicken Burger', result)
+
+    def test_what_coffee_do_you_have_still_extracts(self):
+        """'coffee' is a valid product search term — must still be extracted."""
+        from apps.chatbot.service import extract_product_name
+        result = extract_product_name("What coffee do you have?")
+        # 'coffee' extracted → product search → then category filter limits to drinks
+        # This is correct behaviour; the FAQ guard must not block 'coffee'
+        self.assertIsNotNone(result,
+            "'coffee' is a product search term, must not be blocked by FAQ guard")
+
+    # ── F. Regression: coffee ≠ fee ───────────────────────────────────────
+
+    def test_coffee_does_not_trigger_takeout_intent(self):
+        from apps.chatbot.service import detect_intent
+        intent = detect_intent("What coffee do you have?")
+        self.assertEqual(intent, 'menu',
+            f"'coffee' must not trigger takeout intent. Got: {intent!r}")
+
+    def test_coffee_price_does_not_trigger_takeout(self):
+        from apps.chatbot.service import detect_intent
+        intent = detect_intent("How much is the coffee?")
+        self.assertEqual(intent, 'price',
+            f"Coffee price query must not trigger takeout. Got: {intent!r}")
+
+    def test_coffee_does_not_produce_faq_noise(self):
+        """'coffee' must NOT be blocked by the FAQ-subject guard."""
+        from apps.chatbot.service import extract_product_name
+        result = extract_product_name("Tell me about the coffee.")
+        # 'coffee' is not a FAQ subject — should extract as product name
+        self.assertIsNotNone(result)
+        self.assertIn('coffee', result.lower())
+
+    # ── G. Price/category queries unaffected ──────────────────────────────
+
+    def test_drinks_below_50_no_product_search(self):
+        from apps.chatbot.service import extract_product_name, extract_price_constraints, _has_price_constraint
+        name = extract_product_name("What drinks do you have below ₱50?")
+        # Drinks is a noise term — no product name
+        self.assertIsNone(name)
+        c = extract_price_constraints("What drinks do you have below ₱50?")
+        self.assertEqual(c['price_lt'], __import__('decimal').Decimal('50'))
+
+    def test_food_under_50_no_product_search(self):
+        from apps.chatbot.service import extract_product_name
+        name = extract_product_name("What food is under ₱50?")
+        self.assertIsNone(name)
+
+    def test_what_drinks_do_you_have_no_product_search(self):
+        from apps.chatbot.service import extract_product_name
+        name = extract_product_name("What drinks do you have?")
+        self.assertIsNone(name)

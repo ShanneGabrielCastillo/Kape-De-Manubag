@@ -649,6 +649,36 @@ _NOISE_TERMS = {
     'pinakamura', 'pinaka mura', 'pinakabarato', 'pinaka barato',
     'pinakamahal', 'pinaka mahal', 'pinakamataas', 'pinakamababa',
 
+    # ── Business/store FAQ subjects — never product names ─────────────────
+    # These are store-policy and service topics.  If extract_product_name()
+    # captures one of these as the full extracted term (after all stripping),
+    # it must return None so the message stays on the FAQ/takeout path instead
+    # of entering the product-search pipeline.
+    #
+    # Examples that would otherwise become incorrect product searches:
+    #   "Tell me about the packaging fee." → captures "packaging fee"
+    #   "Is takeout available? Tell me about the packaging fee."
+    #       → captures "Tell me about the packaging fee" via is/are…available
+    #   "What is the takeout fee?" → captures "takeout fee"
+    #
+    # IMPORTANT: these are only matched as the *whole* extracted term —
+    # "Tell me about the Chicken Burger" still correctly extracts "Chicken Burger"
+    # because "chicken burger" is not in this set.
+    'packaging fee', 'packaging', 'takeout fee', 'takeout',
+    'fee', 'charge', 'extra fee', 'extra charge',
+    'dine in', 'dine-in', 'take out', 'take-out', 'dinein',
+    'delivery', 'payment method', 'payment methods',
+    'payment', 'gcash payment', 'cash payment',
+    'store hours', 'opening hours', 'operating hours',
+    'wifi', 'wi-fi', 'wifi password',
+    'the packaging fee', 'the takeout fee', 'the fee', 'the charge',
+    'an extra fee', 'extra fees', 'an extra charge', 'extra charges',
+    'a packaging fee', 'a fee', 'a charge',
+    # Tell-me-about FAQ phrases (whole-term after stripping)
+    'tell me about the packaging fee', 'tell me about the takeout fee',
+    'tell me about the fee', 'tell me about takeout',
+    'tell me about the charge',
+
     # ── Filipino generic category/type words ─────────────────────────────
     'pagkain',   # food (Tagalog)
     'inumin',    # drink (Tagalog)
@@ -720,6 +750,21 @@ def extract_product_name(message: str) -> str | None:
         # Skip if the term itself contains price-constraint language —
         # those are handled by extract_price_constraints instead.
         if re.search(r'\b(?:below|under|above|over|less|more|cheap|mura|barato|mahal)\b', term, re.IGNORECASE):
+            continue
+
+        # Skip if the term contains a store-policy/FAQ subject — these are
+        # business-rule topics, not product names.  Handles combined-question
+        # messages like "Can I order takeout and is there an extra fee?"
+        # where the captured term contains FAQ vocabulary.
+        # Uses word-boundary matching so "takeout" inside "Can I get takeout?"
+        # is caught, but a product named e.g. "Takeout Bento" would still
+        # require explicit addition to this list to be suppressed (low risk).
+        if re.search(
+            r'\b(?:takeout|take-out|take out|packaging fee|packaging|'
+            r'fee|charge|extra fee|extra charge|additional charge|'
+            r'delivery|dine.in|dine-in|payment method)\b',
+            term, re.IGNORECASE
+        ):
             continue
 
         # Hard cap — real product names are short
@@ -1850,11 +1895,17 @@ def get_chatbot_response(message: str, history: list[dict], language: str = 'en'
     constraints   = {}
     category_type = None
 
-    # Run product/price extraction for all intents that could carry product or
-    # price information — including 'takeout' and 'ordering' because Bisaya/Filipino
-    # phrases like "makuha" trigger the takeout intent via substring match on 'kuha',
-    # but they may actually be budget or product queries.
-    if intent in ('menu', 'price', 'recommendation', 'general', 'takeout', 'ordering'):
+    # Run product/price extraction for intents that could carry product or
+    # price information.  'takeout' is deliberately excluded: takeout intent
+    # means the customer is asking a store-policy/FAQ question (packaging fee,
+    # dine-in vs take-out, etc.) — not searching for a product.  Routing
+    # takeout through extract_product_name() caused FAQ phrases like
+    # "Tell me about the packaging fee" to become spurious product searches.
+    # 'ordering' stays in so "order a burger" still searches products.
+    # Note: Bisaya/Filipino budget phrases (e.g. "makuha sa ₱50") that were
+    # previously triggering 'takeout' via the 'kuha' substring are now handled
+    # correctly by _kw_match() word-boundary matching and route to 'menu'/'general'.
+    if intent in ('menu', 'price', 'recommendation', 'general', 'ordering'):
         product_name = extract_product_name(message)
 
         if product_name:
