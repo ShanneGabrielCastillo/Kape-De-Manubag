@@ -1973,6 +1973,39 @@ tbody tr:last-child { border-bottom: none; }
 
 /* END TOP PRODUCTS + SALES BY CATEGORY SCROLLBAR STYLING */
 
+/* =====================================================
+   STICKY TABLE HEADERS — Top Products + Daily Breakdown
+   The scroll containers (#top-products-scroll,
+   #daily-breakdown-scroll) both have overflow-y:auto,
+   making them the scroll ancestor. position:sticky +
+   top:0 on their thead th cells pins the header row to
+   the top of the container while tbody rows scroll past.
+
+   IMPORTANT: .card has overflow:hidden which would clip
+   sticky children before they can anchor to the scroll
+   container. .card-scroll-host overrides overflow to
+   visible so the sticky anchor resolves correctly to the
+   inner overflow-y:auto container instead.
+
+   Scoped to these two containers only — does NOT affect
+   any other table or card in the application.
+   ===================================================== */
+
+/* Allow sticky headers to anchor to the inner scroll container,
+   not the card boundary. Defined in responsive.css (loads last)
+   so it wins over mobile-design-system.css .card { overflow:hidden }. */
+
+#top-products-scroll thead th,
+#daily-breakdown-scroll thead th {
+  position: sticky;
+  top: 0;
+  /* Opaque brown background covers rows scrolling beneath the header */
+  background: var(--brown-mid);
+  z-index: 2;
+}
+
+/* END STICKY TABLE HEADERS */
+
 /* ── Mobile topbar: Order Management awaiting-payment badge ── */
 
 /*

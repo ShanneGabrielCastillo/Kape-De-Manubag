@@ -2997,3 +2997,17 @@
   }
 
 }
+
+/* =========================================================================
+   STICKY TABLE HEADERS — card-scroll-host overflow fix
+   responsive.css loads last, so this wins over
+   mobile-design-system.css @media(min-width:768px){.card{overflow:hidden}}.
+   .card-scroll-host is placed only on the Top Products and Daily Breakdown
+   cards. overflow:visible lets position:sticky on thead th anchor correctly
+   to the inner overflow-y:auto scroll container rather than being clipped
+   at the card boundary.
+   ========================================================================= */
+.card-scroll-host {
+  overflow: visible;
+}
+/* END STICKY TABLE HEADERS overflow fix */
