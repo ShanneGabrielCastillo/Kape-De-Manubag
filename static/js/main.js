@@ -683,19 +683,16 @@ window.initSalesChart = function(labels, data) {
   }
 
   new Chart(canvas, {
-    type: 'line',
+    type: 'bar',
     data: {
       labels,
       datasets: [{
         label: 'Sales (₱)',
         data,
         borderColor: '#C17A3B',
-        backgroundColor: 'rgba(193, 122, 59, 0.1)',
-        borderWidth: 2.5,
-        pointBackgroundColor: '#C17A3B',
-        pointRadius: 4,
-        tension: 0.4,
-        fill: true,
+        backgroundColor: 'rgba(193, 122, 59, 0.7)',
+        borderWidth: 1,
+        borderRadius: 4,
       }],
     },
     options: {
