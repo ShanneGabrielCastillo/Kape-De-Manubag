@@ -3011,3 +3011,44 @@
   overflow: visible;
 }
 /* END STICKY TABLE HEADERS overflow fix */
+
+/* =========================================================================
+   RECENT ORDERS — Desktop internal vertical scroll
+   Applied at min-width:768px only — the existing mobile card layout
+   (JS-generated .table-mobile-cards, hidden table) is completely unaffected.
+
+   Uses the same max-height (340px), caramel scrollbar styling, and sticky
+   thead approach already used for Top Products and Daily Breakdown.
+   ========================================================================= */
+@media (min-width: 768px) {
+
+  /* Scroll container */
+  #recent-orders-scroll {
+    max-height: 340px;
+    overflow-y: auto;
+    overflow-x: auto;            /* preserve horizontal scroll for wide tables */
+  }
+
+  /* Firefox */
+  #recent-orders-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(193, 122, 59, 0.4) rgba(0, 0, 0, 0.05);
+  }
+
+  /* WebKit (Chrome, Edge, Safari) */
+  #recent-orders-scroll::-webkit-scrollbar       { width: 5px; }
+  #recent-orders-scroll::-webkit-scrollbar-track { background: rgba(0,0,0,0.04); border-radius: 999px; }
+  #recent-orders-scroll::-webkit-scrollbar-thumb { background: rgba(193,122,59,0.4); border-radius: 999px; }
+  #recent-orders-scroll::-webkit-scrollbar-thumb:hover { background: rgba(193,122,59,0.7); }
+  #recent-orders-scroll::-webkit-scrollbar-button { display: none; height: 0; }
+
+  /* Sticky column headers */
+  #recent-orders-scroll thead th {
+    position: sticky;
+    top: 0;
+    background: var(--brown-mid);   /* opaque — covers scrolling rows beneath */
+    z-index: 2;
+  }
+
+}
+/* END RECENT ORDERS desktop scroll */

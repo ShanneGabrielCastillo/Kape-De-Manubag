@@ -185,41 +185,53 @@ const dailySalesData = {{ daily_sales|safe }};
 const dailyLabels = dailySalesData.map(d => d.date);
 const dailyData   = dailySalesData.map(d => d.total);
 
-new Chart(document.getElementById('daily-chart'), {
-  type: 'line',
-  data: {
-    labels: dailyLabels,
-    datasets: [{
-      label: 'Sales (₱)',
-      data: dailyData,
-      backgroundColor: 'rgba(193,122,59,0.1)',
-      borderColor: '#C17A3B',
-      borderWidth: 2.5,
-      pointBackgroundColor: '#C17A3B',
-      pointRadius: 4,
-      tension: 0.3,
-      fill: true,
-    }]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: { callbacks: { label: ctx => `₱${ctx.raw.toFixed(2)}` } }
+// Defer chart creation until after the browser has performed its first layout
+// reflow. On mobile the CSS grid collapses to single-column, but that reflow
+// is not guaranteed to be complete when the script runs synchronously at
+// end-of-body. Reading clientWidth before reflow returns the pre-collapse
+// (two-column) width, causing Chart.js to lock the canvas to that narrower
+// size and leaving right-side whitespace. requestAnimationFrame fires after
+// layout is stable, so Chart.js reads the correct full-column width.
+requestAnimationFrame(function () {
+  const dailyChart = new Chart(document.getElementById('daily-chart'), {
+    type: 'line',
+    data: {
+      labels: dailyLabels,
+      datasets: [{
+        label: 'Sales (₱)',
+        data: dailyData,
+        backgroundColor: 'rgba(193,122,59,0.1)',
+        borderColor: '#C17A3B',
+        borderWidth: 2.5,
+        pointBackgroundColor: '#C17A3B',
+        pointRadius: 4,
+        tension: 0.3,
+        fill: true,
+      }]
     },
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: { callback: v => `₱${v}`, font: { size: 11 }, maxTicksLimit: 6 },
-        grid: { color: 'rgba(0,0,0,.04)' }
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => `₱${ctx.raw.toFixed(2)}` } }
       },
-      x: {
-        grid: { display: false },
-        ticks: { maxRotation: 45, minRotation: 0, font: { size: 10 }, maxTicksLimit: 7 }
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { callback: v => `₱${v}`, font: { size: 11 }, maxTicksLimit: 6 },
+          grid: { color: 'rgba(0,0,0,.04)' }
+        },
+        x: {
+          grid: { display: false },
+          ticks: { maxRotation: 45, minRotation: 0, font: { size: 10 }, maxTicksLimit: 7 }
+        }
       }
     }
-  }
+  });
+  // Belt-and-suspenders: explicitly resize after creation so the chart
+  // always fills its container at the correct post-reflow dimensions.
+  dailyChart.resize();
 });
 </script>
 {% endblock %}
