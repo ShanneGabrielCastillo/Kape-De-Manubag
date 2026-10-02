@@ -1273,6 +1273,31 @@
    so normal block flow applies — no extra CSS needed) */
 
 /* ==========================================================================
+   GCASH PAYMENT SETTINGS PAGE — desktop two-column layout
+   ========================================================================== */
+
+/* Desktop: GCash Settings form (left) + How Verification Works (right) */
+@media (min-width: 768px) {
+
+  .gcash-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+  }
+
+  /* <form> occupies the full left column as a single grid item —
+     its inner cards stack normally inside it */
+  .gcash-layout > form {
+    min-width: 0;
+  }
+
+}
+
+/* Mobile / tablet: gcash-layout has no rule below 768px —
+   normal block flow keeps cards stacked vertically */
+
+/* ==========================================================================
    RESPONSIVE TABLE CARDS — status form overrides
    ========================================================================== */
 @media (max-width: 767.98px) {
