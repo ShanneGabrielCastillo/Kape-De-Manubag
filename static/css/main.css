@@ -1638,26 +1638,40 @@ tbody tr:last-child { border-bottom: none; }
   display: none; /* shown only on mobile via responsive.css */
 }
 
+/* ── Collapse/Expand toggle button ──
+   Lives OUTSIDE .sidebar (direct child of .app-layout) so that
+   overflow:hidden on .sidebar never clips it.
+   Position is fixed, pinned to the right edge of the sidebar via
+   left: var(--sidebar-w) minus half the button width — it rides the
+   CSS width transition automatically with no JS.
+   Hidden on mobile via the display:none base rule below; shown only
+   inside @media (min-width: 768px). */
 .sidebar-collapse-btn {
-  display: none; /* hidden on mobile — shown on desktop only */
+  display: none;          /* hidden everywhere except desktop (see media query) */
+  position: fixed;
+  /* Vertically: centre on the brand row (~16px top padding + 36px logo / 2 = ~34px) */
+  top: 28px;
+  /* Horizontally: sit half-outside the right edge of the sidebar */
+  left: calc(var(--sidebar-w) - 14px);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--brown-mid);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 6px;
-  color: rgba(255, 255, 255, 0.55);
-  cursor: pointer;
-  transition: var(--transition);
   padding: 0;
+  z-index: 200;           /* above sidebar (z-index:100) and topbar (z-index:50) */
+  box-shadow: 0 2px 8px rgba(44, 24, 16, 0.35);
+  transition: left 0.25s ease, background 0.2s, color 0.2s, border-color 0.2s;
 }
 .sidebar-collapse-btn:hover,
 .sidebar-collapse-btn:focus-visible {
-  background: rgba(212, 168, 83, 0.2);
-  color: var(--gold);
-  border-color: rgba(212, 168, 83, 0.45);
+  background: var(--caramel);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.5);
   outline: none;
 }
 .sidebar-collapse-btn:focus-visible {
@@ -1665,7 +1679,7 @@ tbody tr:last-child { border-bottom: none; }
   outline-offset: 2px;
 }
 .sidebar-collapse-btn .collapse-icon {
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   line-height: 1;
   transition: transform 0.25s ease;
   display: block;
@@ -1683,7 +1697,7 @@ tbody tr:last-child { border-bottom: none; }
    ════════════════════════════════════════════ */
 @media (min-width: 768px) {
 
-  /* Show collapse button */
+  /* Show collapse button (position:fixed, rides sidebar width via left: calc) */
   .sidebar-collapse-btn {
     display: flex;
   }
@@ -1707,19 +1721,23 @@ tbody tr:last-child { border-bottom: none; }
     margin-left: var(--sidebar-collapsed-w);
   }
 
+  /* Move toggle to ride the collapsed sidebar right edge */
+  .sidebar-collapsed .sidebar-collapse-btn {
+    left: calc(var(--sidebar-collapsed-w) - 14px);
+  }
+
   /* Brand: logo circle stays, text column hides */
   .sidebar-collapsed .sidebar .brand-text {
     display: none;
   }
   .sidebar-collapsed .sidebar .sidebar-brand {
     padding: 14px 8px;
-    justify-content: space-between;
+    justify-content: center;
     gap: 4px;
-    overflow: hidden; /* brand-logo (36px) + gap + button (26px) must fit in 64px */
   }
 
   /* Rotate ◀ to ▶ */
-  .sidebar-collapsed .sidebar .collapse-icon {
+  .sidebar-collapsed .sidebar-collapse-btn .collapse-icon {
     transform: rotate(180deg);
   }
 
