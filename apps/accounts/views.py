@@ -101,7 +101,8 @@ def profile_view(request):
             if user.profile_image:
                 user.profile_image.delete(save=False)
                 user.profile_image = None
-                user.save(update_fields=['profile_image'])
+                user.profile_image_filename = ''
+                user.save(update_fields=['profile_image', 'profile_image_filename'])
             messages.success(request, 'Profile photo removed.')
             return redirect('accounts:profile')
 

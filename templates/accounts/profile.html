@@ -68,7 +68,11 @@
   color: var(--brown-mid);
   font-weight: 600;
   margin: 0;
-  word-break: break-all;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
 }
 .profile-img-hint {
   font-size: 0.75rem;
@@ -155,7 +159,13 @@
             {# Side: filename + Remove Photo + hint #}
             <div class="profile-img-actions">
               <p class="profile-img-filename" id="img-filename">
-                {% if user.profile_image %}{{ user.profile_image.name|cut:"profiles/" }}{% endif %}
+                {% if user.profile_image %}
+                  {% if user.profile_image_filename %}
+                    {{user.profile_image_filename}}
+                  {% else %}
+                    Profile photo
+                  {% endif %}
+                {% endif %}
               </p>
 
               <button type="submit" form="remove-photo-form"

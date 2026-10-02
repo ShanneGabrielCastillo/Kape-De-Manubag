@@ -68,6 +68,18 @@ class ProfileUpdateForm(forms.ModelForm):
             'email': forms.EmailInput(attrs={'class': 'form-control'}),
         }
 
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        # Capture the original filename when a new image is uploaded
+        new_image = self.cleaned_data.get('profile_image')
+        from django.core.files.uploadedfile import UploadedFile
+        if isinstance(new_image, UploadedFile):
+            import os
+            user.profile_image_filename = os.path.basename(new_image.name or '')
+        if commit:
+            user.save()
+        return user
+
 
 # ── Password Management Forms ─────────────────────────────────────────────────
 

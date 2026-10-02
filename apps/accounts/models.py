@@ -29,6 +29,10 @@ class CustomUser(AbstractUser):
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='customer')
     phone = models.CharField(max_length=15, blank=True, null=True)
     profile_image = models.ImageField(upload_to='profiles/', blank=True, null=True)
+    profile_image_filename = models.CharField(
+        max_length=255, blank=True, default='',
+        help_text='Original filename of the uploaded profile image (user-facing display only).'
+    )
     deactivated_at = models.DateTimeField(
         null=True, blank=True,
         help_text='When this account was soft-deactivated (is_active=False). '
