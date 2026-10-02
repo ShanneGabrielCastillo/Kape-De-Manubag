@@ -1235,6 +1235,24 @@
 
 }
 
+/* Desktop: Configurable Settings + How Settings Work side by side */
+@media (min-width: 768px) {
+
+  .settings-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+  }
+
+  /* form wrapper (parent of the Configurable Settings card) must
+     fill its grid cell so the card stretches to full column width */
+  .settings-layout > form {
+    display: contents;
+  }
+
+}
+
 /* ==========================================================================
    RESPONSIVE TABLE CARDS — status form overrides
    ========================================================================== */
