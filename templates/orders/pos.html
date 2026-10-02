@@ -57,9 +57,23 @@
      on mobile the layout must be flush with the viewport edges. */
   .pos-layout { margin: 0 !important; }
 
+  /* Remove the page-content horizontal padding so .pos-layout can fill the
+     full viewport width. The desktop value (28px) is already cancelled by the
+     inline margin:-28px on .pos-layout, but on mobile that cancel is removed
+     by the rule above, leaving 16–20px of dead space on each side.
+     We zero it out here (POS-page-only override, no other page is affected)
+     and give .pos-left a small 8px inset instead for comfortable readability.
+     overflow-x:hidden is re-applied because responsive.css sets it via the
+     shorthand `padding` rule and the cascade would otherwise drop it. */
+  .page-content {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    overflow-x: hidden;
+  }
+
   .pos-left {
     overflow-y: visible;
-    padding: 12px;
+    padding: 8px;
     padding-bottom: 160px; /* clearance for fixed drawer */
   }
   .pos-right {
