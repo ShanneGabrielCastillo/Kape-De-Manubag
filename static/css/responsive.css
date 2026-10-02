@@ -1254,6 +1254,25 @@
 }
 
 /* ==========================================================================
+   MY PROFILE PAGE — desktop two-column layout
+   ========================================================================== */
+
+/* Desktop: Profile card (left) + Password card (right) side by side */
+@media (min-width: 768px) {
+
+  .profile-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+  }
+
+}
+
+/* Mobile / tablet: cards remain stacked (no .profile-layout rule below 768px,
+   so normal block flow applies — no extra CSS needed) */
+
+/* ==========================================================================
    RESPONSIVE TABLE CARDS — status form overrides
    ========================================================================== */
 @media (max-width: 767.98px) {

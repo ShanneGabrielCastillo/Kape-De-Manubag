@@ -92,104 +92,108 @@
   </div>
 </div>
 
-<div class="card" style="max-width:560px;margin-bottom:20px">
-  <div class="card-body">
-    <form method="post" enctype="multipart/form-data" id="profile-form">
-      {% csrf_token %}
+<div class="profile-layout">
 
-      {# First Name #}
-      <div class="form-group">
-        <label class="form-label">{{ form.first_name.label }}</label>
-        {{ form.first_name }}
-        {% if form.first_name.errors %}<small style="color:var(--red-accent)">{{ form.first_name.errors.0 }}</small>{% endif %}
-      </div>
+  <div class="card">
+    <div class="card-body">
+      <form method="post" enctype="multipart/form-data" id="profile-form">
+        {% csrf_token %}
 
-      {# Last Name #}
-      <div class="form-group">
-        <label class="form-label">{{ form.last_name.label }}</label>
-        {{ form.last_name }}
-        {% if form.last_name.errors %}<small style="color:var(--red-accent)">{{ form.last_name.errors.0 }}</small>{% endif %}
-      </div>
-
-      {# Email #}
-      <div class="form-group">
-        <label class="form-label">Email Address</label>
-        {{ form.email }}
-        {% if form.email.errors %}<small style="color:var(--red-accent)">{{ form.email.errors.0 }}</small>{% endif %}
-      </div>
-
-      {# Profile Image #}
-      <div class="form-group">
-        <label class="form-label">Profile Image</label>
-
-        {# Hidden file input — opened by clicking the avatar or pencil #}
-        {{ form.profile_image }}
-
-        <div class="profile-img-row">
-
-          {# Clickable avatar — opens file picker #}
-          <div class="profile-avatar-wrap" id="avatar-wrap"
-               onclick="document.getElementById('id_profile_image').click()"
-               title="Click to change photo">
-            {% if user.profile_image %}
-              {# onerror falls back to initials if the image URL is unreachable #}
-              <img id="avatar-preview"
-                   src="{{ user.profile_image.url }}"
-                   alt="{{ user.first_name|first|upper|default:user.username|first|upper }}"
-                   class="profile-avatar"
-                   onerror="this.style.display='none';document.getElementById('avatar-initials').style.display='flex';">
-              <div id="avatar-initials" class="profile-avatar-initials" style="display:none">
-                {{ user.first_name|first|upper|default:user.username|first|upper }}
-              </div>
-            {% else %}
-              <img id="avatar-preview" class="profile-avatar" src="" alt="" style="display:none">
-              <div id="avatar-initials" class="profile-avatar-initials">
-                {{ user.first_name|first|upper|default:user.username|first|upper }}
-              </div>
-            {% endif %}
-            <span class="profile-edit-badge">✏️</span>
-          </div>
-
-          {# Side: filename + Remove Photo + hint #}
-          <div class="profile-img-actions">
-            <p class="profile-img-filename" id="img-filename">
-              {% if user.profile_image %}{{ user.profile_image.name|cut:"profiles/" }}{% endif %}
-            </p>
-
-            <button type="submit" form="remove-photo-form"
-                    id="remove-photo-btn"
-                    class="btn btn-sm"
-                    style="border:2px solid var(--red-accent);color:var(--red-accent);background:transparent;{% if not user.profile_image %}display:none{% endif %}">
-              🗑️ Remove Photo
-            </button>
-
-            <p class="profile-img-hint">JPG, PNG, GIF, or WEBP &bull; Max 5 MB</p>
-
-            {% if form.profile_image.errors %}
-            <small style="color:var(--red-accent)">{{ form.profile_image.errors.0 }}</small>
-            {% endif %}
-          </div>
-
+        {# First Name #}
+        <div class="form-group">
+          <label class="form-label">{{ form.first_name.label }}</label>
+          {{ form.first_name }}
+          {% if form.first_name.errors %}<small style="color:var(--red-accent)">{{ form.first_name.errors.0 }}</small>{% endif %}
         </div>
-      </div>
 
-      <button type="submit" class="btn btn-primary btn-block" style="margin-top:8px">
-        Save Changes
-      </button>
-    </form>
-  </div>
-</div>
+        {# Last Name #}
+        <div class="form-group">
+          <label class="form-label">{{ form.last_name.label }}</label>
+          {{ form.last_name }}
+          {% if form.last_name.errors %}<small style="color:var(--red-accent)">{{ form.last_name.errors.0 }}</small>{% endif %}
+        </div>
 
-{# Password card #}
-<div class="card" style="max-width:560px">
-  <div class="card-header"><h3>🔒 Password</h3></div>
-  <div class="card-body" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
-    <p style="margin:0;font-size:0.88rem;color:#888">Keep your account secure by using a strong, unique password.</p>
-    <a href="{% url 'accounts:password_change' %}" class="btn btn-outline" style="white-space:nowrap;flex-shrink:0">
-      Change Password
-    </a>
+        {# Email #}
+        <div class="form-group">
+          <label class="form-label">Email Address</label>
+          {{ form.email }}
+          {% if form.email.errors %}<small style="color:var(--red-accent)">{{ form.email.errors.0 }}</small>{% endif %}
+        </div>
+
+        {# Profile Image #}
+        <div class="form-group">
+          <label class="form-label">Profile Image</label>
+
+          {# Hidden file input — opened by clicking the avatar or pencil #}
+          {{ form.profile_image }}
+
+          <div class="profile-img-row">
+
+            {# Clickable avatar — opens file picker #}
+            <div class="profile-avatar-wrap" id="avatar-wrap"
+                 onclick="document.getElementById('id_profile_image').click()"
+                 title="Click to change photo">
+              {% if user.profile_image %}
+                {# onerror falls back to initials if the image URL is unreachable #}
+                <img id="avatar-preview"
+                     src="{{ user.profile_image.url }}"
+                     alt="{{ user.first_name|first|upper|default:user.username|first|upper }}"
+                     class="profile-avatar"
+                     onerror="this.style.display='none';document.getElementById('avatar-initials').style.display='flex';">
+                <div id="avatar-initials" class="profile-avatar-initials" style="display:none">
+                  {{ user.first_name|first|upper|default:user.username|first|upper }}
+                </div>
+              {% else %}
+                <img id="avatar-preview" class="profile-avatar" src="" alt="" style="display:none">
+                <div id="avatar-initials" class="profile-avatar-initials">
+                  {{ user.first_name|first|upper|default:user.username|first|upper }}
+                </div>
+              {% endif %}
+              <span class="profile-edit-badge">✏️</span>
+            </div>
+
+            {# Side: filename + Remove Photo + hint #}
+            <div class="profile-img-actions">
+              <p class="profile-img-filename" id="img-filename">
+                {% if user.profile_image %}{{ user.profile_image.name|cut:"profiles/" }}{% endif %}
+              </p>
+
+              <button type="submit" form="remove-photo-form"
+                      id="remove-photo-btn"
+                      class="btn btn-sm"
+                      style="border:2px solid var(--red-accent);color:var(--red-accent);background:transparent;{% if not user.profile_image %}display:none{% endif %}">
+                🗑️ Remove Photo
+              </button>
+
+              <p class="profile-img-hint">JPG, PNG, GIF, or WEBP &bull; Max 5 MB</p>
+
+              {% if form.profile_image.errors %}
+              <small style="color:var(--red-accent)">{{ form.profile_image.errors.0 }}</small>
+              {% endif %}
+            </div>
+
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block" style="margin-top:8px">
+          Save Changes
+        </button>
+      </form>
+    </div>
   </div>
-</div>
+
+  {# Password card #}
+  <div class="card">
+    <div class="card-header"><h3>🔒 Password</h3></div>
+    <div class="card-body" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+      <p style="margin:0;font-size:0.88rem;color:#888">Keep your account secure by using a strong, unique password.</p>
+      <a href="{% url 'accounts:password_change' %}" class="btn btn-outline" style="white-space:nowrap;flex-shrink:0">
+        Change Password
+      </a>
+    </div>
+  </div>
+
+</div><!-- /.profile-layout -->
 
 {# Hidden form for Remove Photo — POSTs remove_photo=1 to profile_view #}
 <form id="remove-photo-form" method="post" style="display:none">
