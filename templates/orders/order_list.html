@@ -85,6 +85,8 @@
   .order-search-icon { display: none; }
   .order-search-input { padding: 10px 14px !important; border-radius: var(--radius-sm) !important; }
 }
+
+@media (max-width: 767.98px) {
   .om-cards ~ .table-mobile-cards,
   .table-mobile-cards:not(.om-cards) { display: none !important; }
 
@@ -934,7 +936,13 @@ RealtimeConnection.on('gcash_submitted', function(data) {
   function buildOrderCards() {
     const table = document.querySelector('table[data-card-builder="orders"]');
     if (!table) return;
-    if (window.innerWidth > 767) return;
+    if (window.innerWidth > 767) {
+      // Desktop: remove any mobile cards that were built before a resize.
+      // Without this, cards built at mobile width persist in the DOM when
+      // the user (or DevTools) widens the viewport back to desktop width.
+      document.querySelectorAll('.om-cards').forEach(el => el.remove());
+      return;
+    }
 
     // Remove previous custom cards (idempotency)
     document.querySelectorAll('.om-cards').forEach(el => el.remove());
