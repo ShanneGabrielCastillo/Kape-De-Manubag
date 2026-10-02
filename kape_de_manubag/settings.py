@@ -326,6 +326,8 @@ EMAIL_PORT          = int(os.environ.get('EMAIL_PORT', '587'))
 EMAIL_HOST_USER     = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 EMAIL_USE_TLS       = os.environ.get('EMAIL_USE_TLS', 'True').strip().lower() in {'1', 'true', 'yes'}
+EMAIL_USE_SSL       = os.environ.get('EMAIL_USE_SSL', 'False').strip().lower() in {'1', 'true', 'yes'}
+EMAIL_TIMEOUT       = int(os.environ.get('EMAIL_TIMEOUT', '10'))  # fail fast instead of hanging
 DEFAULT_FROM_EMAIL  = os.environ.get('DEFAULT_FROM_EMAIL', 'Kape De Manubag <noreply@example.com>')
 
 # Django's password-reset token expires after this many seconds (default 3 days).
