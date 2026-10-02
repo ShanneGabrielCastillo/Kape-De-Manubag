@@ -330,6 +330,13 @@ EMAIL_USE_SSL       = os.environ.get('EMAIL_USE_SSL', 'False').strip().lower() i
 EMAIL_TIMEOUT       = int(os.environ.get('EMAIL_TIMEOUT', '10'))  # fail fast instead of hanging
 DEFAULT_FROM_EMAIL  = os.environ.get('DEFAULT_FROM_EMAIL', 'Kape De Manubag <noreply@example.com>')
 
+# ── Resend — transactional email via HTTP API ─────────────────────────────────
+# Render's free tier blocks all outbound SMTP ports (25, 465, 587), so Django's
+# SMTP backend cannot send email there. The Resend SDK uses HTTPS (port 443)
+# which is never blocked. Set RESEND_API_KEY in the Render environment variables
+# panel. Get your key from https://resend.com → Dashboard → API Keys.
+RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
+
 # Django's password-reset token expires after this many seconds (default 3 days).
 # Override via env if you want shorter-lived links.
 PASSWORD_RESET_TIMEOUT = int(os.environ.get('PASSWORD_RESET_TIMEOUT', str(60 * 60 * 24 * 3)))

@@ -7,7 +7,6 @@ from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.exceptions import ValidationError
-from django.core.mail import send_mail
 from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.utils.encoding import force_bytes, force_str
@@ -231,13 +230,18 @@ def password_reset_request(request):
             })
 
             try:
-                send_mail(
-                    subject=subject,
-                    message=body,
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    recipient_list=[user.email],
-                    fail_silently=False,
-                )
+                # Use the Resend HTTP API instead of Django's SMTP backend.
+                # Render's free tier blocks all outbound SMTP ports (25, 465,
+                # 587), so SMTP-based sending always fails there.  The Resend
+                # SDK sends over HTTPS (port 443) which is never blocked.
+                import resend
+                resend.api_key = settings.RESEND_API_KEY
+                resend.Emails.send({
+                    'from':    settings.DEFAULT_FROM_EMAIL,
+                    'to':      [user.email],
+                    'subject': subject,
+                    'text':    body,
+                })
             except Exception:
                 # Log the failure but do not reveal it to the requester —
                 # the same success page is shown so enumeration remains
