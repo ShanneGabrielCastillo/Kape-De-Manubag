@@ -171,18 +171,47 @@ def change_password(request):
     expected UX for a deliberate password change (as opposed to a reset).
     The new password is hashed by Django's pipeline; it is never stored in
     plaintext or surfaced in logs/errors.
+
+    When the request carries the ``X-Requested-With: XMLHttpRequest`` header
+    (sent by the fetch-based form on the template) the view responds with JSON
+    instead of a full-page render:
+
+      • Success → {"ok": true,  "redirect": "<profile-url>"}
+      • Failure → {"ok": false, "errors": {"field": ["msg", ...], ...}}
+
+    This lets the browser display validation errors *without a page reload*,
+    so the user never loses the values they have already typed.  Password
+    values are never echoed back into the response — only error strings.
     """
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
     form = StaffPasswordChangeForm(user=request.user, data=request.POST or None)
 
-    if request.method == 'POST' and form.is_valid():
-        form.save()
-        # Rotate the session auth hash so the current session stays valid
-        # after the password change (prevents an immediate self-lockout).
-        update_session_auth_hash(request, request.user)
-        log_action(request.user, 'account.password_change', request.user,
-                   object_repr=str(request.user))
-        messages.success(request, 'Your password has been changed successfully.')
-        return redirect('accounts:profile')
+    if request.method == 'POST':
+        if form.is_valid():
+            form.save()
+            # Rotate the session auth hash so the current session stays valid
+            # after the password change (prevents an immediate self-lockout).
+            update_session_auth_hash(request, request.user)
+            log_action(request.user, 'account.password_change', request.user,
+                       object_repr=str(request.user))
+            if is_ajax:
+                from django.urls import reverse
+                return JsonResponse({
+                    'ok': True,
+                    'redirect': reverse('accounts:profile'),
+                })
+            messages.success(request, 'Your password has been changed successfully.')
+            return redirect('accounts:profile')
+
+        # Form is invalid
+        if is_ajax:
+            # Collect all field errors and non-field errors into a plain dict.
+            # Passwords are NEVER included in this response — only the error
+            # strings that Django generated (e.g. "too similar to username").
+            errors = {}
+            for field, errs in form.errors.items():
+                errors[field] = list(errs)
+            return JsonResponse({'ok': False, 'errors': errors})
 
     return render(request, 'accounts/change_password.html', {'form': form})
 
