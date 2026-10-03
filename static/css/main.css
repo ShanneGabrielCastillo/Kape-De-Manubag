@@ -2020,6 +2020,12 @@ tbody tr:last-child { border-bottom: none; }
   /* Opaque brown background covers rows scrolling beneath the header */
   background: var(--brown-mid);
   z-index: 2;
+  /* border-collapse:collapse + position:sticky causes browsers to render
+     collapsed inter-cell borders as white seams between promoted layers.
+     Removing the cell borders on sticky header cells eliminates those lines
+     without affecting tbody row/column borders. */
+  border-right: none;
+  border-left: none;
 }
 
 /* END STICKY TABLE HEADERS */

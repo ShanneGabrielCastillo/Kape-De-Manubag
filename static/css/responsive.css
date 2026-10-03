@@ -3110,6 +3110,12 @@
     top: 0;
     background: var(--brown-mid);   /* opaque — covers scrolling rows beneath */
     z-index: 2;
+    /* border-collapse:collapse + position:sticky causes browsers to render
+       collapsed inter-cell borders as white seams between promoted layers.
+       Removing the cell borders on sticky header cells eliminates those lines
+       without affecting tbody row/column borders. */
+    border-right: none;
+    border-left: none;
   }
 
 }
