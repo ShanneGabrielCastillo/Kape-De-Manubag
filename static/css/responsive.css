@@ -3179,7 +3179,7 @@
    Root cause: .table-orders has no min-width on desktop, and tbody cells
    have no white-space constraint. With table{width:100%} the browser
    compresses all 9 columns equally as the card narrows. When the sidebar
-   is expanded (260px) vs collapsed (64px) the content area loses ~196px,
+   is expanded (224px) vs collapsed (64px) the content area loses ~160px,
    which is enough to cause:
      - Order # to break at hyphens  → "KDM-20260927-\n0010"
      - Customer to break at spaces  → "Walk-in\nCustomer"
@@ -3249,3 +3249,52 @@
 
 }
 /* END ORDER MANAGEMENT TABLE desktop column wrapping fix */
+
+/* ==========================================================================
+   DASHBOARD RECENT ORDERS MOBILE CARDS — Order # one-line fix
+   --------------------------------------------------------------------------
+   Root cause: The responsive-tables.js builder puts the Order # cell
+   (data-role="primary") content into div.table-card-title.  That element
+   has flex:1 + min-width:0, which lets it shrink freely inside the flex
+   header row (title | amount | status).  Neither .table-card-title nor the
+   <a> inside it has white-space:nowrap, so the browser treats every hyphen
+   in "KDM-20260927-0001" as a line-break opportunity, producing:
+       KDM-
+       20260927-
+       0001
+
+   NOTE: an earlier fix in this file sets word-break:break-all on
+   .table-card [data-role="primary"] a — but the JS builder does NOT add
+   a data-role attribute to the generated .table-card-title element, so
+   that selector never matches the dashboard Recent Orders cards.
+
+   Fix:
+   1. white-space:nowrap + overflow:hidden + text-overflow:ellipsis on
+      .table-card-title and its inner <a> — order number stays on one line.
+      On very narrow viewports (320px) "KDM-20260927-0001" is ~165px at
+      0.9rem and the title flex item gets ~55% of a 320px card (~176px after
+      padding) — it fits.  Only genuinely long future codes would ellipsize,
+      which is the correct graceful fallback.
+   2. No change to .table-card-header layout, padding, font sizes, or the
+      amount/status siblings.
+   3. Scoped to max-width:767.98px — desktop Recent Orders table (≥768px)
+      is completely unaffected.
+   ========================================================================== */
+@media (max-width: 767.98px) {
+
+  .table-card-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .table-card-title a {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;   /* ellipsis requires a block/inline-block context */
+    max-width: 100%;
+  }
+
+}
+/* END DASHBOARD RECENT ORDERS MOBILE CARDS one-line fix */

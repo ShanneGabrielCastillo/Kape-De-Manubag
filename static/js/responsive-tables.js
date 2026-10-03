@@ -90,6 +90,18 @@
           cardBody.appendChild(el);
           break;
         }
+        case 'body-status': {
+          // Like 'secondary' but always rendered — even when empty — so the
+          // STATUS row appears in the card body (below Type) rather than in
+          // the card header next to the order number / total.
+          const row2  = document.createElement('div');
+          row2.className = 'table-card-row';
+          row2.innerHTML =
+            '<span class="table-card-label">' + header.text + ':</span>' +
+            '<span class="table-card-value table-card-value--status">' + content + '</span>';
+          cardBody.appendChild(row2);
+          break;
+        }
         case 'actions': {
           actionsDiv.innerHTML += content;
           break;
