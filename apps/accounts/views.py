@@ -194,13 +194,17 @@ def change_password(request):
             update_session_auth_hash(request, request.user)
             log_action(request.user, 'account.password_change', request.user,
                        object_repr=str(request.user))
+            # Queue the success notification before responding. Django's message
+            # framework stores it in the session, so it survives the redirect
+            # (whether triggered client-side via JS or by a plain POST fallback)
+            # and is rendered as a dismissable success alert on My Profile.
+            messages.success(request, 'Password changed successfully.')
             if is_ajax:
                 from django.urls import reverse
                 return JsonResponse({
                     'ok': True,
                     'redirect': reverse('accounts:profile'),
                 })
-            messages.success(request, 'Your password has been changed successfully.')
             return redirect('accounts:profile')
 
         # Form is invalid
