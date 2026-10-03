@@ -1382,6 +1382,23 @@ tbody tr:last-child { border-bottom: none; }
 /* ── Logout text hidden on desktop (shown on mobile via responsive.css) ── */
 .logout-text { display: none; }
 
+/* ── Logout icon (inline SVG) — size, alignment, colour inheritance ── */
+.logout-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.logout-icon svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  /* Inherit the anchor's colour so hover/focus colour changes apply */
+  stroke: currentColor;
+}
+
 /* ── Reports date filter — desktop layout ── */
 /* Both wrappers are flex items inside the form's flex row.
    No width set so they size to content; form handles wrapping. */

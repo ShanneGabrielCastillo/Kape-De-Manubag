@@ -912,7 +912,8 @@
     font-weight: 600;
     color: rgba(255,255,255,0.7);
   }
-  .logout-icon { font-size: 1rem; }
+  .logout-icon { font-size: 1rem; display: inline-flex; align-items: center; justify-content: center; }
+  .logout-icon svg { width: 18px; height: 18px; stroke: currentColor; display: block; }
   .sidebar-user > a[href*="logout"] {
     display: flex;
     align-items: center;
