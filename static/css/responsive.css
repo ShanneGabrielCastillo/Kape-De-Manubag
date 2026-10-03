@@ -3118,5 +3118,35 @@
     border-left: none;
   }
 
+  /* Prevent Order # and Time cells from wrapping onto multiple lines.
+     The table already sits inside overflow-x:auto (#recent-orders-scroll),
+     so adding a min-width here causes the scroll container to kick in rather
+     than squeezing those columns until the text breaks.
+
+     Order # — "KDM-20260927-0010" is ~168px at 0.9rem; 170px gives a small
+     buffer. The link inherits white-space:nowrap so hyphens no longer act as
+     line-break opportunities.
+
+     Time — "6 days, 2 hours ago" can be up to ~130px; 140px covers it.
+     white-space:nowrap keeps the whole phrase on one line. */
+  #recent-orders-scroll .dash-table tbody td:first-child {
+    white-space: nowrap;
+    min-width: 170px;
+  }
+  #recent-orders-scroll .dash-table tbody td:first-child a {
+    white-space: nowrap;
+  }
+  #recent-orders-scroll .dash-table tbody td:last-child {
+    white-space: nowrap;
+    min-width: 140px;
+  }
+
+  /* Give the table a minimum total width so the scroll container activates
+     cleanly instead of the browser squeezing all columns at once.
+     580px covers the six columns at their minimum readable sizes. */
+  #recent-orders-scroll .dash-table {
+    min-width: 580px;
+  }
+
 }
 /* END RECENT ORDERS desktop scroll */
