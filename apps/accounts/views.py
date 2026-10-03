@@ -18,6 +18,7 @@ from .forms import (
     StaffPasswordChangeForm, PasswordResetRequestForm,
 )
 from .models import CustomUser
+from .validators import validate_password_strength
 from apps.accounts.decorators import admin_required
 from apps.audit.services import log_action
 
@@ -299,10 +300,17 @@ def password_reset_confirm(request, uidb64, token):
         else:
             from django.contrib.auth import password_validation
             from django import forms as django_forms
+            # 1) Strength check (mirrors frontend JS — score >= 4/5 criteria)
             try:
-                password_validation.validate_password(new_password1, user)
+                validate_password_strength(new_password1)
             except django_forms.ValidationError as exc:
                 errors.extend(exc.messages)
+            if not errors:
+                # 2) Django's built-in validators (only run if strength passed)
+                try:
+                    password_validation.validate_password(new_password1, user)
+                except django_forms.ValidationError as exc:
+                    errors.extend(exc.messages)
 
         if errors:
             return render(request, 'accounts/password_reset_confirm.html', {

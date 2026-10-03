@@ -208,3 +208,46 @@ def validate_payment_proof_upload(value):
             PROOF_DIMENSIONS.format(width=width, height=height),
             code='proof_dimensions_too_large',
         )
+
+
+# ── Password Strength Validator ───────────────────────────────────────────────
+
+import re as _re
+
+# Mirror of the JavaScript strength-scoring criteria used by the frontend
+# indicator. Score = number of criteria met; "Strong" requires score >= 4.
+_STRENGTH_CRITERIA = [
+    (lambda p: len(p) >= 8,                   'at least 8 characters'),
+    (lambda p: bool(_re.search(r'[a-z]', p)), 'a lowercase letter (a\u2013z)'),
+    (lambda p: bool(_re.search(r'[A-Z]', p)), 'an uppercase letter (A\u2013Z)'),
+    (lambda p: bool(_re.search(r'[0-9]', p)), 'a number'),
+    (lambda p: bool(_re.search(r'[^a-zA-Z0-9]', p)), 'a special character'),
+]
+_STRONG_THRESHOLD = 4
+
+WEAK_PASSWORD_MESSAGE = (
+    'Your password is not strong enough. '
+    'It must satisfy at least {threshold} of these requirements: '
+    '{criteria}.'
+)
+
+
+def validate_password_strength(password):
+    """Raise ValidationError if the password does not reach "Strong" level.
+
+    "Strong" mirrors the frontend JS indicator: score >= 4 out of 5 criteria.
+    This is called by StaffPasswordChangeForm.clean() and
+    password_reset_confirm view so both flows enforce the same rule.
+
+    The password value is NEVER logged, stored, or surfaced in error messages.
+    """
+    score = sum(1 for check, _ in _STRENGTH_CRITERIA if check(password))
+    if score < _STRONG_THRESHOLD:
+        criteria_list = '; '.join(label for _, label in _STRENGTH_CRITERIA)
+        raise ValidationError(
+            WEAK_PASSWORD_MESSAGE.format(
+                threshold=_STRONG_THRESHOLD,
+                criteria=criteria_list,
+            ),
+            code='password_too_weak',
+        )

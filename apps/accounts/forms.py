@@ -6,6 +6,7 @@ from .validators import (
     MAX_SIZE_MB,
     SUPPORTED_FORMATS_LABEL,
     validate_profile_image_upload,
+    validate_password_strength,
 )
 
 
@@ -149,9 +150,13 @@ class StaffPasswordChangeForm(forms.Form):
         cleaned = super().clean()
         new_pw = cleaned.get('new_password1')
         if new_pw:
-            # Run every configured AUTH_PASSWORD_VALIDATORS rule.
-            # Pass the user so validators like UserAttributeSimilarityValidator
-            # can compare the password against the user's attributes.
+            # 1) Strength check (mirrors frontend JS indicator — score >= 4/5)
+            try:
+                validate_password_strength(new_pw)
+            except forms.ValidationError as exc:
+                self.add_error('new_password1', exc)
+                return cleaned  # stop here; skip Django validators on weak pw
+            # 2) Django's built-in validators (length, common, numeric, similarity)
             try:
                 password_validation.validate_password(new_pw, self.user)
             except forms.ValidationError as exc:
