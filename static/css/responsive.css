@@ -3118,35 +3118,133 @@
     border-left: none;
   }
 
-  /* Prevent Order # and Time cells from wrapping onto multiple lines.
-     The table already sits inside overflow-x:auto (#recent-orders-scroll),
-     so adding a min-width here causes the scroll container to kick in rather
-     than squeezing those columns until the text breaks.
+  /* ── Recent Orders: prevent Order #, Customer, and Time from wrapping ──
+     All three rules are desktop-only (inside this min-width:768px block) so
+     mobile card layout is completely unaffected.
 
-     Order # — "KDM-20260927-0010" is ~168px at 0.9rem; 170px gives a small
-     buffer. The link inherits white-space:nowrap so hyphens no longer act as
-     line-break opportunities.
+     The table sits inside overflow-x:auto (#recent-orders-scroll), so
+     enforcing min-widths here makes the scroll container activate rather
+     than forcing the browser to compress columns until text breaks.
 
-     Time — "6 days, 2 hours ago" can be up to ~130px; 140px covers it.
-     white-space:nowrap keeps the whole phrase on one line. */
+     Col 1 — Order # (td:first-child)
+       "KDM-20260927-0010" is ~168px at 0.9rem DM Sans; 172px gives a
+       comfortable buffer.  white-space:nowrap on both the cell and the <a>
+       link prevents hyphen characters from acting as line-break points. */
   #recent-orders-scroll .dash-table tbody td:first-child {
     white-space: nowrap;
-    min-width: 170px;
+    min-width: 172px;
   }
   #recent-orders-scroll .dash-table tbody td:first-child a {
     white-space: nowrap;
   }
-  #recent-orders-scroll .dash-table tbody td:last-child {
+
+  /* Col 2 — Customer (td:nth-child(2))
+     "Walk-in Customer" is ~120px; give the column a min-width that covers
+     that common case.  white-space:nowrap stops the name from breaking at
+     spaces.  max-width + overflow:hidden + text-overflow:ellipsis gracefully
+     truncates names that are genuinely too long (e.g. a 40-character name)
+     without blowing the table past its scroll container. */
+  #recent-orders-scroll .dash-table tbody td:nth-child(2) {
     white-space: nowrap;
-    min-width: 140px;
+    min-width: 130px;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  /* Give the table a minimum total width so the scroll container activates
-     cleanly instead of the browser squeezing all columns at once.
-     580px covers the six columns at their minimum readable sizes. */
+  /* Col 6 — Time (td:last-child)
+     "6 days, 2 hours ago" is up to ~145px; 148px covers it.
+     white-space:nowrap keeps the entire phrase on one line. */
+  #recent-orders-scroll .dash-table tbody td:last-child {
+    white-space: nowrap;
+    min-width: 148px;
+  }
+
+  /* Table floor width — ensures all six columns fit at their minimums before
+     the scroll container kicks in.  Calculated:
+       172 (Order#) + 130 (Customer) + 72 (Type) + 72 (Total) + 84 (Status) + 148 (Time)
+       + 6 × 32px padding = ~770px.
+     Raising this from the previous 580px to match the updated column floors. */
   #recent-orders-scroll .dash-table {
-    min-width: 580px;
+    min-width: 770px;
   }
 
 }
 /* END RECENT ORDERS desktop scroll */
+
+/* ==========================================================================
+   ORDER MANAGEMENT TABLE — desktop column wrapping fix
+   --------------------------------------------------------------------------
+   Root cause: .table-orders has no min-width on desktop, and tbody cells
+   have no white-space constraint. With table{width:100%} the browser
+   compresses all 9 columns equally as the card narrows. When the sidebar
+   is expanded (260px) vs collapsed (64px) the content area loses ~196px,
+   which is enough to cause:
+     - Order # to break at hyphens  → "KDM-20260927-\n0010"
+     - Customer to break at spaces  → "Walk-in\nCustomer"
+     - Items to break at the space  → "1\nitems"
+
+   Fix strategy:
+   1. Set white-space:nowrap + a sensible min-width on the three affected
+      columns so the browser cannot compress them below their content width.
+   2. Give Customer a max-width + text-overflow:ellipsis so genuinely long
+      names truncate gracefully instead of blowing out the table.
+   3. Give the table itself a min-width floor (~900px) so the existing
+      .table-wrapper { overflow-x:auto } scroll container activates cleanly
+      when the card is narrower than the table — the table scrolls, the page
+      does not.
+   4. Keep Actions buttons from wrapping by preventing flex-wrap on that cell.
+
+   Everything is scoped to min-width:768px — mobile uses the JS-generated
+   om-card layout and is completely unaffected.
+   ========================================================================== */
+@media (min-width: 768px) {
+
+  /* ── Col 1 — Order # ──────────────────────────────────────────────────
+     "KDM-20260927-0010" is ~168px at 0.9rem; 175px covers it with margin. */
+  .table-orders td:first-child,
+  .table-orders td:first-child a {
+    white-space: nowrap;
+    min-width: 175px;
+  }
+
+  /* ── Col 2 — Customer ─────────────────────────────────────────────────
+     "Walk-in Customer" is ~120px; 130px min covers the common case.
+     max-width + ellipsis truncates genuinely long names (e.g. 40+ chars)
+     without blowing the table past its scroll container. */
+  .table-orders td:nth-child(2) {
+    white-space: nowrap;
+    min-width: 130px;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ── Col 4 — Items ────────────────────────────────────────────────────
+     "1 items" is short but breaks at the space; nowrap fixes it. */
+  .table-orders td:nth-child(4) {
+    white-space: nowrap;
+    min-width: 60px;
+  }
+
+  /* ── Col 9 — Actions ──────────────────────────────────────────────────
+     The button row uses display:flex;flex-wrap:wrap in the template.
+     Prevent wrapping so View / Print / Advance stay on one line when
+     there is enough room; the table's horizontal scroll handles overflow. */
+  .table-orders td:last-child > div {
+    flex-wrap: nowrap;
+  }
+
+  /* ── Table floor width ────────────────────────────────────────────────
+     Sum of column minimums + 9 × 32px cell padding ≈ 900px.
+     Below this, .table-wrapper { overflow-x:auto } scrolls the table
+     horizontally — the page itself never gets a horizontal scrollbar.
+     This is the key rule that makes the expanded-sidebar state clean:
+     instead of compressing columns, the table maintains readable widths
+     and the wrapper scrolls if necessary. */
+  .table-orders {
+    min-width: 900px;
+  }
+
+}
+/* END ORDER MANAGEMENT TABLE desktop column wrapping fix */
