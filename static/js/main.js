@@ -149,7 +149,11 @@ document.querySelectorAll('.add-to-cart-form').forEach(form => {
         const cartCount = document.querySelector('.cart-count');
         if (cartCount) cartCount.textContent = data.cart_count;
         const cartFabBadge = document.querySelector('.cart-fab .badge-count');
-        if (cartFabBadge) cartFabBadge.textContent = data.cart_count;
+        if (cartFabBadge) {
+          const _count = parseInt(data.cart_count, 10) || 0;
+          cartFabBadge.textContent = _count;
+          cartFabBadge.style.display = _count > 0 ? 'flex' : 'none';
+        }
         // Persist the count so the cart page can detect session expiry.
         try { localStorage.setItem('kdm_cart_count', data.cart_count); } catch(e) {}
       } else {
@@ -203,7 +207,11 @@ document.querySelectorAll('.qty-btn').forEach(btn => {
         const totalEl = document.querySelector('.cart-grand-total');
         if (totalEl) totalEl.textContent = `₱${data.cart_total.toFixed(2)}`;
         const cartFabBadge = document.querySelector('.cart-fab .badge-count');
-        if (cartFabBadge) cartFabBadge.textContent = data.cart_count;
+        if (cartFabBadge) {
+          const _count = parseInt(data.cart_count, 10) || 0;
+          cartFabBadge.textContent = _count;
+          cartFabBadge.style.display = _count > 0 ? 'flex' : 'none';
+        }
         try { localStorage.setItem('kdm_cart_count', data.cart_count); } catch(e) {}
       } else {
         showToast(data.error || 'Could not update item. Please try again.', 'error');
@@ -249,7 +257,11 @@ document.querySelectorAll('.cart-remove').forEach(btn => {
         const totalEl = document.querySelector('.cart-grand-total');
         if (totalEl) totalEl.textContent = `₱${data.cart_total.toFixed(2)}`;
         const cartFabBadge = document.querySelector('.cart-fab .badge-count');
-        if (cartFabBadge) cartFabBadge.textContent = data.cart_count;
+        if (cartFabBadge) {
+          const _count = parseInt(data.cart_count, 10) || 0;
+          cartFabBadge.textContent = _count;
+          cartFabBadge.style.display = _count > 0 ? 'flex' : 'none';
+        }
         try { localStorage.setItem('kdm_cart_count', data.cart_count); } catch(e) {}
         showToast('Item removed', 'info');
       } else {
@@ -259,6 +271,16 @@ document.querySelectorAll('.cart-remove').forEach(btn => {
       showToast('Error removing item', 'error');
     }
   });
+});
+
+// ── Cross-tab cart count sync via localStorage ──
+window.addEventListener('storage', function(e) {
+  if (e.key !== 'kdm_cart_count') return;
+  const badge = document.querySelector('.cart-fab .badge-count');
+  if (!badge) return;
+  const count = parseInt(e.newValue, 10) || 0;
+  badge.textContent = count;
+  badge.style.display = count > 0 ? 'flex' : 'none';
 });
 
 // ── Order Status Update ──

@@ -13,10 +13,6 @@
     {% else %}
       <a href="{% url 'accounts:login' %}" class="btn btn-sm btn-outline">Staff Login</a>
     {% endif %}
-    <a href="{% url 'orders:cart' %}" class="cart-fab" style="position:relative;width:42px;height:42px;font-size:1.1rem;bottom:unset;right:unset;box-shadow:var(--shadow)">
-      🛒
-      {% if cart_count %}<span class="badge-count">{{ cart_count }}</span>{% endif %}
-    </a>
   </div>
 </nav>
 
@@ -97,12 +93,10 @@
 </div>
 
 <!-- Floating Cart Button -->
-{% if cart_count %}
-<a href="{% url 'orders:cart' %}" class="cart-fab">
+<a href="{% url 'orders:cart' %}" class="cart-fab" aria-label="View cart">
   🛒
-  <span class="badge-count">{{ cart_count }}</span>
+  <span class="badge-count" id="cart-fab-badge" {% if not cart_count %}style="display:none"{% endif %}>{{ cart_count }}</span>
 </a>
-{% endif %}
 
 {# ── Customer Chatbot — visible on menu page only ── #}
 <link rel="stylesheet" href="{% static 'css/chatbot.css' %}">
