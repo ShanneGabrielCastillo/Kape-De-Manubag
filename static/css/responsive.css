@@ -1873,20 +1873,8 @@
    -------------------------------------------------------------------------- */
 @media (max-width: 575.98px) {
 
-  /* The fixed floating FAB — hidden on mobile in favour of the nav button */
-  a.cart-fab[style*="badge-count"],
-  a.cart-fab:not([style*="bottom:unset"]) {
-    /* Target the standalone fixed FAB only (the nav inline one has
-       bottom:unset in its inline style).  Using display:none here would
-       also hide the cart page's own FAB reference — use visibility:hidden
-       plus pointer-events:none instead so layout is unaffected. */
-  }
-
-  /* Cleaner approach: scope by page context.  The fixed FAB on the menu
-     page lives OUTSIDE the <nav>, so target it relative to the body. */
-  body > a.cart-fab {
-    display: none !important;
-  }
+  /* The topbar cart was removed — the fixed FAB is now the only cart entry
+     point on all screen sizes. No display:none needed here. */
 
 }
 
