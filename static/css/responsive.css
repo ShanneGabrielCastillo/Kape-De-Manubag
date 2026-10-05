@@ -2337,9 +2337,10 @@
     letter-spacing: -0.02em;
   }
 
-  /* Ending COH row: give the amount column all remaining space */
+  /* Ending COH row: restore horizontal padding so label/amount aren't
+     flush against the box borders (desktop rule uses 14px, match it here) */
   #ending-row {
-    padding: 12px 0 8px;
+    padding: 12px 14px 8px;
   }
   #ending-row > span:last-child {
     flex-shrink: 0;

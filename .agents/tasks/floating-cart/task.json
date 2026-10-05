@@ -1,0 +1,7 @@
+{
+  "task_id": "task-floating-cart",
+  "task_description": "Remove cart icon from the customer menu topbar, make the floating cart FAB always visible on all screen sizes, ensure the badge shows/hides correctly at 0, and synchronize badge count in real time via existing AJAX responses. No new endpoints, no new architecture.",
+  "status": "pending",
+  "feature_order": ["FEAT-001", "FEAT-002"],
+  "blocked_reason": null
+}

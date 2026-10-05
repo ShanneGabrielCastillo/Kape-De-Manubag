@@ -1,0 +1,29 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Ensure the floating cart badge updates in real time (show/hide at 0, update on add/remove/qty-change) and synchronizes across browser tabs. The existing JS handlers in main.js already read data.cart_count from AJAX responses and write to .cart-fab .badge-count, but they do not show/hide the badge when count transitions to/from 0. Fix the three handlers and add a localStorage storage event listener for cross-tab sync.",
+  "status": "pending",
+  "steps": [
+    "In static/js/main.js, locate the add-to-cart AJAX handler (around line 130, after 'Add to Cart (AJAX)'). Find the block that reads: 'const cartFabBadge = document.querySelector(\".cart-fab .badge-count\"); if (cartFabBadge) cartFabBadge.textContent = data.cart_count;'. Replace it with a helper call or inline show/hide logic: set cartFabBadge.textContent = data.cart_count; then cartFabBadge.style.display = (parseInt(data.cart_count, 10) > 0) ? 'flex' : 'none'; This applies to the success branch inside the add-to-cart handler.",
+    "In static/js/main.js, locate the qty-btn click handler. Find the same cartFabBadge update block and apply the same show/hide logic: after setting textContent, set style.display = count > 0 ? 'flex' : 'none'.",
+    "In static/js/main.js, locate the cart-remove click handler. Find the cartFabBadge update block and apply the same show/hide logic.",
+    "In static/js/main.js, after the cart-remove handler block (near the end of the existing cart handler section), add a cross-tab sync listener: window.addEventListener('storage', function(e) { if (e.key !== 'kdm_cart_count') return; const badge = document.querySelector('.cart-fab .badge-count'); if (!badge) return; const count = parseInt(e.newValue, 10) || 0; badge.textContent = count; badge.style.display = count > 0 ? 'flex' : 'none'; });"
+  ],
+  "acceptance_criteria": [
+    "Adding an item to an empty cart: the badge appears immediately showing '1'. No page refresh.",
+    "Adding another item: badge increments immediately (e.g. '1' -> '2').",
+    "Removing an item on the cart page: badge decrements immediately.",
+    "Removing the last item: badge hides (display:none) immediately.",
+    "Clearing the cart: badge hides immediately.",
+    "With two menu tabs open: cart action in tab 1 updates badge in tab 2 without refresh (best-effort, degrades gracefully if storage event does not fire).",
+    "python manage.py test apps.orders apps.menu all pass."
+  ],
+  "verification": [
+    "python manage.py check",
+    "python manage.py test apps.orders apps.menu",
+    "Manual: empty cart -> add item -> badge shows 1. Add again -> 2. Go to cart page -> remove one -> badge shows 1. Remove last -> badge hides. All without page refresh.",
+    "Manual: open menu in two tabs. Add item in tab 1. Tab 2 badge updates."
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

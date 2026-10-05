@@ -276,7 +276,7 @@ document.querySelectorAll('.cart-remove').forEach(btn => {
 // ── Cross-tab cart count sync via localStorage ──
 window.addEventListener('storage', function(e) {
   if (e.key !== 'kdm_cart_count') return;
-  const badge = document.querySelector('.cart-fab .badge-count');
+  const badge = document.getElementById('cart-fab-badge');
   if (!badge) return;
   const count = parseInt(e.newValue, 10) || 0;
   badge.textContent = count;

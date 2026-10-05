@@ -1,0 +1,24 @@
+{
+  "project_type": "Django 4.x monolith, vanilla JS front-end, no npm/webpack, static files served directly",
+  "language": "Python (Django) + vanilla JavaScript + CSS",
+  "build_system": "Django dev server (python manage.py runserver). No JS/CSS build step — static files are edited directly in static/. collectstatic is needed for production but not for local dev.",
+  "test_framework": "Django TestCase (unittest). Run with: python manage.py test apps.orders apps.menu",
+  "build_command": "python manage.py check --deploy (or just python manage.py check for local)",
+  "test_command": "python manage.py test apps.orders apps.menu",
+  "verification_instructions": "1. Run `python manage.py check` — must show no errors. 2. Run `python manage.py test apps.orders apps.menu` — all tests pass. 3. Manual smoke test: open menu page in browser, add/remove items, verify floating cart badge updates without page refresh.",
+  "snapshot_or_generated_files": null,
+  "environment_constraints": "Workspace root is c:\\Users\\Shecile\\kape_de_manubag_system. Always use this absolute path — do not rely on relative paths. Do not restart the server; file changes take effect immediately in development.",
+  "contribution_requirements": "No AGENTS.md found. Match existing code style: Django templates use {% %} blocks, JS uses async/await with fetch, CSS is plain (no preprocessor). No new dependencies may be introduced.",
+  "key_patterns": "Cart state lives server-side in Django sessions. All cart AJAX endpoints (add_to_cart, update_cart, remove_from_cart, clear_cart) already return 'cart_count' in their JSON response. JS handlers in main.js already read data.cart_count and update '.cart-fab .badge-count'. The context processor apps.orders.context_processors.cart_count injects cart_count into every template render.",
+  "relevant_files": [
+    "templates/menu/index.html",
+    "static/js/main.js",
+    "static/css/main.css",
+    "static/css/responsive.css",
+    "static/css/chatbot.css",
+    "apps/orders/views.py",
+    "apps/orders/context_processors.py",
+    "apps/orders/models.py"
+  ],
+  "directory_structure": "apps/ — Django apps (menu, orders, accounts, chatbot, etc.). templates/ — all HTML templates (base.html, base_admin.html, menu/index.html, orders/cart.html, etc.). static/css/ — main.css, responsive.css, chatbot.css, mobile-design-system.css. static/js/ — main.js (all JS), chatbot.js."
+}

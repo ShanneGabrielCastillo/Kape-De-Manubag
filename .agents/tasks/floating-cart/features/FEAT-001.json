@@ -1,0 +1,26 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Remove the cart icon from the customer menu topbar and make the floating cart FAB always visible on all screen sizes. The topbar cart is an inline-styled .cart-fab element inside the menu template's own nav section (NOT in base.html). The bottom floating cart is currently conditional on {% if cart_count %}, which hides it when the cart is empty — fix by always rendering it, using a server-rendered style='display:none' on the badge when count is 0.",
+  "status": "pending",
+  "steps": [
+    "In templates/menu/index.html, locate the topbar <nav> element (first element in {% block body %}). Inside the <div style='display:flex;align-items:center;gap:12px'>, remove the entire <a href='{% url 'orders:cart' %}' class='cart-fab' style='position:relative;width:42px;height:42px;font-size:1.1rem;bottom:unset;right:unset;box-shadow:var(--shadow)'> element including its children. Keep the Staff Login / Dashboard <a> tag.",
+    "In templates/menu/index.html, locate the floating cart block near the bottom (just before the chatbot comment). Replace the entire {% if cart_count %}...{% endif %} block with an unconditional FAB that always renders. Add id='cart-fab-badge' to the badge span and apply style='display:none' when cart_count is falsy: <a href=\"{% url 'orders:cart' %}\" class=\"cart-fab\" aria-label=\"View cart\">\\n  🛒\\n  <span class=\"badge-count\" id=\"cart-fab-badge\" {% if not cart_count %}style=\"display:none\"{% endif %}>{{ cart_count }}</span>\\n</a>",
+    "In static/css/chatbot.css, update the @media (max-width: 480px) rule for .kdm-chat-btn: change bottom from 80px to 90px to restore the clear gap above the cart FAB (which is at bottom:20px + height:56px = 76px top edge; 90px provides 14px gap)."
+  ],
+  "acceptance_criteria": [
+    "The topbar on the customer menu page shows only the logo and Staff Login/Dashboard link — no cart icon.",
+    "The floating cart FAB is visible at bottom-right on all screen sizes including 320px, 360px, 375px, 390px, 412px.",
+    "When the cart is empty, the FAB shows no red badge.",
+    "When the cart has items, the FAB shows the red badge with the correct count.",
+    "The chatbot button and cart FAB do not overlap on mobile viewports.",
+    "python manage.py check reports no errors."
+  ],
+  "verification": [
+    "python manage.py check",
+    "python manage.py test apps.orders apps.menu",
+    "Manual: open menu page with empty cart — FAB visible, badge hidden. Topbar has no cart icon."
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
