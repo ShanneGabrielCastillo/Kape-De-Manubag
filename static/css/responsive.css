@@ -3102,10 +3102,9 @@
     z-index: 2;
     /* border-collapse:collapse + position:sticky causes browsers to render
        collapsed inter-cell borders as white seams between promoted layers.
-       Removing the cell borders on sticky header cells eliminates those lines
-       without affecting tbody row/column borders. */
-    border-right: none;
-    border-left: none;
+       Setting all four border sides to none on the sticky <th> eliminates
+       every seam line without affecting tbody row/column borders. */
+    border: none;
   }
 
   /* ── Recent Orders: prevent Order #, Customer, and Time from wrapping ──
