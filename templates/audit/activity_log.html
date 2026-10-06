@@ -286,9 +286,9 @@
             <span style="font-size:0.75rem">{{ log.created_at|date:"g:i A" }}</span>
           </td>
 
-          {# User — mobile: label-value row "User: admin / Admin" #}
+          {# User — mobile: label-value row showing first name (falls back to username) #}
           <td style="font-weight:600;font-size:0.88rem">
-            {{ log.user.username|default:"System" }}
+            {{ log.user.first_name|default:log.user.username|default:"System" }}
             {% if log.user %}
             <div style="font-size:0.75rem;color:#aaa;font-weight:400">{{ log.user.get_role_display }}</div>
             {% endif %}
