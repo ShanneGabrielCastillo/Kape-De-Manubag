@@ -1,0 +1,1 @@
+Phase 13 complete: reinitLucide added to responsive-tables.js after mobile card DOM insertion; chatbot.js and realtime.js already correct.

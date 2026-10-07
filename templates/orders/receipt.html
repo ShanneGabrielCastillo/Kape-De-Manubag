@@ -75,9 +75,11 @@
 </div>
 
 <div class="no-print" style="text-align:center;margin-top:24px">
-  <button onclick="window.print()" style="padding:10px 24px;background:#4A2C2A;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:0.9rem">🖨️ Print Receipt</button>
+  <button onclick="window.print()" style="padding:10px 24px;background:#4A2C2A;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:0.9rem"><i data-lucide="printer" style="width:1em;height:1em;vertical-align:-0.15em;margin-right:4px" aria-hidden="true"></i> Print Receipt</button>
   <button onclick="window.close()" style="padding:10px 24px;background:#888;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:0.9rem;margin-left:8px">Close</button>
 </div>
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<script>document.addEventListener('DOMContentLoaded', function () { if (typeof lucide !== 'undefined') lucide.createIcons(); });</script>
 <script>setTimeout(() => window.print(), 500);</script>
 </body>
 </html>

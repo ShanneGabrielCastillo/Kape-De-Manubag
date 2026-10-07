@@ -256,7 +256,7 @@
             {% elif log.action == "category.reactivate" %}
               <span style="color:var(--green-success)"><i data-lucide="circle-check" class="status-icon" aria-hidden="true"></i> Category Reactivated</span>
             {% elif log.action == "category.delete" %}
-              <span style="color:var(--red-accent)">🗑️ Category Deleted</span>
+              <span style="color:var(--red-accent)"><i data-lucide="trash-2" class="status-icon" aria-hidden="true"></i> Category Deleted</span>
             {% elif log.action == "staff.create" %}
               <i data-lucide="user-round" class="status-icon" aria-hidden="true"></i> Staff Account Created
             {% elif log.action == "staff.deactivate" %}

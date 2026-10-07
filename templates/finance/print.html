@@ -123,10 +123,12 @@
 </div>
 
 <div class="no-print">
-  <button class="btn-print" onclick="window.print()">🖨️ Print</button>
+  <button class="btn-print" onclick="window.print()"><i data-lucide="printer" style="width:1em;height:1em;vertical-align:-0.15em;margin-right:4px" aria-hidden="true"></i> Print</button>
   <button class="btn-close" onclick="window.close()">Close</button>
 </div>
 
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<script>document.addEventListener('DOMContentLoaded', function () { if (typeof lucide !== 'undefined') lucide.createIcons(); });</script>
 <script>setTimeout(() => window.print(), 500);</script>
 </body>
 </html>

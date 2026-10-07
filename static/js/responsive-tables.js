@@ -183,6 +183,7 @@
     // Insert AFTER the .card ancestor (outside overflow:hidden) so cards are visible
     const insertTarget = wrapper.closest('.card') || wrapper;
     insertTarget.insertAdjacentElement('afterend', container);
+    window.reinitLucide && window.reinitLucide();
   }
 
   /**
