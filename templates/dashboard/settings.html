@@ -1,4 +1,4 @@
-{% extends "base_admin.html" %}
+﻿{% extends "base_admin.html" %}
 {% block page_title %}System Settings{% endblock %}
 
 {% block content %}
@@ -15,7 +15,7 @@
     {% csrf_token %}
     <div class="card">
       <div class="card-header">
-        <h3>⚙️ Configurable Settings</h3>
+        <h3><i data-lucide="settings" class="btn-icon" aria-hidden="true"></i> Configurable Settings</h3>
       </div>
       <div class="card-body" style="padding:0">
 
@@ -24,7 +24,7 @@
           <div>
             <div style="font-weight:700;font-size:0.95rem;color:var(--brown-dark);margin-bottom:4px">
               {% if setting.key == 'PACKAGING_FEE_PER_ITEM' %}
-                📦 Take-Out Packaging Fee
+                <i data-lucide="package" class="btn-icon" aria-hidden="true"></i> Take-Out Packaging Fee
               {% else %}
                 {{ setting.key }}
               {% endif %}
@@ -54,7 +54,7 @@
         </div>
         {% empty %}
         <div style="padding:40px;text-align:center;color:#aaa">
-          <div style="font-size:2rem;margin-bottom:8px">⚙️</div>
+          <div style="margin-bottom:8px"><i data-lucide="settings" style="width:2rem;height:2rem" aria-hidden="true"></i></div>
           <p>No settings found. Run the seed script to initialize defaults.</p>
         </div>
         {% endfor %}
@@ -63,14 +63,14 @@
       {% if settings_list %}
       <div class="settings-footer">
         <a href="{% url 'dashboard:index' %}" class="btn btn-outline">Cancel</a>
-        <button type="submit" class="btn btn-primary">💾 Save Changes</button>
+        <button type="submit" class="btn btn-primary"><i data-lucide="save" class="btn-icon" aria-hidden="true"></i> Save Changes</button>
       </div>
       {% endif %}
     </div>
   </form>
 
   <div class="card">
-    <div class="card-header"><h3>ℹ️ How Settings Work</h3></div>
+    <div class="card-header"><h3><i data-lucide="info" class="btn-icon" aria-hidden="true"></i> How Settings Work</h3></div>
     <div class="card-body" style="font-size:0.88rem;color:#666;line-height:1.8">
       <ul style="padding-left:20px">
         <li><strong>Take-Out Packaging Fee</strong> — charged per eligible meal item (Burgers, Combos, Pastil, Snacks, Appetizers, Ala Carte) when a customer or cashier selects Take-Out. Beverages (Coffee, Milk Tea, Non-Coffee Drinks) are exempt.</li>
@@ -82,3 +82,4 @@
 
 </div><!-- /.settings-layout -->
 {% endblock %}
+

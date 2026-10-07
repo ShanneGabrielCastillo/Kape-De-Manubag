@@ -1,4 +1,4 @@
-{% extends "base_admin.html" %}
+﻿{% extends "base_admin.html" %}
 {% load static %}
 {% block page_title %}Dashboard{% endblock %}
 {% block body_attrs %}data-realtime="true"{% endblock %}
@@ -287,33 +287,33 @@
     <div class="stat-label">Today's Sales</div>
     <div class="stat-value">{% if 'stats' in widget_errors %}—{% else %}₱{{ daily_sales|floatformat:2 }}{% endif %}</div>
     <div class="stat-sub">{% if 'stats' in widget_errors %}Unavailable{% elif daily_orders %}{{ daily_orders }} order{{ daily_orders|pluralize }} today{% else %}No orders yet today{% endif %}</div>
-    <div class="stat-icon">☀️</div>
+    <div class="stat-icon"><i data-lucide="calendar" aria-hidden="true"></i></div>
   </div>
   <div class="stat-card green dash-content" data-stat="weekly">
     <div class="stat-label">Weekly Sales</div>
     <div class="stat-value">{% if 'stats' in widget_errors %}—{% else %}₱{{ weekly_sales|floatformat:2 }}{% endif %}</div>
     <div class="stat-sub">{% if 'stats' in widget_errors %}Unavailable{% elif weekly_orders %}{{ weekly_orders }} order{{ weekly_orders|pluralize }} this week{% else %}No orders this week{% endif %}</div>
-    <div class="stat-icon">📅</div>
+    <div class="stat-icon"><i data-lucide="calendar-range" aria-hidden="true"></i></div>
   </div>
   <div class="stat-card blue dash-content" data-stat="monthly">
     <div class="stat-label">Monthly Sales</div>
     <div class="stat-value">{% if 'stats' in widget_errors %}—{% else %}₱{{ monthly_sales|floatformat:2 }}{% endif %}</div>
     <div class="stat-sub">{% if 'stats' in widget_errors %}Unavailable{% elif monthly_orders %}{{ monthly_orders }} order{{ monthly_orders|pluralize }} this month{% else %}No orders this month{% endif %}</div>
-    <div class="stat-icon">📆</div>
+    <div class="stat-icon"><i data-lucide="calendar-range" aria-hidden="true"></i></div>
   </div>
   <div class="stat-card dash-content" data-stat="total">
     <div class="stat-label">Total Revenue</div>
     <div class="stat-value">{% if 'stats' in widget_errors %}—{% else %}₱{{ total_sales|floatformat:2 }}{% endif %}</div>
     <div class="stat-sub">{% if 'stats' in widget_errors %}Unavailable{% elif total_orders %}{{ total_orders }} total order{{ total_orders|pluralize }}{% else %}No orders recorded yet{% endif %}</div>
-    <div class="stat-icon">💰</div>
+    <div class="stat-icon"><i data-lucide="wallet" aria-hidden="true"></i></div>
   </div>
 </div>
 
 <!-- Quick Actions (always visible — they are navigation, not data) -->
 <div class="dashboard-quick-actions" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px">
-  <a href="{% url 'orders:pos' %}" class="btn btn-caramel"><span>🖥️</span> Open POS</a>
+  <a href="{% url 'orders:pos' %}" class="btn btn-caramel"><i data-lucide="monitor" class="btn-icon" aria-hidden="true"></i> Open POS</a>
   <a href="{% url 'orders:order_list' %}" class="btn btn-primary" style="position:relative">
-    📋 Orders
+    <i data-lucide="clipboard-list" class="btn-icon" aria-hidden="true"></i> Orders
     {% if pending_count %}
     {# Desktop: existing pill badge — unchanged #}
     <span class="badge badge-awaiting-payment dash-orders-pill" id="pending-count-value" style="margin-left:4px">{{ pending_count }} awaiting payment</span>
@@ -323,7 +323,7 @@
   </a>
   {% if user.is_admin_user %}
   <a href="{% url 'menu:product_create' %}" class="btn btn-outline">+ Add Product</a>
-  <a href="{% url 'reports:index' %}" class="btn btn-outline">📈 Reports</a>
+  <a href="{% url 'reports:index' %}" class="btn btn-outline"><i data-lucide="chart-column" class="btn-icon" aria-hidden="true"></i> Reports</a>
   {% endif %}
 </div>
 
@@ -341,7 +341,7 @@
 
   <!-- Top Products — skeleton -->
   <div class="card dash-skeleton" aria-hidden="true">
-    <div class="card-header"><h3>🏆 Top Products</h3></div>
+    <div class="card-header"><h3><i data-lucide="award" class="btn-icon" aria-hidden="true"></i> Top Products</h3></div>
     <div class="card-body dash-list" style="padding:0">
       {% for i in "12345" %}
       <div class="sk-row">
@@ -370,12 +370,12 @@
         <canvas id="sales-chart"></canvas>
         {% if 'chart' in widget_errors %}
         <div class="chart-empty" id="chart-empty" style="display:flex">
-          <div class="empty-icon">⚠️</div>
+          <div class="empty-icon"><i data-lucide="triangle-alert" style="width:2.2rem;height:2.2rem;opacity:0.5" aria-hidden="true"></i></div>
           <p>Chart data is temporarily unavailable. Please try again later.</p>
         </div>
         {% else %}
         <div class="chart-empty" id="chart-empty">
-          <div class="empty-icon">📊</div>
+          <div class="empty-icon"><i data-lucide="chart-column" style="width:2.2rem;height:2.2rem;opacity:0.5" aria-hidden="true"></i></div>
           <p>No sales data yet — the chart will appear here once orders are placed.</p>
         </div>
         {% endif %}
@@ -387,7 +387,7 @@
   <!-- Top Products — real content -->
   <div class="card dash-content">
     <div class="card-header">
-      <h3>🏆 Top Products</h3>
+      <h3><i data-lucide="award" class="btn-icon" aria-hidden="true"></i> Top Products</h3>
       {# Period pill — updated by JS when the chart period changes #}
       <span id="top-products-period-label" style="font-size:0.75rem;font-weight:600;padding:3px 10px;border-radius:20px;background:var(--cream);color:var(--brown-mid)">
         {% if initial_period == 'month' %}This Month{% else %}This Week{% endif %}
@@ -396,7 +396,7 @@
     <div class="card-body dash-list" id="top-products-list" style="padding:0">
       {% if 'top_products' in widget_errors %}
       <div class="empty-state widget-error">
-        <div class="empty-icon">⚠️</div>
+        <div class="empty-icon"><i data-lucide="triangle-alert" style="width:2.2rem;height:2.2rem;opacity:0.5" aria-hidden="true"></i></div>
         <p>Top products are temporarily unavailable. Please try again later.</p>
       </div>
       {% else %}
@@ -410,7 +410,7 @@
       </div>
       {% empty %}
       <div class="empty-state">
-        <div class="empty-icon">🏆</div>
+        <div class="empty-icon"><i data-lucide="award" style="width:4rem;height:4rem;opacity:0.5" aria-hidden="true"></i></div>
         <p>No best-sellers yet — top products will appear here once orders are placed.</p>
       </div>
       {% endfor %}
@@ -447,7 +447,7 @@
 
   <!-- Low Stock — skeleton -->
   <div class="card dash-skeleton" aria-hidden="true">
-    <div class="card-header"><h3>⚠️ Low Stock</h3></div>
+    <div class="card-header"><h3><i data-lucide="triangle-alert" class="btn-icon" aria-hidden="true"></i> Low Stock</h3></div>
     <div class="card-body dash-list" style="padding:0">
       {% for i in "12345" %}
       <div class="sk-row">
@@ -477,7 +477,7 @@
           <tr id="recent-orders-error">
             <td colspan="6">
               <div class="empty-state table-empty-state widget-error" style="padding:32px">
-                <div class="empty-icon">⚠️</div>
+                <div class="empty-icon"><i data-lucide="triangle-alert" style="width:2.2rem;height:2.2rem;opacity:0.5" aria-hidden="true"></i></div>
                 <p>Recent orders are temporarily unavailable. Please try again later.</p>
               </div>
             </td>
@@ -501,7 +501,7 @@
           <tr id="recent-orders-empty">
             <td colspan="6">
               <div class="empty-state table-empty-state" style="padding:32px">
-                <div class="empty-icon">📋</div>
+                <div class="empty-icon"><i data-lucide="clipboard-list" style="width:2.2rem;height:2.2rem;opacity:0.5" aria-hidden="true"></i></div>
                 <p>No orders yet — new orders will appear here.</p>
               </div>
             </td>
@@ -516,13 +516,13 @@
   <!-- Low Stock — real content -->
   <div class="card dash-content">
     <div class="card-header">
-      <h3>⚠️ Low Stock</h3>
+      <h3><i data-lucide="triangle-alert" class="btn-icon" aria-hidden="true"></i> Low Stock</h3>
       <a href="{% url 'inventory:list' %}" class="btn btn-sm btn-outline">Inventory</a>
     </div>
     <div class="card-body dash-list" id="low-stock-list" style="padding:0">
       {% if 'low_stock' in widget_errors %}
       <div class="empty-state widget-error">
-        <div class="empty-icon">⚠️</div>
+        <div class="empty-icon"><i data-lucide="triangle-alert" style="width:2.2rem;height:2.2rem;opacity:0.5" aria-hidden="true"></i></div>
         <p>Low stock data is temporarily unavailable. Please try again later.</p>
       </div>
       {% else %}
@@ -537,7 +537,7 @@
         </span>
       </div>
       {% empty %}
-      <div class="empty-state"><div class="empty-icon">✅</div><p>All items well-stocked</p></div>
+      <div class="empty-state"><div class="empty-icon"><i data-lucide="circle-check" style="width:4rem;height:4rem;opacity:0.5" aria-hidden="true"></i></div><p>All items well-stocked</p></div>
       {% endfor %}
       {% endif %}
     </div>
@@ -749,7 +749,7 @@
   // Friendly fallback shown inside a widget when its dataset failed to load.
   function widgetErrorHtml(message) {
     return '<div class="empty-state widget-error">' +
-      '<div class="empty-icon">⚠️</div>' +
+      '<div class="empty-icon"><i data-lucide="triangle-alert" style="width:2.2rem;height:2.2rem;opacity:0.5" aria-hidden="true"></i></div>' +
       '<p>' + escHtml(message) + '</p></div>';
   }
 
@@ -866,7 +866,7 @@
       // Dataset failed server-side: friendly fallback, keep the card layout.
       html = widgetErrorHtml('Top products are temporarily unavailable. Please try again later.');
     } else if (!items.length) {
-      html = '<div class="empty-state"><div class="empty-icon">🏆</div>' +
+      html = '<div class="empty-state"><div class="empty-icon"><i data-lucide="award" style="width:4rem;height:4rem;opacity:0.5" aria-hidden="true"></i></div>' +
              '<p>No best-sellers ' + 'yet — top products will appear here once orders are placed.</p></div>';
     } else {
       html = items.map(function (p) {
@@ -888,7 +888,7 @@
       // Dataset failed server-side: friendly fallback, keep the card layout.
       html = widgetErrorHtml('Low stock data is temporarily unavailable. Please try again later.');
     } else if (!items.length) {
-      html = '<div class="empty-state"><div class="empty-icon">✅</div><p>All items well-' + 'stocked</p></div>';
+      html = '<div class="empty-state"><div class="empty-icon"><i data-lucide="circle-check" style="width:4rem;height:4rem;opacity:0.5" aria-hidden="true"></i></div><p>All items well-' + 'stocked</p></div>';
     } else {
       html = items.map(function (p) {
         const cls = p.is_critical ? 'badge-cancelled' : 'badge-pending';
@@ -990,3 +990,4 @@
   });
 </script>
 {% endblock %}
+

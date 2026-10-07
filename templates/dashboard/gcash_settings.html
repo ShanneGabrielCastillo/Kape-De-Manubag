@@ -5,19 +5,19 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <h1 class="page-title">📱 GCash Payment Settings</h1>
+    <h1 class="page-title"><i data-lucide="credit-card" class="btn-icon" aria-hidden="true"></i> GCash Payment Settings</h1>
     <p class="page-subtitle">Configure the GCash account information shown to customers at checkout</p>
   </div>
-  <a href="{% url 'dashboard:system_settings' %}" class="btn btn-outline">← Settings</a>
+  <a href="{% url 'dashboard:system_settings' %}" class="btn btn-outline"><i data-lucide="arrow-left" class="btn-icon" aria-hidden="true"></i> Settings</a>
 </div>
 
 {% if gcash.is_configured %}
 <div style="background:#d1e7dd;border:1px solid #a3cfbb;border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:0.88rem;color:#0f5132">
-  ✅ GCash is configured — customers can select GCash at checkout.
+  <i data-lucide="badge-check" class="status-icon" aria-hidden="true"></i> GCash is configured — customers can select GCash at checkout.
 </div>
 {% else %}
 <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:0.88rem;color:#856404">
-  ⚠️ GCash is not fully configured yet. Set at least the account name and number so customers can make GCash payments.
+  <i data-lucide="triangle-alert" class="status-icon" aria-hidden="true"></i> GCash is not fully configured yet. Set at least the account name and number so customers can make GCash payments.
 </div>
 {% endif %}
 
@@ -26,7 +26,7 @@
   <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
     <div class="card" style="margin-bottom:20px">
-      <div class="card-header"><h3>💳 Account Details</h3></div>
+      <div class="card-header"><h3><i data-lucide="credit-card" class="btn-icon" aria-hidden="true"></i> Account Details</h3></div>
       <div class="card-body" style="display:flex;flex-direction:column;gap:18px">
 
         <div class="form-group">
@@ -57,7 +57,7 @@
     </div>
 
     <div class="card" style="margin-bottom:20px">
-      <div class="card-header"><h3>🔲 GCash QR Code</h3></div>
+      <div class="card-header"><h3><i data-lucide="image-up" class="btn-icon" aria-hidden="true"></i> GCash QR Code</h3></div>
       <div class="card-body">
         {% if gcash.qr_image %}
         <div style="margin-bottom:16px">
@@ -81,20 +81,20 @@
 
         {% if not gcash.qr_image %}
         <div style="background:var(--cream);border-radius:10px;padding:14px;margin-top:12px;font-size:0.85rem;color:#888">
-          💡 Upload your GCash QR code so customers can scan it directly. This is optional but improves the customer experience.
+          <i data-lucide="info" class="status-icon" aria-hidden="true"></i> Upload your GCash QR code so customers can scan it directly. This is optional but improves the customer experience.
         </div>
         {% endif %}
       </div>
     </div>
 
     <div style="display:flex;gap:12px">
-      <button type="submit" class="btn btn-primary">💾 Save GCash Settings</button>
+      <button type="submit" class="btn btn-primary"><i data-lucide="save" class="btn-icon" aria-hidden="true"></i> Save GCash Settings</button>
       <a href="{% url 'dashboard:index' %}" class="btn btn-outline">Cancel</a>
     </div>
   </form>
 
   <div class="card">
-    <div class="card-header"><h3>ℹ️ How Manual GCash Verification Works</h3></div>
+    <div class="card-header"><h3><i data-lucide="info" class="btn-icon" aria-hidden="true"></i> How Manual GCash Verification Works</h3></div>
     <div class="card-body" style="font-size:0.88rem;color:#666;line-height:1.8">
       <ol style="padding-left:20px">
         <li>Customer selects <strong>GCash</strong> at checkout and places their order.</li>
@@ -107,7 +107,7 @@
         <li>Customer is notified in real-time and sees Order Received.</li>
       </ol>
       <p style="margin-top:10px;color:#c0392b;font-size:0.85rem">
-        ⚠️ <strong>Never click Verify</strong> without checking your actual GCash account first. The customer's reference number alone is not proof of payment.
+        <i data-lucide="triangle-alert" class="status-icon" aria-hidden="true"></i> <strong>Never click Verify</strong> without checking your actual GCash account first. The customer's reference number alone is not proof of payment.
       </p>
     </div>
   </div>
