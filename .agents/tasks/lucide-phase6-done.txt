@@ -1,0 +1,1 @@
+Phase 6 complete: Lucide icons migrated in cart.html (trash-2, triangle-alert, shopping-cart), order_success.html (circle-check, credit-card, clipboard-list); checkout.html emoji left as-is per rules.
