@@ -99,12 +99,12 @@
 
   // ── Quick reply buttons ───────────────────────────────────────────────────
   const QUICK_QUESTIONS = [
-    { label: '🍽️ What\'s on the menu?',           msg: 'What food and drinks do you have?' },
-    { label: '⭐ What do you recommend?',          msg: 'What do you recommend?' },
-    { label: '💳 Payment methods?',               msg: 'What payment methods do you accept?' },
-    { label: '🥡 Takeout & packaging fee?',       msg: 'Is takeout available? Tell me about the packaging fee.' },
-    { label: '🛒 How do I order?',                msg: 'How do I place an order?' },
-    { label: '📦 Track my order',                 msg: 'I want to track my order' },
+    { label: 'What\'s on the menu?',           msg: 'What food and drinks do you have?' },
+    { label: 'What do you recommend?',          msg: 'What do you recommend?' },
+    { label: 'Payment methods?',               msg: 'What payment methods do you accept?' },
+    { label: 'Takeout & packaging fee?',       msg: 'Is takeout available? Tell me about the packaging fee.' },
+    { label: 'How do I order?',                msg: 'How do I place an order?' },
+    { label: 'Track my order',                 msg: 'I want to track my order' },
   ];
 
   function showQuickReplies() {
@@ -152,7 +152,9 @@
   }
 
   function appendBotMessage(text) {
-    return appendMessage(text, 'bot');
+    const w = appendMessage(text, 'bot');
+    window.reinitLucide && window.reinitLucide();
+    return w;
   }
 
   function appendUserMessage(text) {

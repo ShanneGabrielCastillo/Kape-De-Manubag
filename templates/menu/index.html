@@ -25,7 +25,7 @@
 <!-- Category Filter Nav -->
 <div class="menu-nav">
   <div class="menu-nav-inner">
-    <button class="menu-cat-btn active" data-cat="all">🍽️ All</button>
+    <button class="menu-cat-btn active" data-cat="all">All</button>
     {% for cat in categories %}
     <button class="menu-cat-btn" data-cat="{{ cat.slug }}">{{ cat.icon }} {{ cat.name }}</button>
     {% endfor %}
@@ -36,7 +36,7 @@
 <div class="menu-container">
   <!-- Search -->
   <div class="menu-search-bar">
-    <input type="text" id="menu-search" class="menu-search-input" placeholder="🔍 Search menu...">
+    <input type="text" id="menu-search" class="menu-search-input" placeholder="Search menu...">
   </div>
 
   {% for cat in categories %}
@@ -94,7 +94,7 @@
 
 <!-- Floating Cart Button -->
 <a href="{% url 'orders:cart' %}" class="cart-fab" aria-label="View cart">
-  🛒
+  <i data-lucide="shopping-cart" class="chat-icon" aria-hidden="true"></i>
   <span class="badge-count" id="cart-fab-badge" {% if not cart_count %}style="display:none"{% endif %}>{{ cart_count }}</span>
 </a>
 
@@ -108,7 +108,7 @@
         aria-expanded="false"
         aria-controls="kdm-chat-panel"
         title="Need help? Chat with us!">
-  💬
+  <i data-lucide="message-circle" class="chat-icon" aria-hidden="true"></i>
   <span id="kdm-chat-dot" class="kdm-chat-btn-dot" aria-hidden="true"></span>
 </button>
 
@@ -165,7 +165,7 @@
             class="kdm-chat-send"
             aria-label="Send message"
             title="Send">
-      ➤
+      <i data-lucide="send" class="chat-icon" aria-hidden="true"></i>
     </button>
   </div>
 
