@@ -304,7 +304,7 @@
     <h1 class="page-title">Order Management</h1>
     <p class="page-subtitle">Track and manage all orders</p>
   </div>
-  <a href="{% url 'orders:pos' %}" class="btn btn-caramel">🖥️ Open POS</a>
+  <a href="{% url 'orders:pos' %}" class="btn btn-caramel"><i data-lucide="monitor" class="btn-icon" aria-hidden="true"></i> Open POS</a>
 </div>
 
 <!-- Status tabs -->
@@ -320,12 +320,12 @@
   <form method="get" id="order-search-form">
     {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
     <div class="order-search-wrap">
-      <span class="order-search-icon">🔍</span>
+      <i data-lucide="search" class="order-search-icon" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);pointer-events:none;z-index:1;width:1rem;height:1rem;color:#aaa" aria-hidden="true"></i>
       <input type="text" name="q" value="{{ search }}" placeholder="Search order # or customer..." class="form-control order-search-input">
     </div>
     <div class="order-filter-btns">
-      <button type="submit" class="btn btn-primary">🔧 Filter</button>
-      <a href="?{% if status_filter %}status={{ status_filter }}{% endif %}" class="btn btn-outline">↺ Clear</a>
+      <button type="submit" class="btn btn-primary"><i data-lucide="list-filter" class="btn-icon" aria-hidden="true"></i> Filter</button>
+      <a href="?{% if status_filter %}status={{ status_filter }}{% endif %}" class="btn btn-outline"><i data-lucide="rotate-ccw" class="btn-icon" aria-hidden="true"></i> Clear</a>
     </div>
   </form>
 </div>
@@ -373,9 +373,9 @@
               <span class="badge badge-cancelled" style="font-size:0.8rem;padding:5px 10px">{{ order.get_status_display }}</span>
             {% elif order.status == 'awaiting_payment' %}
               {% if order.payment_method == 'gcash' and order.gcash_status == 'pending' %}
-              <span class="badge" style="background:#dbeafe;color:#1e40af;font-size:0.8rem;padding:5px 10px">📋 GCash — Verify</span>
+              <span class="badge" style="background:#dbeafe;color:#1e40af;font-size:0.8rem;padding:5px 10px"><i data-lucide="clipboard-list" class="status-icon" aria-hidden="true"></i> GCash — Verify</span>
               {% elif order.payment_method == 'gcash' and order.gcash_status == 'rejected' %}
-              <span class="badge" style="background:#fee2e2;color:#991b1b;font-size:0.8rem;padding:5px 10px">❌ GCash Rejected</span>
+              <span class="badge" style="background:#fee2e2;color:#991b1b;font-size:0.8rem;padding:5px 10px"><i data-lucide="circle-x" class="status-icon" aria-hidden="true"></i> GCash Rejected</span>
               {% elif order.payment_method == 'gcash' %}
               <span class="badge" style="background:#fff3cd;color:#856404;font-size:0.8rem;padding:5px 10px">{{ order.get_status_display }}</span>
               {% else %}
@@ -389,10 +389,10 @@
             {% if order.status == 'awaiting_payment' %}
               {# Show payment action based on exact GCash state #}
               {% if order.payment_method == 'gcash' and order.gcash_status == 'pending' %}
-                <a href="{% url 'orders:order_detail' order.pk %}" class="btn btn-sm btn-primary">🔍 Verify GCash</a>
+                <a href="{% url 'orders:order_detail' order.pk %}" class="btn btn-sm btn-primary"><i data-lucide="badge-check" class="btn-icon" aria-hidden="true"></i> Verify GCash</a>
               {% else %}
                 {# Cash, GCash-none, GCash-rejected: all show Pay #}
-                <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}', '{{ order.payment_method }}', '')" class="btn btn-sm btn-caramel">💳 Pay</button>
+                <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}', '{{ order.payment_method }}', '')" class="btn btn-sm btn-caramel"><i data-lucide="credit-card" class="btn-icon" aria-hidden="true"></i> Pay</button>
               {% endif %}
             {% elif order.is_paid %}
               <span class="badge badge-paid">Paid</span>
@@ -404,7 +404,7 @@
           <td>
             <div style="display:flex;gap:4px;flex-wrap:wrap">
               <a href="{% url 'orders:order_detail' order.pk %}" class="btn btn-sm btn-outline">View</a>
-              <a href="{% url 'orders:print_receipt' order.pk %}" class="btn btn-sm btn-outline" target="_blank">🖨️</a>
+              <a href="{% url 'orders:print_receipt' order.pk %}" class="btn btn-sm btn-outline" target="_blank"><i data-lucide="printer" class="btn-icon" aria-hidden="true"></i></a>
               {% if order.next_status %}
               <button onclick="quickAdvance('{% url 'orders:quick_status_advance' order.pk %}', this)" class="btn btn-sm btn-caramel" title="Advance to {{ order.next_status }}" data-next-status="{{ order.next_status }}" data-is-paid="{{ order.is_paid|yesno:'true,false' }}">▶ {{ order.next_status|title }}</button>
               {% endif %}
@@ -626,12 +626,12 @@ RealtimeConnection.on('new_order', function(order) {
     let statusCellHtml, paymentCellHtml, actionCellHtml;
 
     if (isAwaitingPayment) {
-      statusCellHtml = `<span class="badge" style="background:#fff3cd;color:#856404;font-size:0.8rem;padding:5px 10px">💳 Awaiting Payment</span>`;
-      paymentCellHtml = `<button onclick="openPaymentModal(${order.order_id}, ${Number(order.total).toFixed(2)}, '${payUrl}', '${escHtml(order.payment_method || 'cash')}', '')" class="btn btn-sm btn-caramel">💳 Pay</button>`;
+      statusCellHtml = `<span class="badge" style="background:#fff3cd;color:#856404;font-size:0.8rem;padding:5px 10px"><i data-lucide="credit-card" class="status-icon" aria-hidden="true"></i> Awaiting Payment</span>`;
+      paymentCellHtml = `<button onclick="openPaymentModal(${order.order_id}, ${Number(order.total).toFixed(2)}, '${payUrl}', '${escHtml(order.payment_method || 'cash')}', '')" class="btn btn-sm btn-caramel"><i data-lucide="credit-card" class="btn-icon" aria-hidden="true"></i> Pay</button>`;
       actionCellHtml = `
         <div style="display:flex;gap:4px;flex-wrap:wrap">
           <a href="${detailUrl}" class="btn btn-sm btn-outline">View</a>
-          <a href="${receiptUrl}" class="btn btn-sm btn-outline" target="_blank">🖨️</a>
+          <a href="${receiptUrl}" class="btn btn-sm btn-outline" target="_blank"><i data-lucide="printer" class="btn-icon" aria-hidden="true"></i></a>
         </div>`;
     } else {
       statusCellHtml = `
@@ -644,8 +644,8 @@ RealtimeConnection.on('new_order', function(order) {
       actionCellHtml = `
         <div style="display:flex;gap:4px;flex-wrap:wrap">
           <a href="${detailUrl}" class="btn btn-sm btn-outline">View</a>
-          <a href="${receiptUrl}" class="btn btn-sm btn-outline" target="_blank">🖨️</a>
-          <button onclick="quickAdvance('${advanceUrl}')" class="btn btn-sm btn-caramel" title="Advance to Preparing">▶ Preparing</button>
+          <a href="${receiptUrl}" class="btn btn-sm btn-outline" target="_blank"><i data-lucide="printer" class="btn-icon" aria-hidden="true"></i></a>
+          <button onclick="quickAdvance('${advanceUrl}')" class="btn btn-sm btn-caramel" title="Advance to Preparing"><i data-lucide="chevron-right" class="btn-icon" aria-hidden="true"></i> Preparing</button>
         </div>`;
     }
 
@@ -671,6 +671,7 @@ RealtimeConnection.on('new_order', function(order) {
     if (typeof window.initResponsiveTables === 'function') {
       window.initResponsiveTables();
     }
+    window.reinitLucide && window.reinitLucide();
   } catch (err) {
     // Malformed payload or missing DOM — fall back to a reload so the list
     // is never left in an inconsistent state.
@@ -719,7 +720,7 @@ RealtimeConnection.on('status_changed', function(data) {
     const totalRaw  = row.dataset.totalRaw  || '0';
 
     if (newStatus === 'awaiting_payment' && !isPaid) {
-      payCell.innerHTML = `<button onclick="openPaymentModal(${orderId}, ${parseFloat(totalRaw).toFixed(2)}, '${payUrl}', '${escHtml(row.dataset.paymentMethod || 'cash')}', '')" class="btn btn-sm btn-caramel">💳 Pay</button>`;
+      payCell.innerHTML = `<button onclick="openPaymentModal(${orderId}, ${parseFloat(totalRaw).toFixed(2)}, '${payUrl}', '${escHtml(row.dataset.paymentMethod || 'cash')}', '')" class="btn btn-sm btn-caramel"><i data-lucide="credit-card" class="btn-icon" aria-hidden="true"></i> Pay</button>`;
     } else if (newStatus === 'cancelled') {
       payCell.innerHTML = '';
     } else if (isPaid) {
@@ -748,6 +749,7 @@ RealtimeConnection.on('status_changed', function(data) {
   // ── 4. Keep row-level data attributes current ─────────────────────────
   row.dataset.isPaid = isPaid ? 'true' : 'false';
   row.dataset.status = newStatus;
+  window.reinitLucide && window.reinitLucide();
 });
 
 // ── Real-time: GCash reference submitted by customer ──────────────────────
@@ -770,20 +772,21 @@ RealtimeConnection.on('gcash_submitted', function(data) {
   // 2. Update the Status column badge (column index 5, fixed table layout).
   const statusCell = row.cells[5];
   if (statusCell) {
-    statusCell.innerHTML = `<span class="badge" style="background:#dbeafe;color:#1e40af;font-size:0.8rem;padding:5px 10px">📋 GCash — Verify</span>`;
+    statusCell.innerHTML = `<span class="badge" style="background:#dbeafe;color:#1e40af;font-size:0.8rem;padding:5px 10px"><i data-lucide="clipboard-list" class="status-icon" aria-hidden="true"></i> GCash — Verify</span>`;
   }
 
   // 3. Update the Payment column (column index 6).
   const payCell = row.cells[6];
   if (payCell) {
     const detailUrl = row.dataset.detailUrl || '';
-    payCell.innerHTML = `<a href="${escHtml(detailUrl)}" class="btn btn-sm btn-primary">🔍 Verify GCash</a>`;
+    payCell.innerHTML = `<a href="${escHtml(detailUrl)}" class="btn btn-sm btn-primary"><i data-lucide="badge-check" class="btn-icon" aria-hidden="true"></i> Verify GCash</a>`;
   }
 
   // 4. Rebuild the mobile card so it reflects the new state.
   if (typeof window.initResponsiveTables === 'function') {
     window.initResponsiveTables();
   }
+  window.reinitLucide && window.reinitLucide();
 
   // 5. Notify staff via the existing toast mechanism.
   const name = data.customer_name ? escHtml(data.customer_name) : '';
@@ -859,12 +862,12 @@ RealtimeConnection.on('gcash_submitted', function(data) {
 
       if (payMethod === 'gcash' && gcashStatus === 'pending') {
         // Customer has submitted a GCash reference — show Verify link
-        payHtml = `<a href="${escHtml(d.detailUrl || '')}" class="btn btn-sm btn-primary">🔍 Verify GCash</a>`;
+        payHtml = `<a href="${escHtml(d.detailUrl || '')}" class="btn btn-sm btn-primary"><i data-lucide="badge-check" class="btn-icon" aria-hidden="true"></i> Verify GCash</a>`;
       } else if (payMethod === 'gcash' && gcashStatus === 'rejected') {
         payHtml = `<span style="font-size:0.75rem;color:#991b1b">❌ Rejected</span>`;
       } else {
         payHtml = `<button onclick="openPaymentModal(${escHtml(d.orderId)}, ${escHtml(d.totalRaw || '0')}, '${escHtml(d.payUrl || '')}', '${escHtml(payMethod)}', '')"
-                           class="btn btn-sm btn-caramel">💳 Pay</button>`;
+                           class="btn btn-sm btn-caramel"><i data-lucide="credit-card" class="btn-icon" aria-hidden="true"></i> Pay</button>`;
       }
     } else if (isPaid) {
       payHtml = `<span class="badge badge-paid" style="font-size:0.72rem">● Paid</span>`;
@@ -904,13 +907,13 @@ RealtimeConnection.on('gcash_submitted', function(data) {
     // ── Date row ──
     const dateHtml = `
       <div class="om-date">
-        <span>📅</span>
+        <span><i data-lucide="calendar" class="status-icon" aria-hidden="true"></i></span>
         <span>${escHtml(d.date || '')}</span>
       </div>`;
 
     // ── Action buttons ──
-    const viewBtn    = `<a href="${escHtml(d.detailUrl || '')}" class="btn btn-sm btn-outline">👁 View</a>`;
-    const printBtn   = `<a href="${escHtml(d.receiptUrl || '')}" class="btn btn-sm btn-outline" target="_blank">🖨️</a>`;
+    const viewBtn    = `<a href="${escHtml(d.detailUrl || '')}" class="btn btn-sm btn-outline">View</a>`;
+    const printBtn   = `<a href="${escHtml(d.receiptUrl || '')}" class="btn btn-sm btn-outline" target="_blank"><i data-lucide="printer" class="btn-icon" aria-hidden="true"></i></a>`;
     let advanceBtn   = '';
     if (nextStatus && !isTerminal) {
       const nextLabel = (window.STATUS_LABELS && window.STATUS_LABELS[nextStatus]) || nextStatus;
@@ -918,7 +921,7 @@ RealtimeConnection.on('gcash_submitted', function(data) {
                             class="btn btn-sm btn-caramel"
                             data-next-status="${escHtml(nextStatus)}"
                             data-is-paid="${isPaid ? 'true' : 'false'}">
-                      ▶ ${escHtml(nextLabel)}
+                      <i data-lucide="chevron-right" class="btn-icon" aria-hidden="true"></i> ${escHtml(nextLabel)}
                     </button>`;
     }
     const actionCount = advanceBtn ? 3 : 2;
@@ -972,6 +975,8 @@ RealtimeConnection.on('gcash_submitted', function(data) {
 
     // Suppress generic output
     document.querySelectorAll('.table-mobile-cards').forEach(el => el.style.display = 'none');
+
+    window.reinitLucide && window.reinitLucide();
   }
 
   document.addEventListener('DOMContentLoaded', buildOrderCards);
