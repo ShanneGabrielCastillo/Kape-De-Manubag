@@ -154,27 +154,27 @@
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;font-size:0.8rem">
   {% if q %}
   <span style="background:var(--cream);border:1px solid var(--caramel);color:var(--brown-mid);padding:3px 10px;border-radius:20px">
-    🔍 "{{ q }}"
+    <i data-lucide="search" class="status-icon" aria-hidden="true"></i> "{{ q }}"
   </span>
   {% endif %}
   {% if category %}
   <span style="background:var(--cream);border:1px solid var(--caramel);color:var(--brown-mid);padding:3px 10px;border-radius:20px">
-    📁 {{ category|capfirst }}
+    <i data-lucide="folder" class="status-icon" aria-hidden="true"></i> {{ category|capfirst }}
   </span>
   {% endif %}
   {% if user_id %}
   <span style="background:var(--cream);border:1px solid var(--caramel);color:var(--brown-mid);padding:3px 10px;border-radius:20px">
-    👤 User filtered
+    <i data-lucide="user-round" class="status-icon" aria-hidden="true"></i> User filtered
   </span>
   {% endif %}
   {% if date_from %}
   <span style="background:var(--cream);border:1px solid var(--caramel);color:var(--brown-mid);padding:3px 10px;border-radius:20px">
-    📅 From {{ date_from }}
+    <i data-lucide="calendar" class="status-icon" aria-hidden="true"></i> From {{ date_from }}
   </span>
   {% endif %}
   {% if date_to %}
   <span style="background:var(--cream);border:1px solid var(--caramel);color:var(--brown-mid);padding:3px 10px;border-radius:20px">
-    📅 To {{ date_to }}
+    <i data-lucide="calendar" class="status-icon" aria-hidden="true"></i> To {{ date_to }}
   </span>
   {% endif %}
 </div>
@@ -224,57 +224,57 @@
           {# Action label — mobile: bold title in card header #}
           <td style="font-size:0.88rem;font-weight:500">
             {% if log.action == "order.payment" %}
-              💳 Payment Processed
+              <i data-lucide="credit-card" class="status-icon" aria-hidden="true"></i> Payment Processed
             {% elif log.action == "order.cancel" %}
-              <span style="color:var(--red-accent)">✖ Order Cancelled</span>
+              <span style="color:var(--red-accent)"><i data-lucide="circle-x" class="status-icon" aria-hidden="true"></i> Order Cancelled</span>
             {% elif log.action == "order.status_changed" %}
-              🔄 Status Changed
+              <i data-lucide="refresh-cw" class="status-icon" aria-hidden="true"></i> Status Changed
             {% elif log.action == "order.accepted" %}
-              <span style="color:var(--green-success)">✅ Order Accepted</span>
+              <span style="color:var(--green-success)"><i data-lucide="circle-check" class="status-icon" aria-hidden="true"></i> Order Accepted</span>
             {% elif log.action == "order.gcash_submitted" %}
-              📤 GCash Payment Submitted
+              <i data-lucide="send" class="status-icon" aria-hidden="true"></i> GCash Payment Submitted
             {% elif log.action == "order.gcash_verified" %}
-              <span style="color:var(--green-success)">✅ GCash Payment Verified</span>
+              <span style="color:var(--green-success)"><i data-lucide="circle-check" class="status-icon" aria-hidden="true"></i> GCash Payment Verified</span>
             {% elif log.action == "order.gcash_rejected" %}
-              <span style="color:var(--red-accent)">✖ GCash Payment Rejected</span>
+              <span style="color:var(--red-accent)"><i data-lucide="circle-x" class="status-icon" aria-hidden="true"></i> GCash Payment Rejected</span>
             {% elif log.action == "product.create" %}
-              ➕ Product Created
+              <i data-lucide="package-plus" class="status-icon" aria-hidden="true"></i> Product Created
             {% elif log.action == "product.update" %}
-              ✏️ Product Updated
+              <i data-lucide="pencil" class="status-icon" aria-hidden="true"></i> Product Updated
             {% elif log.action == "product.deactivate" %}
-              <span style="color:var(--red-accent)">🚫 Product Deactivated</span>
+              <span style="color:var(--red-accent)"><i data-lucide="circle-x" class="status-icon" aria-hidden="true"></i> Product Deactivated</span>
             {% elif log.action == "product.reactivate" %}
-              <span style="color:var(--green-success)">✅ Product Reactivated</span>
+              <span style="color:var(--green-success)"><i data-lucide="circle-check" class="status-icon" aria-hidden="true"></i> Product Reactivated</span>
             {% elif log.action == "product.availability" %}
               👁️ Availability Changed
             {% elif log.action == "category.create" %}
-              ➕ Category Created
+              <i data-lucide="package-plus" class="status-icon" aria-hidden="true"></i> Category Created
             {% elif log.action == "category.update" %}
-              ✏️ Category Updated
+              <i data-lucide="pencil" class="status-icon" aria-hidden="true"></i> Category Updated
             {% elif log.action == "category.deactivate" %}
-              <span style="color:var(--red-accent)">🚫 Category Deactivated</span>
+              <span style="color:var(--red-accent)"><i data-lucide="circle-x" class="status-icon" aria-hidden="true"></i> Category Deactivated</span>
             {% elif log.action == "category.reactivate" %}
-              <span style="color:var(--green-success)">✅ Category Reactivated</span>
+              <span style="color:var(--green-success)"><i data-lucide="circle-check" class="status-icon" aria-hidden="true"></i> Category Reactivated</span>
             {% elif log.action == "category.delete" %}
               <span style="color:var(--red-accent)">🗑️ Category Deleted</span>
             {% elif log.action == "staff.create" %}
-              👤 Staff Account Created
+              <i data-lucide="user-round" class="status-icon" aria-hidden="true"></i> Staff Account Created
             {% elif log.action == "staff.deactivate" %}
-              <span style="color:var(--red-accent)">🔒 Account Deactivated</span>
+              <span style="color:var(--red-accent)"><i data-lucide="lock-keyhole" class="status-icon" aria-hidden="true"></i> Account Deactivated</span>
             {% elif log.action == "staff.activate" %}
-              <span style="color:var(--green-success)">🔓 Account Activated</span>
+              <span style="color:var(--green-success)"><i data-lucide="circle-check" class="status-icon" aria-hidden="true"></i> Account Activated</span>
             {% elif log.action == "account.password_change" %}
-              🔑 Password Changed
+              <i data-lucide="key-round" class="status-icon" aria-hidden="true"></i> Password Changed
             {% elif log.action == "account.password_reset" %}
-              🔑 Password Reset
+              <i data-lucide="key-round" class="status-icon" aria-hidden="true"></i> Password Reset
             {% elif log.action == "inventory.restock" %}
-              📦 Inventory Restocked
+              <i data-lucide="package" class="status-icon" aria-hidden="true"></i> Inventory Restocked
             {% elif log.action == "finance.create" %}
-              💰 Finance Record Created
+              <i data-lucide="wallet" class="status-icon" aria-hidden="true"></i> Finance Record Created
             {% elif log.action == "finance.update" %}
-              💰 Finance Record Updated
+              <i data-lucide="wallet" class="status-icon" aria-hidden="true"></i> Finance Record Updated
             {% elif log.action == "settings.update" %}
-              ⚙️ Settings Updated
+              <i data-lucide="settings" class="status-icon" aria-hidden="true"></i> Settings Updated
             {% else %}
               {{ log.action }}
             {% endif %}
@@ -308,7 +308,7 @@
         {% empty %}
         <tr>
           <td colspan="6" style="text-align:center;color:#aaa;padding:48px 16px">
-            <div style="font-size:2rem;margin-bottom:8px">📜</div>
+            <div style="font-size:2rem;margin-bottom:8px"><i data-lucide="logs" class="action-icon"></i></div>
             {% if q or category or user_id or date_from or date_to %}
             No activity logs match the current filters.
             {% else %}

@@ -32,12 +32,15 @@
   </p>
   <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
     <a href="/" style="background:var(--brown-mid);color:var(--cream);padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:600;font-size:1rem;display:inline-flex;align-items:center;gap:8px">
-      🍽️ Return to Menu
+      <i data-lucide="shopping-bag" class="btn-icon" aria-hidden="true"></i> Return to Menu
     </a>
     <a href="javascript:history.back()" style="background:transparent;color:var(--brown-mid);padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:600;font-size:1rem;border:2px solid var(--brown-mid);display:inline-flex;align-items:center;gap:8px">
-      ← Try Again
+      <i data-lucide="arrow-left" class="btn-icon" aria-hidden="true"></i> Try Again
     </a>
   </div>
+
+  <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+  <script>lucide.createIcons();</script>
 
 </body>
 </html>

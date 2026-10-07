@@ -1,0 +1,1 @@
+Phase 12 complete: activity_log.html filter chips + action icons migrated to Lucide; 404.html and 500.html buttons migrated to Lucide with createIcons script added.
