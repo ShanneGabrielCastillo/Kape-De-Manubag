@@ -18,9 +18,9 @@
           <td><span class="badge {% if cat.is_active %}badge-ready{% else %}badge-cancelled{% endif %}">{% if cat.is_active %}Active{% else %}Inactive{% endif %}</span></td>
           <td>
             {% if cat.is_packaging_required %}
-              <span class="badge badge-preparing">📦 Required</span>
+              <span class="badge badge-preparing"><i data-lucide="package" class="status-icon" aria-hidden="true"></i> Required</span>
             {% else %}
-              <span class="badge badge-muted">🥤 None</span>
+              <span class="badge badge-muted">None</span>
             {% endif %}
           </td>
           <td>{{ cat.order }}</td>

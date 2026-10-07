@@ -263,7 +263,7 @@
 
 {% if products_in_active_orders %}
 <div class="alert alert-warning">
-  ⚠️ <strong>{{ products_in_active_orders }}</strong> product{{ products_in_active_orders|pluralize }}
+  <i data-lucide="triangle-alert" class="status-icon" aria-hidden="true"></i> <strong>{{ products_in_active_orders }}</strong> product{{ products_in_active_orders|pluralize }}
   {{ products_in_active_orders|pluralize:"is,are" }} currently referenced by active orders
   (pending, preparing, or ready). Deactivating or marking one unavailable hides it from the
   menu and POS immediately — those orders keep their saved line items and remain fulfillable.
@@ -273,22 +273,22 @@
 <div class="filter-bar product-filter-bar">
   <form method="get" id="product-filter-form">
     <div class="pfb-search">
-      <span class="pfb-search-icon">🔍</span>
+      <i data-lucide="search" class="btn-icon pfb-search-icon" aria-hidden="true"></i>
       <input type="text" name="q" value="{{ search }}" placeholder="Search products..." class="form-control pfb-search-input">
     </div>
     <div class="pfb-select-wrap">
-      <span class="pfb-select-icon">⊞</span>
+      <i data-lucide="tags" class="btn-icon pfb-select-icon" aria-hidden="true"></i>
       <select name="category" class="form-control form-select pfb-select">
         <option value="">All Categories</option>
         {% for cat in categories %}
         <option value="{{ cat.slug }}" {% if category_filter == cat.slug %}selected{% endif %}>{{ cat.name }}</option>
         {% endfor %}
       </select>
-      <span class="pfb-select-arrow">▾</span>
+      <i data-lucide="chevron-down" class="btn-icon pfb-select-arrow" aria-hidden="true"></i>
     </div>
     <div class="pfb-btn-row">
-      <button type="submit" class="btn btn-primary pfb-btn-filter">🔧 Filter</button>
-      <a href="{% url 'menu:product_list' %}" class="btn btn-outline pfb-btn-clear">↺ Clear</a>
+      <button type="submit" class="btn btn-primary pfb-btn-filter"><i data-lucide="list-filter" class="btn-icon" aria-hidden="true"></i> Filter</button>
+      <a href="{% url 'menu:product_list' %}" class="btn btn-outline pfb-btn-clear"><i data-lucide="rotate-ccw" class="btn-icon" aria-hidden="true"></i> Clear</a>
     </div>
   </form>
 </div>
@@ -556,7 +556,7 @@ document.addEventListener('click', function(e) {
         <div class="pm-divider"></div>
         <div class="pm-meta">
           <div class="pm-stock-row">
-            <span class="pm-stock-label">📦 Stock</span>
+            <span class="pm-stock-label"><i data-lucide="package" class="btn-icon" aria-hidden="true"></i> Stock</span>
             <span class="pm-stock-sep"></span>
             <span class="pm-stock-val ${stockClass(stockStatus)}">${stockQty}</span>
           </div>
@@ -564,15 +564,15 @@ document.addEventListener('click', function(e) {
         </div>
         <div class="pm-divider"></div>
         <div class="pm-actions">
-          <a href="${escHtml(d.editUrl || '')}" class="btn btn-sm btn-outline">✏ Edit</a>
-          <a href="${escHtml(d.stockUrl || '')}" class="btn btn-sm btn-outline">📦 Stock</a>
+          <a href="${escHtml(d.editUrl || '')}" class="btn btn-sm btn-outline"><i data-lucide="pencil" class="btn-icon" aria-hidden="true"></i> Edit</a>
+          <a href="${escHtml(d.stockUrl || '')}" class="btn btn-sm btn-outline"><i data-lucide="package" class="btn-icon" aria-hidden="true"></i> Stock</a>
           <button class="btn btn-sm ${toggleClass} toggle-active-btn"
                   data-id="${escHtml(d.productId)}"
                   data-name="${escHtml(d.name || '')}"
                   data-url="${escHtml(d.toggleUrl || '')}"
                   data-is-active="${isActive ? 'true' : 'false'}"
                   data-active-orders="${activeOrders}">
-            ${isActive ? '🚫 Deactivate' : '✅ Reactivate'}
+            ${isActive ? '<i data-lucide="circle-x" class="btn-icon" aria-hidden="true"></i> Deactivate' : '<i data-lucide="circle-check" class="btn-icon" aria-hidden="true"></i> Reactivate'}
           </button>
         </div>`;
       container.appendChild(card);
@@ -583,6 +583,9 @@ document.addEventListener('click', function(e) {
     if (cardWrapper) {
       cardWrapper.insertAdjacentElement('afterend', container);
     }
+
+    // Re-initialise Lucide icons injected into the card HTML strings
+    if (typeof window.reinitLucide === 'function') window.reinitLucide();
 
     // Suppress the generic table-mobile-cards output for this table
     const generic = document.querySelector('.table-mobile-cards');

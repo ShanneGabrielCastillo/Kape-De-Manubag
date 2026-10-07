@@ -1,0 +1,1 @@
+﻿Phase 9 complete: product_list.html and category_list.html migrated to Lucide icons.
