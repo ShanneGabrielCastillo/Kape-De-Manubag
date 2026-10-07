@@ -1,0 +1,1 @@
+Phase 5 complete: pos.html migrated — search/category emoji removed, Lucide icons added for receipt-text, package, banknote, smartphone, shopping-cart, chevron-up/down drawer toggle; reinitLucide() called after dynamic HTML insertion.

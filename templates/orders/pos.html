@@ -179,12 +179,12 @@
   <div class="pos-left">
     <!-- Search -->
     <div class="pos-search-row">
-      <input type="search" id="pos-search" class="pos-search-input" placeholder="🔍 Search products..." autocomplete="off" aria-label="Search products">
+      <input type="search" id="pos-search" class="pos-search-input" placeholder="Search products..." autocomplete="off" aria-label="Search products">
     </div>
 
     <!-- Category Tabs ("All" is the default view so search spans the whole catalog) -->
     <div class="cat-tabs-row" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
-      <button class="cat-tab active" data-cat="all" onclick="filterCat('all',this)">🍽️ All</button>
+      <button class="cat-tab active" data-cat="all" onclick="filterCat('all',this)">All</button>
       {% for cat in categories %}
       <button class="cat-tab" data-cat="{{ cat.slug }}" onclick="filterCat('{{ cat.slug }}',this)">{{ cat.icon }} {{ cat.name }}</button>
       {% endfor %}
@@ -235,11 +235,11 @@
   <div class="pos-right">
     <div class="pos-header" id="pos-drawer-header">
       <div style="display:flex;justify-content:space-between;align-items:center;width:100%">
-        <span>🧾 Current Order<span id="pos-item-count-badge" style="font-size:0.75rem;opacity:0.7"></span></span>
+        <span><i data-lucide="receipt-text" class="btn-icon" aria-hidden="true"></i> Current Order<span id="pos-item-count-badge" style="font-size:0.75rem;opacity:0.7"></span></span>
         <div style="display:flex;align-items:center;gap:12px">
           <span id="pos-total-preview" style="font-size:1rem;font-weight:700;color:var(--gold)">₱0.00</span>
           <button onclick="POS.clear()" class="pos-clear-btn" style="background:rgba(255,255,255,.15);border:none;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:0.75rem">Clear</button>
-          <span id="pos-drawer-toggle-icon" style="font-size:0.9rem">▲</span>
+          <i data-lucide="chevron-up" id="pos-drawer-toggle-icon" style="width:16px;height:16px"></i>
         </div>
       </div>
     </div>
@@ -260,21 +260,21 @@
       <div style="display:flex;gap:12px;align-items:center">
         <span style="font-size:0.78rem;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap">Payment:</span>
         <label style="display:flex;align-items:center;gap:5px;font-size:0.82rem;cursor:pointer;font-weight:600">
-          <input type="radio" name="pos-payment-method" value="cash" checked> 💵 Cash
+          <input type="radio" name="pos-payment-method" value="cash" checked> <i data-lucide="banknote" class="btn-icon" aria-hidden="true"></i> Cash
         </label>
         <label style="display:flex;align-items:center;gap:5px;font-size:0.82rem;cursor:pointer;font-weight:600">
-          <input type="radio" name="pos-payment-method" value="gcash"> 📱 GCash
+          <input type="radio" name="pos-payment-method" value="gcash"> <i data-lucide="smartphone" class="btn-icon" aria-hidden="true"></i> GCash
         </label>
       </div>
     </div>
 
     <div class="pos-body" id="pos-order-items">
-      <div class="empty-state" style="padding:30px"><div class="empty-icon">🛒</div><p>No items yet</p></div>
+      <div class="empty-state" style="padding:30px"><div class="empty-icon"><i data-lucide="shopping-cart" class="action-icon" aria-hidden="true"></i></div><p>No items yet</p></div>
     </div>
 
     <div class="pos-footer">
       <div id="pos-packaging-row" style="display:none;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:0.85rem;color:#888">
-        <span>📦 Packaging Fee</span>
+        <span><i data-lucide="package" class="btn-icon" aria-hidden="true"></i> Packaging Fee</span>
         <span id="pos-packaging-display" style="color:var(--caramel)">₱0.00</span>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -388,6 +388,7 @@ function handlePosAdd(id, name, price, el) {
     html += '</div>';
     document.getElementById('size-modal-body').innerHTML = html;
     document.getElementById('size-modal').style.display = 'flex';
+    if (typeof window.reinitLucide === 'function') window.reinitLucide();
   } else {
     POS.addItem(id, name, price, 'none');
   }
@@ -414,7 +415,10 @@ function handlePosAdd(id, name, price, el) {
     if (layout && window.innerWidth <= 767) {
       layout.classList.toggle('pos-layout--collapsed', !isExpanded);
     }
-    if (icon) icon.textContent = isExpanded ? '▼' : '▲';
+    if (icon) {
+      icon.setAttribute('data-lucide', isExpanded ? 'chevron-down' : 'chevron-up');
+      if (typeof lucide !== 'undefined') lucide.createIcons({ nodes: [icon] });
+    }
   }
 
   // Apply the correct initial state on page load (mobile: start collapsed).
@@ -443,6 +447,8 @@ function handlePosAdd(id, name, price, el) {
     if (POS.items.length === 0 && isExpanded) {
       setExpanded(false);
     }
+    // Re-initialise Lucide icons injected by POS.render (e.g. empty-cart icon)
+    if (typeof window.reinitLucide === 'function') window.reinitLucide();
   };
 })();
 
