@@ -37,6 +37,7 @@
          id="sidebar-orders-link"
          aria-label="Order Management">
         <span class="nav-icon"><i data-lucide="clipboard-list" class="nav-icon" aria-hidden="true"></i></span>
+        <span class="nav-label">Order Management</span>
         {# JS-controlled badge — count is set by TopbarOrderBadge (same module as mobile badge) #}
         <span id="sidebar-awaiting-badge"
               class="sidebar-awaiting-badge"
@@ -130,7 +131,7 @@
       </a>
       <a href="{% url 'orders:queue_board' %}" class="sidebar-link" target="_blank"
          aria-label="Queue Board (opens in new tab)">
-        <span class="nav-icon"><i data-lucide="monitor" class="nav-icon" aria-hidden="true"></i></span>
+        <span class="nav-icon"><i data-lucide="list-ordered" class="nav-icon" aria-hidden="true"></i></span>
         <span class="nav-label">Queue Board</span>
         <span class="sidebar-tooltip" aria-hidden="true">Queue Board ↗</span>
       </a>
