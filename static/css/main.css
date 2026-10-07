@@ -2239,3 +2239,154 @@ tbody tr:last-child { border-bottom: none; }
   .pw-req-list { grid-template-columns: 1fr; }
 }
 /* END PASSWORD STRENGTH INDICATOR */
+
+/* ============================================================
+   LUCIDE ICON SYSTEM — Kape De Manubag
+   Icon sizing utilities for Lucide SVG icons.
+   These rules control SVG dimensions since Lucide icons
+   are <svg> elements and font-size has no effect on SVGs.
+   ============================================================ */
+
+/* Base rule: applies to any element with data-lucide attribute
+   or the .lucide class added by lucide.createIcons() */
+[data-lucide],
+.lucide {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  vertical-align: middle;
+  stroke-width: 1.75;
+}
+
+/* Sidebar nav icons: 20×20 */
+.nav-icon {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  text-align: center;
+}
+.nav-icon svg,
+.nav-icon [data-lucide] {
+  width: 100%;
+  height: 100%;
+}
+
+/* Topbar icons: 22×22 */
+.topbar-icon {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Button icons: 16×16 */
+.btn-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+/* Status icons in badges and indicators: 16×16 */
+.status-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+/* Action icons in table action buttons: 22×22 */
+.action-icon {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Chat icons in chatbot UI: 20×20 */
+.chat-icon {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Stat card decorative background icons */
+.stat-icon [data-lucide],
+.stat-icon .lucide {
+  width: 2rem;
+  height: 2rem;
+  opacity: 0.15;
+}
+
+/* Sidebar collapsed state: override width:auto back to icon size */
+.sidebar-collapsed .sidebar .sidebar-link .nav-icon {
+  width: 22px;
+  height: 22px;
+}
+
+/* END LUCIDE ICON SYSTEM */
+
+/* ── Lucide Icons ─────────────────────────────────────────── */
+[data-lucide] {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.nav-icon[data-lucide],
+.nav-icon > svg {
+  width: 18px;
+  height: 18px;
+}
+
+.btn-icon[data-lucide],
+.btn-icon > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.topbar-icon[data-lucide],
+.topbar-icon > svg {
+  width: 18px;
+  height: 18px;
+}
+
+.status-icon[data-lucide],
+.status-icon > svg {
+  width: 14px;
+  height: 14px;
+}
+
+.action-icon[data-lucide],
+.action-icon > svg {
+  width: 32px;
+  height: 32px;
+}
+
+.chat-icon[data-lucide],
+.chat-icon > svg {
+  width: 20px;
+  height: 20px;
+}
+
+.stat-icon[data-lucide],
+.stat-icon > svg {
+  width: 24px;
+  height: 24px;
+}
