@@ -1,0 +1,1 @@
+Phase 11 (Accounts) Lucide icons migration complete: profile.html, change_password.html, login.html, password_reset_request.html, password_reset_done.html, password_reset_confirm.html updated.
