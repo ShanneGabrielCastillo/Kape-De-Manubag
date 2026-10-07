@@ -263,7 +263,7 @@
     <!-- Preparing Column -->
     <div class="board-column preparing">
       <div class="column-header">
-        <div class="column-title">🍳 Now Preparing</div>
+        <div class="column-title"><i data-lucide="cooking-pot" class="btn-icon" aria-hidden="true"></i> Now Preparing</div>
         <div class="column-count"><span id="preparing-count">0</span> orders</div>
       </div>
       <div class="order-tiles" id="preparing-tiles">
@@ -274,7 +274,7 @@
           <div class="tile-type">{% if order.order_type == 'dine_in' %}Dine-In{% else %}Take-Out{% endif %}</div>
         </div>
         {% empty %}
-        <div class="empty-state"><div class="empty-icon">🍳</div><p>No orders preparing</p></div>
+        <div class="empty-state"><div class="empty-icon"><i data-lucide="cooking-pot" class="action-icon" aria-hidden="true"></i></div><p>No orders preparing</p></div>
         {% endfor %}
       </div>
     </div>
@@ -282,7 +282,7 @@
     <!-- Ready Column -->
     <div class="board-column ready">
       <div class="column-header">
-        <div class="column-title">✅ Ready for Pickup</div>
+        <div class="column-title"><i data-lucide="circle-check" class="btn-icon" aria-hidden="true"></i> Ready for Pickup</div>
         <div class="column-count"><span id="ready-count">0</span> orders</div>
       </div>
       <div class="order-tiles" id="ready-tiles">
@@ -293,7 +293,7 @@
           <div class="tile-type">{% if order.order_type == 'dine_in' %}Dine-In{% else %}Take-Out{% endif %}</div>
         </div>
         {% empty %}
-        <div class="empty-state"><div class="empty-icon">✅</div><p>No orders ready yet</p></div>
+        <div class="empty-state"><div class="empty-icon"><i data-lucide="circle-check" class="action-icon" aria-hidden="true"></i></div><p>No orders ready yet</p></div>
         {% endfor %}
       </div>
     </div>
@@ -302,7 +302,7 @@
 
   <!-- Ticker -->
   <div class="board-ticker">
-    <span>🔄 Auto-refreshes every 5 seconds</span>
+    <span><i data-lucide="refresh-cw" class="status-icon" aria-hidden="true"></i> Auto-refreshes every 5 seconds</span>
     <span id="last-updated-text">Loading...</span>
   </div>
 
@@ -315,5 +315,14 @@ window.BOARD_CONFIG = {
 };
 </script>
 <script src="{% static 'js/queue_board.js' %}"></script>
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+  });
+  window.reinitLucide = function () {
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+  };
+</script>
 </body>
 </html>

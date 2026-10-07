@@ -181,7 +181,7 @@
   {% if order.payment_method == 'gcash' and not order.is_paid %}
   {% if gcash_settings and gcash_settings.is_configured %}
   <div class="gcash-info-card" id="gcash-info-card">
-    <h3>📱 GCash Payment Details</h3>
+    <h3><i data-lucide="smartphone" class="btn-icon" aria-hidden="true"></i> GCash Payment Details</h3>
 
     <div class="gcash-amount-big">₱{{ order.total|floatformat:2 }}</div>
     <div class="gcash-amount-label">Send this exact amount</div>
@@ -261,7 +261,7 @@
       </div>
       <div id="gcash-submit-error" style="display:none;background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;font-size:0.85rem;color:#991b1b"></div>
       <button type="submit" class="btn btn-primary btn-block" id="gcash-submit-btn">
-        📨 Submit Payment for Verification
+        <i data-lucide="send" class="btn-icon" aria-hidden="true"></i> Submit Payment for Verification
       </button>
     </form>
   </div>
@@ -365,7 +365,7 @@
     <div class="accepted-overlay-title">Order Received!</div>
     <div class="accepted-overlay-number">{{ order.order_number }}</div>
     <div class="accepted-overlay-sub">Your order has been confirmed and is now being prepared!</div>
-    <a id="accepted-tracker-link" href="{% url 'orders:order_tracker' order.tracking_token %}" class="btn btn-primary btn-block">📱 Track Your Order →</a>
+    <a id="accepted-tracker-link" href="{% url 'orders:order_tracker' order.tracking_token %}" class="btn btn-primary btn-block"><i data-lucide="clipboard-list" class="btn-icon" aria-hidden="true"></i> Track Your Order</a>
   </div>
 </div>
 
@@ -493,5 +493,14 @@ function copyToClipboard(text, btn) {
 })();
 </script>
 <script src="{% static 'js/payment_waiting.js' %}"></script>
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+  });
+  window.reinitLucide = function () {
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+  };
+</script>
 </body>
 </html>

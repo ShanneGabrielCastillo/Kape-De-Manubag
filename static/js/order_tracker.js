@@ -140,7 +140,7 @@
       consecutivePollFailures = 0;
       // Clear any connection-problem hint now that we have a good response.
       if (!sseConnected) {
-        setHint('🔄 Reconnecting… auto-refreshing every 5 seconds');
+        setHint('Reconnecting… auto-refreshing every 5 seconds');
       }
       applyData(data);
     } catch (err) {
@@ -149,7 +149,7 @@
       // After a few consecutive failures, tell the customer so they know
       // the display may be stale — don't leave them in the dark.
       if (consecutivePollFailures >= POLL_FAILURE_HINT_THRESHOLD) {
-        setHint('⚠️ Connection issue — retrying… your order status may be delayed');
+        setHint('Connection issue — retrying… your order status may be delayed');
       }
     } finally {
       isPolling = false;
@@ -165,7 +165,7 @@
   function openSse() {
     if (!config.sseUrl || !window.EventSource) {
       // Browser does not support SSE — stay on fast polling.
-      setHint('🔄 Auto-refreshes every 5 seconds');
+      setHint('Auto-refreshes every 5 seconds');
       return;
     }
 
@@ -175,7 +175,7 @@
       sseConnected = true;
       // SSE is live — slow the polling down to a safety-net rate.
       startPolling(POLL_SLOW_MS);
-      setHint('🟢 Live — updates as they happen');
+      setHint('Live — updates as they happen');
     };
 
     sseSource.onerror = function () {
@@ -183,7 +183,7 @@
       // does so the tracker does not go stale during the reconnection window.
       sseConnected = false;
       startPolling(POLL_FAST_MS);
-      setHint('🔄 Reconnecting… auto-refreshing every 5 seconds');
+      setHint('Reconnecting… auto-refreshing every 5 seconds');
     };
 
     sseSource.addEventListener('status_changed', function (e) {

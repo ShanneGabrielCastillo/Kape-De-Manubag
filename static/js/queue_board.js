@@ -84,6 +84,7 @@
       existing.forEach(tile => tile.remove());
       if (!container.querySelector('.empty-state')) {
         container.appendChild(emptyState(emptyIcon, emptyText));
+        window.reinitLucide && window.reinitLucide();
       }
       if (countEl) countEl.textContent = '0';
       return;
@@ -115,6 +116,7 @@
         const tileEl = makeTile(item, tileClass, isNew);
         tileEl._data = item;
         container.appendChild(tileEl);
+        window.reinitLucide && window.reinitLucide();
       }
     });
 
@@ -142,7 +144,7 @@
         document.getElementById('preparing-count'),
         data.preparing,
         'preparing-tile',
-        { emptyIcon: '🍳', emptyText: 'No orders preparing' }
+        { emptyIcon: '<i data-lucide="cooking-pot" class="action-icon" aria-hidden="true"></i>', emptyText: 'No orders preparing' }
       );
 
       // ── Ready column ──
@@ -151,7 +153,7 @@
         document.getElementById('ready-count'),
         data.ready,
         'ready-tile',
-        { emptyIcon: '✅', emptyText: 'No orders ready yet', markNew: true }
+        { emptyIcon: '<i data-lucide="circle-check" class="action-icon" aria-hidden="true"></i>', emptyText: 'No orders ready yet', markNew: true }
       );
       knownReadyNums = new Set((data.ready || []).map(i => i.queue_number));
 
