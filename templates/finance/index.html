@@ -17,7 +17,7 @@
              class="form-control" style="width:160px">
       <button type="submit" class="btn btn-primary btn-sm">Go</button>
     </form>
-    <a href="{% url 'finance:history' %}" class="btn btn-outline btn-sm">📋 Full History</a>
+    <a href="{% url 'finance:history' %}" class="btn btn-outline btn-sm"><i data-lucide="clipboard-list" class="btn-icon" aria-hidden="true"></i> Full History</a>
   </div>
 </div>
 
@@ -39,7 +39,7 @@
           <h3>Cash Reconciliation — {{ selected_date|date:"F j, Y" }}</h3>
           {% if existing_record %}
             {% if existing_record.is_auto_generated %}
-            <span class="finance-saved-badge" style="background:rgba(255,140,0,0.12);color:#b36200;border-color:rgba(255,140,0,0.35)">⚠️ Auto-generated</span>
+            <span class="finance-saved-badge" style="background:rgba(255,140,0,0.12);color:#b36200;border-color:rgba(255,140,0,0.35)"><i data-lucide="triangle-alert" class="status-icon" aria-hidden="true"></i> Auto-generated</span>
             {% else %}
             <span class="finance-saved-badge">✓ Saved</span>
             {% endif %}
@@ -47,7 +47,7 @@
         </div>
         {% if existing_record.is_auto_generated %}
         <div style="background:rgba(255,140,0,0.08);border-left:4px solid #f90;padding:12px 16px;font-size:0.83rem;color:#7a4800;display:flex;gap:10px;align-items:flex-start">
-          <span style="font-size:1.1rem;line-height:1">⚠️</span>
+            <span style="font-size:1.1rem;line-height:1"><i data-lucide="triangle-alert" class="status-icon" aria-hidden="true"></i></span>
           <div>
             <strong>This record was auto-generated</strong> because no finance entry was saved for this day.
             GCash payments have been auto-filled from order data.
@@ -68,7 +68,7 @@
             {% else %}
               {# Editable input — no auto record found #}
               {{ form.previous_coh }}
-              <div class="finance-warning-label">⚠️ {{ previous_coh_source }}</div>
+              <div class="finance-warning-label"><i data-lucide="triangle-alert" class="status-icon" aria-hidden="true"></i> {{ previous_coh_source }}</div>
             {% endif %}
           </div>
 
@@ -87,7 +87,7 @@
               <span style="font-size:0.75rem;font-weight:400;color:#888;margin-left:6px">({{ gcash_order_count }} order{{ gcash_order_count|pluralize }})</span>
             </div>
             <div style="font-size:0.75rem;color:#0d6efd;margin-top:4px;font-weight:600">
-              📱 GCash Sales &nbsp;—&nbsp; included in Running Total, enter below as deduction
+              <i data-lucide="smartphone" class="status-icon" aria-hidden="true"></i> GCash Sales &nbsp;—&nbsp; included in Running Total, enter below as deduction
             </div>
             {% endif %}
             <div style="font-size:0.72rem;color:#aaa;margin-top:6px">
@@ -151,7 +151,7 @@
           </div>
 
           <button type="submit" class="btn btn-caramel btn-block btn-lg" style="margin-top:8px">
-            💾 Save Finance Record
+            <i data-lucide="save" class="btn-icon" aria-hidden="true"></i> Save Finance Record
           </button>
 
         </div>
@@ -220,7 +220,7 @@
             </div>
 
             <div id="negative-warning" style="display:none;color:var(--red-accent);font-size:0.8rem;margin-top:8px;text-align:center">
-              ⚠️ Ending COH is negative. Please review.
+              <i data-lucide="triangle-alert" class="status-icon" aria-hidden="true"></i> Ending COH is negative. Please review.
             </div>
 
           </div>
@@ -228,7 +228,7 @@
           {% if existing_record %}
           <div style="padding:16px;border-top:1px solid var(--cream)">
             <a href="{% url 'finance:print' existing_record.pk %}" target="_blank"
-               class="btn btn-outline btn-block btn-sm">🖨️ Print Report</a>
+               class="btn btn-outline btn-block btn-sm"><i data-lucide="printer" class="btn-icon" aria-hidden="true"></i> Print Report</a>
           </div>
           {% endif %}
 
@@ -289,7 +289,7 @@
           </td>
           <td style="font-size:0.8rem;color:#aaa">{{ rec.prepared_by.username|default:"—" }}</td>
           <td>
-            <a href="{% url 'finance:print' rec.pk %}" target="_blank" class="btn btn-sm btn-outline">🖨️</a>
+            <a href="{% url 'finance:print' rec.pk %}" target="_blank" class="btn btn-sm btn-outline"><i data-lucide="printer" class="btn-icon" aria-hidden="true"></i></a>
             <a href="?date={{ rec.date|date:'Y-m-d' }}" class="btn btn-sm btn-outline">Edit</a>
           </td>
         </tr>
@@ -328,11 +328,11 @@
       </div>
       <div style="display:flex;gap:8px">
         <a href="?date={{ rec.date|date:'Y-m-d' }}" class="btn btn-sm btn-outline" style="flex:1;justify-content:center">Edit</a>
-        <a href="{% url 'finance:print' rec.pk %}" target="_blank" class="btn btn-sm btn-outline">🖨️</a>
+        <a href="{% url 'finance:print' rec.pk %}" target="_blank" class="btn btn-sm btn-outline"><i data-lucide="printer" class="btn-icon" aria-hidden="true"></i></a>
       </div>
     </div>
     {% empty %}
-    <div class="empty-state" style="padding:40px"><div class="empty-icon">💰</div><p>No finance records yet.</p></div>
+    <div class="empty-state" style="padding:40px"><div class="empty-icon"><i data-lucide="wallet" class="action-icon" aria-hidden="true"></i></div><p>No finance records yet.</p></div>
     {% endfor %}
   </div>
 

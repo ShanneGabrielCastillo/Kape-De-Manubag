@@ -15,31 +15,31 @@
     <div class="stat-label">Total Products</div>
     <div class="stat-value">{{ total_count }}</div>
     <div class="stat-sub">All products in catalog</div>
-    <div class="stat-icon">📦</div>
+    <div class="stat-icon"><i data-lucide="boxes"></i></div>
   </div>
   <div class="stat-card green">
     <div class="stat-label">Active Products</div>
     <div class="stat-value">{{ active_count }}</div>
     <div class="stat-sub">Currently sellable</div>
-    <div class="stat-icon">✅</div>
+    <div class="stat-icon"><i data-lucide="circle-check"></i></div>
   </div>
   <div class="stat-card blue">
     <div class="stat-label">Low Stock Items</div>
     <div class="stat-value">{{ low_stock_count }}</div>
     <div class="stat-sub">{% if critical_stock_count %}{{ critical_stock_count }} critical{% else %}At or below restock threshold{% endif %}</div>
-    <div class="stat-icon">⚠️</div>
+    <div class="stat-icon"><i data-lucide="triangle-alert"></i></div>
   </div>
   <div class="stat-card red">
     <div class="stat-label">Out of Stock</div>
     <div class="stat-value">{{ out_of_stock_count }}</div>
     <div class="stat-sub">Stock at zero</div>
-    <div class="stat-icon">🚫</div>
+    <div class="stat-icon"><i data-lucide="circle-x"></i></div>
   </div>
 </div>
 
 {% if low_stock_count %}
 <div class="alert alert-warning" style="margin-bottom:20px">
-  ⚠️ <strong>{{ low_stock_count }} product{{ low_stock_count|pluralize }}</strong> with low stock (at or below their restock threshold).{% if critical_stock_count %} <strong>{{ critical_stock_count }} critical</strong>.{% endif %} Restock soon!
+  <i data-lucide="triangle-alert" class="status-icon" aria-hidden="true"></i> <strong>{{ low_stock_count }} product{{ low_stock_count|pluralize }}</strong> with low stock (at or below their restock threshold).{% if critical_stock_count %} <strong>{{ critical_stock_count }} critical</strong>.{% endif %} Restock soon!
 </div>
 {% endif %}
 
@@ -88,7 +88,7 @@
 <div id="restock-modal" class="modal-backdrop" style="display:none">
   <div class="modal">
     <div class="modal-header">
-      <h4>📦 Restock Product</h4>
+      <h4><i data-lucide="package-plus" class="btn-icon" aria-hidden="true"></i> Restock Product</h4>
       <button class="modal-close" onclick="document.getElementById('restock-modal').style.display='none'">×</button>
     </div>
     <div class="modal-body">

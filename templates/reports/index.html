@@ -12,7 +12,7 @@
 <div class="page-header">
   <div><h1 class="page-title">Sales Reports</h1><p class="page-subtitle">Analyze your revenue and performance</p></div>
   <div style="display:flex;gap:10px">
-    <a href="{% url 'reports:export_excel' %}?start={{ start_date }}&end={{ end_date }}" class="btn btn-success reports-export-btn">📊 Export Excel</a>
+    <a href="{% url 'reports:export_excel' %}?start={{ start_date }}&end={{ end_date }}" class="btn btn-success reports-export-btn"><i data-lucide="download" class="btn-icon" aria-hidden="true"></i> Export Excel</a>
   </div>
 </div>
 
@@ -44,19 +44,19 @@
     <div class="stat-label">Total Revenue</div>
     <div class="stat-value">₱{{ total_revenue|floatformat:2 }}</div>
     <div class="stat-sub">Selected period</div>
-    <div class="stat-icon">💰</div>
+    <div class="stat-icon"><i data-lucide="wallet"></i></div>
   </div>
   <div class="stat-card green">
     <div class="stat-label">Total Orders</div>
     <div class="stat-value">{{ total_orders }}</div>
     <div class="stat-sub">Paid orders</div>
-    <div class="stat-icon">📋</div>
+    <div class="stat-icon"><i data-lucide="clipboard-list"></i></div>
   </div>
   <div class="stat-card blue">
     <div class="stat-label">Average Order</div>
     <div class="stat-value">₱{{ avg_order|floatformat:2 }}</div>
     <div class="stat-sub">Per transaction</div>
-    <div class="stat-icon">📊</div>
+    <div class="stat-icon"><i data-lucide="chart-column"></i></div>
   </div>
 </div>
 
@@ -94,7 +94,7 @@
 <!-- Top Products + Daily Table -->
 <div class="reports-grid-bottom">
   <div class="card card-scroll-host">
-    <div class="card-header"><h3>🏆 Top Products</h3></div>
+    <div class="card-header"><h3><i data-lucide="award" class="btn-icon" aria-hidden="true"></i> Top Products</h3></div>
     <div id="top-products-scroll" class="table-wrapper reports-table-wrapper">
       <table>
         <thead>
@@ -136,7 +136,7 @@
   </div>
 
   <div class="card card-scroll-host">
-    <div class="card-header"><h3>📅 Daily Breakdown</h3></div>
+    <div class="card-header"><h3><i data-lucide="calendar" class="btn-icon" aria-hidden="true"></i> Daily Breakdown</h3></div>
     <div id="daily-breakdown-scroll" class="table-wrapper reports-table-wrapper" style="max-height:340px;overflow-y:auto">
       <table>
         <thead><tr><th>Date</th><th>Orders</th><th>Sales</th></tr></thead>

@@ -58,7 +58,7 @@
           </td>
           <td style="font-size:0.8rem;color:#aaa">{{ rec.prepared_by.username|default:"—" }}</td>
           <td>
-            <a href="{% url 'finance:print' rec.pk %}" target="_blank" class="btn btn-sm btn-outline">🖨️</a>
+            <a href="{% url 'finance:print' rec.pk %}" target="_blank" class="btn btn-sm btn-outline"><i data-lucide="printer" class="btn-icon" aria-hidden="true"></i></a>
             <a href="{% url 'finance:index' %}?date={{ rec.date|date:'Y-m-d' }}" class="btn btn-sm btn-outline">Edit</a>
           </td>
         </tr>
@@ -92,11 +92,11 @@
       </div>
       <div style="display:flex;gap:8px">
         <a href="{% url 'finance:index' %}?date={{ rec.date|date:'Y-m-d' }}" class="btn btn-sm btn-outline" style="flex:1;justify-content:center">Edit</a>
-        <a href="{% url 'finance:print' rec.pk %}" target="_blank" class="btn btn-sm btn-outline">🖨️</a>
+        <a href="{% url 'finance:print' rec.pk %}" target="_blank" class="btn btn-sm btn-outline"><i data-lucide="printer" class="btn-icon" aria-hidden="true"></i></a>
       </div>
     </div>
     {% empty %}
-    <div class="empty-state" style="padding:40px"><div class="empty-icon">💰</div><p>No records found.</p></div>
+    <div class="empty-state" style="padding:40px"><div class="empty-icon"><i data-lucide="wallet" class="action-icon" aria-hidden="true"></i></div><p>No records found.</p></div>
     {% endfor %}
   </div>
 </div>
