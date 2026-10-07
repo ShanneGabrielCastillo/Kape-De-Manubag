@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 {% load static %}
 
 {% block body %}
@@ -26,7 +26,7 @@
       {# Dashboard: active only on the dashboard index view, not on any other dashboard-app view #}
       <a href="{% url 'dashboard:index' %}" class="sidebar-link {% if request.resolver_match.app_name == 'dashboard' and request.resolver_match.url_name == 'index' %}active{% endif %}"
          aria-label="Dashboard">
-        <span class="nav-icon">📊</span>
+        <span class="nav-icon"><i data-lucide="layout-dashboard" class="nav-icon" aria-hidden="true"></i></span>
         <span class="nav-label">Dashboard</span>
         <span class="sidebar-tooltip" aria-hidden="true">Dashboard</span>
       </a>
@@ -36,8 +36,7 @@
       <a href="{% url 'orders:order_list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'orders' and request.resolver_match.url_name in 'order_list,order_detail,update_status,process_payment,accept_order,verify_gcash_payment,reject_gcash_payment,print_receipt,quick_status_advance' %}active{% endif %}"
          id="sidebar-orders-link"
          aria-label="Order Management">
-        <span class="nav-icon">📋</span>
-        <span class="nav-label">Order Management</span>
+        <span class="nav-icon"><i data-lucide="clipboard-list" class="nav-icon" aria-hidden="true"></i></span>
         {# JS-controlled badge — count is set by TopbarOrderBadge (same module as mobile badge) #}
         <span id="sidebar-awaiting-badge"
               class="sidebar-awaiting-badge"
@@ -48,7 +47,7 @@
       {# POS Terminal: active only on pos url_name #}
       <a href="{% url 'orders:pos' %}" class="sidebar-link {% if request.resolver_match.app_name == 'orders' and request.resolver_match.url_name == 'pos' %}active{% endif %}"
          aria-label="POS Terminal">
-        <span class="nav-icon">🖥️</span>
+        <span class="nav-icon"><i data-lucide="monitor" class="nav-icon" aria-hidden="true"></i></span>
         <span class="nav-label">POS Terminal</span>
         <span class="sidebar-tooltip" aria-hidden="true">POS Terminal</span>
       </a>
@@ -58,14 +57,14 @@
       {# Products: active on all product management views #}
       <a href="{% url 'menu:product_list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'menu' and request.resolver_match.url_name in 'product_list,product_create,product_edit,product_toggle_active,product_toggle' %}active{% endif %}"
          aria-label="Products">
-        <span class="nav-icon">🍽️</span>
+        <span class="nav-icon"><i data-lucide="package" class="nav-icon" aria-hidden="true"></i></span>
         <span class="nav-label">Products</span>
         <span class="sidebar-tooltip" aria-hidden="true">Products</span>
       </a>
       {# Categories: active on all category management views #}
       <a href="{% url 'menu:category_list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'menu' and request.resolver_match.url_name in 'category_list,category_create,category_edit,category_toggle_active,category_delete' %}active{% endif %}"
          aria-label="Categories">
-        <span class="nav-icon">🏷️</span>
+        <span class="nav-icon"><i data-lucide="tags" class="nav-icon" aria-hidden="true"></i></span>
         <span class="nav-label">Categories</span>
         <span class="sidebar-tooltip" aria-hidden="true">Categories</span>
       </a>
@@ -73,20 +72,20 @@
       <div class="nav-section-title">Stock &amp; Reports</div>
       <a href="{% url 'inventory:list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'inventory' %}active{% endif %}"
          aria-label="Inventory">
-        <span class="nav-icon">📦</span>
+        <span class="nav-icon"><i data-lucide="boxes" class="nav-icon" aria-hidden="true"></i></span>
         <span class="nav-label">Inventory</span>
         <span class="sidebar-tooltip" aria-hidden="true">Inventory</span>
       </a>
       <a href="{% url 'reports:index' %}" class="sidebar-link {% if request.resolver_match.app_name == 'reports' %}active{% endif %}"
          aria-label="Sales Reports">
-        <span class="nav-icon">📈</span>
+        <span class="nav-icon"><i data-lucide="chart-column" class="nav-icon" aria-hidden="true"></i></span>
         <span class="nav-label">Sales Reports</span>
         <span class="sidebar-tooltip" aria-hidden="true">Sales Reports</span>
       </a>
       {# Staff Accounts: active only on accounts app staff-related views #}
       <a href="{% url 'accounts:staff_list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'accounts' and request.resolver_match.url_name in 'staff_list,staff_create,staff_toggle' %}active{% endif %}"
          aria-label="Staff Accounts">
-        <span class="nav-icon">👥</span>
+        <span class="nav-icon"><i data-lucide="user-round" class="nav-icon" aria-hidden="true"></i></span>
         <span class="nav-label">Staff Accounts</span>
         <span class="sidebar-tooltip" aria-hidden="true">Staff Accounts</span>
       </a>
@@ -95,20 +94,20 @@
       {# Settings: active only on the system_settings url_name — NOT on gcash_settings #}
       <a href="{% url 'dashboard:system_settings' %}" class="sidebar-link {% if request.resolver_match.app_name == 'dashboard' and request.resolver_match.url_name == 'system_settings' %}active{% endif %}"
          aria-label="Settings">
-        <span class="nav-icon">⚙️</span>
+        <span class="nav-icon"><i data-lucide="settings" class="nav-icon" aria-hidden="true"></i></span>
         <span class="nav-label">Settings</span>
         <span class="sidebar-tooltip" aria-hidden="true">Settings</span>
       </a>
       {# GCash Settings: active only on the gcash_settings url_name — NOT on system_settings #}
       <a href="{% url 'dashboard:gcash_settings' %}" class="sidebar-link {% if request.resolver_match.app_name == 'dashboard' and request.resolver_match.url_name == 'gcash_settings' %}active{% endif %}"
          aria-label="GCash Settings">
-        <span class="nav-icon">📱</span>
+        <span class="nav-icon"><i data-lucide="credit-card" class="nav-icon" aria-hidden="true"></i></span>
         <span class="nav-label">GCash Settings</span>
         <span class="sidebar-tooltip" aria-hidden="true">GCash Settings</span>
       </a>
       <a href="{% url 'audit:activity_log' %}" class="sidebar-link {% if request.resolver_match.app_name == 'audit' %}active{% endif %}"
          aria-label="Activity Log">
-        <span class="nav-icon">📜</span>
+        <span class="nav-icon"><i data-lucide="logs" class="nav-icon" aria-hidden="true"></i></span>
         <span class="nav-label">Activity Log</span>
         <span class="sidebar-tooltip" aria-hidden="true">Activity Log</span>
       </a>
@@ -117,7 +116,7 @@
       <div class="nav-section-title">Finance</div>
       <a href="{% url 'finance:index' %}" class="sidebar-link {% if request.resolver_match.app_name == 'finance' %}active{% endif %}"
          aria-label="Finance">
-        <span class="nav-icon">💰</span>
+        <span class="nav-icon"><i data-lucide="wallet" class="nav-icon" aria-hidden="true"></i></span>
         <span class="nav-label">Finance</span>
         <span class="sidebar-tooltip" aria-hidden="true">Finance</span>
       </a>
@@ -125,13 +124,13 @@
       <div class="nav-section-title">Store</div>
       <a href="{% url 'menu:index' %}" class="sidebar-link" target="_blank"
          aria-label="Customer Menu (opens in new tab)">
-        <span class="nav-icon">🛒</span>
+        <span class="nav-icon"><i data-lucide="shopping-bag" class="nav-icon" aria-hidden="true"></i></span>
         <span class="nav-label">Customer Menu</span>
         <span class="sidebar-tooltip" aria-hidden="true">Customer Menu ↗</span>
       </a>
       <a href="{% url 'orders:queue_board' %}" class="sidebar-link" target="_blank"
          aria-label="Queue Board (opens in new tab)">
-        <span class="nav-icon">📺</span>
+        <span class="nav-icon"><i data-lucide="monitor" class="nav-icon" aria-hidden="true"></i></span>
         <span class="nav-label">Queue Board</span>
         <span class="sidebar-tooltip" aria-hidden="true">Queue Board ↗</span>
       </a>
@@ -150,13 +149,7 @@
       </a>
       <a href="{% url 'accounts:logout' %}" style="margin-left:auto;color:rgba(255,255,255,0.4);font-size:1.1rem;text-decoration:none" title="Logout" aria-label="Sign out">
         <span class="logout-icon" aria-hidden="true">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <!-- door frame (rectangle minus right side) -->
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-            <!-- arrow pointing right (exit direction) -->
-            <polyline points="16 17 21 12 16 7"/>
-            <line x1="21" y1="12" x2="9" y2="12"/>
-          </svg>
+          <i data-lucide="log-out" style="width:18px;height:18px;stroke:currentColor"></i>
         </span>
         <span class="logout-text">Sign Out</span>
       </a>
@@ -172,7 +165,7 @@
           aria-label="Collapse sidebar"
           aria-expanded="true"
           aria-controls="sidebar">
-    <span class="collapse-icon" aria-hidden="true">◀</span>
+    <span class="collapse-icon" aria-hidden="true" id="collapse-icon-el"><i data-lucide="panel-left-close" style="width:14px;height:14px"></i></span>
   </button>
 
   <div class="sidebar-overlay" id="sidebar-overlay"></div>
@@ -185,7 +178,7 @@
         <button id="sidebar-toggle"
                 aria-label="Open navigation menu"
                 aria-expanded="false"
-                aria-controls="sidebar">☰</button>
+                aria-controls="sidebar"><i data-lucide="menu" class="topbar-icon" aria-hidden="true"></i></button>
         <span class="topbar-title">{% block page_title %}Dashboard{% endblock %}</span>
       </div>
       <div class="topbar-actions">
@@ -196,7 +189,7 @@
            style="color:var(--brown-mid);font-size:1.2rem;text-decoration:none"
            aria-label="Order Management — loading orders awaiting payment"
            title="Orders">
-          📋
+          <i data-lucide="clipboard-list" class="topbar-icon" aria-hidden="true"></i>
           <span id="topbar-awaiting-badge"
                 class="topbar-awaiting-badge"
                 aria-hidden="true"
@@ -220,3 +213,4 @@
 <script src="{% static 'js/realtime.js' %}"></script>
 <script src="{% static 'js/responsive-tables.js' %}"></script>
 {% endblock realtime_js %}
+
