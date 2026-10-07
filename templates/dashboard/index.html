@@ -252,6 +252,8 @@
   .loading-skeleton, .chart-loading { animation: none !important; }
   .dash-ready .dash-content { animation: none !important; }
 }
+/* Fix: ensure no gap appears above the topbar on the Dashboard page */
+.page-content > #dashboard-content { margin-top: 0; }
 </style>
 {% endblock %}
 
