@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block body %}
+<div class="app-layout" id="app-layout">
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+
+    <div class="sidebar-brand">
+      <!-- Mobile close button -->
+      <button class="sidebar-mobile-close-btn"
+              onclick="document.querySelector('.sidebar').classList.remove('open');document.querySelector('.sidebar-overlay').classList.remove('open');document.body.style.overflow='';document.getElementById('sidebar-toggle').setAttribute('aria-expanded','false');"
+              aria-label="Close navigation">×</button>
+      <!-- Logo badge -->
+      <div class="brand-logo" aria-hidden="true">☕</div>
+      <!-- Brand text -->
+      <div class="brand-text">
+        <span class="brand-name">Kape De Manubag</span>
+        <span class="brand-sub">Kitchen</span>
+      </div>
+    </div>
+
+    <div class="sidebar-nav-wrapper">
+    <nav class="sidebar-nav">
+      <div class="nav-section-title">Kitchen</div>
+      <a href="{% url 'kitchen:orders' %}" class="sidebar-link {% if request.resolver_match.app_name == 'kitchen' %}active{% endif %}"
+         aria-label="Kitchen Orders">
+        <span class="nav-icon"><i data-lucide="utensils" class="nav-icon" aria-hidden="true"></i></span>
+        <span class="nav-label">Kitchen Orders</span>
+        <span class="sidebar-tooltip" aria-hidden="true">Kitchen Orders</span>
+      </a>
+    </nav>
+    </div><!-- /.sidebar-nav-wrapper -->
+
+    <div class="sidebar-user">
+      <a href="{% url 'accounts:profile' %}" class="sidebar-profile-link" aria-label="My Profile">
+        <div class="user-avatar">
+          {% if user.profile_image %}<img src="{{ user.profile_image.url }}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span style="display:none">{{ user.first_name|first|upper|default:user.username|first|upper }}</span>{% else %}{{ user.first_name|first|upper|default:user.username|first|upper }}{% endif %}
+        </div>
+        <div class="user-info">
+          <div class="user-name">{{ user.get_full_name|default:user.username }}</div>
+          <div class="user-role">{{ user.get_role_display }}</div>
+        </div>
+      </a>
+      <a href="{% url 'accounts:logout' %}" style="margin-left:auto;color:rgba(255,255,255,0.4);font-size:1.1rem;text-decoration:none" title="Logout" aria-label="Sign out">
+        <span class="logout-icon" aria-hidden="true">
+          <i data-lucide="log-out" style="width:18px;height:18px;stroke:currentColor"></i>
+        </span>
+        <span class="logout-text">Sign Out</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- Desktop collapse/expand toggle -->
+  <button class="sidebar-collapse-btn"
+          id="sidebar-collapse-btn"
+          aria-label="Collapse sidebar"
+          aria-expanded="true"
+          aria-controls="sidebar">
+    <span class="collapse-icon" aria-hidden="true" id="collapse-icon-el"><i data-lucide="panel-left-close" style="width:14px;height:14px"></i></span>
+  </button>
+
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <!-- Topbar -->
+    <header class="topbar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button id="sidebar-toggle"
+                aria-label="Open navigation menu"
+                aria-expanded="false"
+                aria-controls="sidebar"><i data-lucide="menu" class="topbar-icon" aria-hidden="true"></i></button>
+      </div>
+      <div class="topbar-actions"></div>
+    </header>
+
+    <div class="page-content">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+</div>
+{% endblock %}
+
+{% block realtime_js %}
+<audio id="kitchen-order-sound" preload="auto">
+  <source src="{% static 'sounds/new_order.mp3' %}" type="audio/mpeg">
+</audio>
+<script src="{% static 'js/realtime.js' %}"></script>
+<script src="{% static 'js/responsive-tables.js' %}"></script>
+{% endblock realtime_js %}

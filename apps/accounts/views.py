@@ -27,6 +27,8 @@ def _default_login_redirect(user):
     """Role-appropriate landing page when no safe 'next' target exists."""
     if user.is_admin_user or user.is_cashier:
         return 'dashboard:index'
+    if user.is_kitchen_staff:
+        return 'kitchen:orders'
     return 'menu:index'
 
 
@@ -119,7 +121,7 @@ def profile_view(request):
 @login_required
 @admin_required
 def staff_list(request):
-    staff = CustomUser.objects.filter(role__in=['admin', 'cashier']).order_by('-created_at')
+    staff = CustomUser.objects.filter(role__in=['admin', 'cashier', 'kitchen_staff']).order_by('-created_at')
     return render(request, 'accounts/staff_list.html', {'staff': staff})
 
 
@@ -239,7 +241,7 @@ def password_reset_request(request):
         user = CustomUser.objects.filter(
             email__iexact=email,
             is_active=True,
-            role__in=['admin', 'cashier'],
+            role__in=['admin', 'cashier', 'kitchen_staff'],
         ).first()
 
         if user:

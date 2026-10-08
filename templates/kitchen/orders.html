@@ -1,0 +1,232 @@
+{% extends 'base_kitchen.html' %}
+{% load static %}
+
+{% block title %}Kitchen Orders{% endblock %}
+
+{% block extra_css %}
+<style>
+.kitchen-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+.kitchen-card {
+  border-left: 4px solid var(--caramel);
+  padding: 1.25rem;
+  animation: slideInCard 0.3s ease;
+}
+.kitchen-card .mark-ready-btn {
+  min-height: 48px;
+  font-size: 1rem;
+  width: 100%;
+  margin-top: 1rem;
+  background: #198754;
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.kitchen-card .mark-ready-btn:hover {
+  background: #157347;
+}
+.kitchen-card .mark-ready-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.order-items-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.5rem 0;
+}
+.order-items-list li {
+  padding: 2px 0;
+  font-size: 0.92rem;
+}
+.order-notes {
+  font-size: 0.85rem;
+  color: #777;
+  margin: 0.25rem 0;
+}
+@keyframes slideInCard {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (max-width: 480px) {
+  .kitchen-grid { grid-template-columns: 1fr; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Kitchen Orders</h1>
+  <span class="badge" id="order-count">{{ orders|length }} preparing</span>
+</div>
+
+{% if orders %}
+<div class="kitchen-grid" id="kitchen-grid">
+  {% for order in orders %}
+  <div class="card kitchen-card" data-order-id="{{ order.pk }}">
+    <div class="d-flex justify-between align-center mb-2">
+      <strong>#{{ order.order_number }}</strong>
+      <span class="badge badge-warning">Preparing</span>
+    </div>
+    <div style="font-size:0.85rem;color:#888;margin-bottom:0.5rem;">
+      {{ order.customer_name }}
+      &bull;
+      {{ order.get_order_type_display }}
+      &bull;
+      {{ order.created_at|date:"g:i A" }}
+    </div>
+    {% if order.notes %}
+    <p class="order-notes">📝 {{ order.notes }}</p>
+    {% endif %}
+    <ul class="order-items-list">
+      {% for item in order.items.all %}
+      <li>
+        {{ item.quantity }}&times; {{ item.product_name }}{% if item.size != 'none' %} ({{ item.get_size_display }}){% endif %}{% if item.notes %} — {{ item.notes }}{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    <button
+      class="mark-ready-btn"
+      data-order-pk="{{ order.pk }}"
+      data-order-id="{{ order.pk }}"
+      data-url="{% url 'kitchen:mark_ready' order.pk %}"
+      aria-label="Mark order {{ order.order_number }} as ready"
+    >
+      <i data-lucide="check-circle" style="width:18px;height:18px;stroke:currentColor" aria-hidden="true"></i>
+      MARK READY
+    </button>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state text-center py-5">
+  <i data-lucide="utensils" style="width:48px;height:48px;stroke:currentColor;opacity:0.3" aria-hidden="true"></i>
+  <h3 class="text-muted" style="margin-top:1rem">No orders to prepare right now ✅</h3>
+  <p class="text-muted">New orders will appear here automatically.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  'use strict';
+
+  var kitchenStreamUrl = window.KDM_URLS && window.KDM_URLS.kitchenStream;
+
+  // Play new-order sound
+  function playNewOrderSound() {
+    var audio = document.getElementById('kitchen-order-sound');
+    if (audio) {
+      audio.play().catch(function () {});
+    }
+  }
+
+  // Update the order-count badge
+  function updateCountBadge() {
+    var remaining = document.querySelectorAll('.kitchen-card').length;
+    var badge = document.getElementById('order-count');
+    if (badge) {
+      badge.textContent = remaining + ' preparing';
+    }
+  }
+
+  // SSE connection to kitchen-only stream
+  if (kitchenStreamUrl && typeof EventSource !== 'undefined') {
+    var ks = new EventSource(kitchenStreamUrl);
+
+    ks.addEventListener('status_changed', function (e) {
+      var data;
+      try { data = JSON.parse(e.data); } catch (ex) { return; }
+
+      if (data.new_status === 'preparing') {
+        // New order arrived for kitchen
+        playNewOrderSound();
+        if (typeof showToast === 'function') {
+          showToast('🍳 New order: #' + data.order_number, 'info', 5000);
+        }
+        // Reload to show new card after brief delay
+        setTimeout(function () { location.reload(); }, 800);
+
+      } else if (data.new_status === 'ready') {
+        // Order marked ready — remove card if it exists (SSE from another client)
+        var card = document.querySelector('[data-order-id="' + data.order_id + '"]');
+        if (card) {
+          card.remove();
+          updateCountBadge();
+        }
+        if (typeof showToast === 'function') {
+          showToast('✅ Order #' + data.order_number + ' is Ready', 'success');
+        }
+      }
+    });
+
+    ks.addEventListener('heartbeat', function () {
+      // keep-alive: no action needed
+    });
+
+    ks.onerror = function () {
+      // SSE will auto-reconnect
+      console.warn('Kitchen SSE disconnected — browser will reconnect');
+    };
+  }
+
+  // MARK READY button handlers
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('.mark-ready-btn');
+    if (!btn) return;
+
+    var url = btn.dataset.url;
+    var orderId = btn.dataset.orderId;
+    var card = btn.closest('.kitchen-card');
+    var csrf = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
+
+    btn.disabled = true;
+    btn.textContent = 'Marking…';
+
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': csrf,
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (data.success) {
+        if (card) { card.remove(); }
+        updateCountBadge();
+        if (typeof showToast === 'function') {
+          showToast('✅ Order #' + data.order_number + ' marked Ready!', 'success');
+        }
+      } else {
+        btn.disabled = false;
+        btn.innerHTML = '<i data-lucide="check-circle" style="width:18px;height:18px;stroke:currentColor" aria-hidden="true"></i> MARK READY';
+        if (typeof lucide !== 'undefined') { lucide.createIcons(); }
+        if (typeof showToast === 'function') {
+          showToast(data.error || 'Could not mark ready', 'error');
+        } else {
+          alert(data.error || 'Failed to mark order ready.');
+        }
+      }
+    })
+    .catch(function () {
+      btn.disabled = false;
+      btn.innerHTML = '<i data-lucide="check-circle" style="width:18px;height:18px;stroke:currentColor" aria-hidden="true"></i> MARK READY';
+      if (typeof lucide !== 'undefined') { lucide.createIcons(); }
+      if (typeof showToast === 'function') {
+        showToast('Network error — try again', 'error');
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}

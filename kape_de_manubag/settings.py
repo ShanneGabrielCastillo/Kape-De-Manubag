@@ -116,6 +116,7 @@ INSTALLED_APPS = [
     'apps.realtime',
     'apps.finance',
     'apps.chatbot',
+    'apps.kitchen',
 ]
 
 MIDDLEWARE = [

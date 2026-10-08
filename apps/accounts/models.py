@@ -23,6 +23,7 @@ class CustomUser(AbstractUser):
     ROLE_CHOICES = [
         ('admin', 'Admin'),
         ('cashier', 'Cashier'),
+        ('kitchen_staff', 'Kitchen Staff'),
         ('customer', 'Customer'),
     ]
 
@@ -51,6 +52,10 @@ class CustomUser(AbstractUser):
     @property
     def is_cashier(self):
         return self.role == 'cashier'
+
+    @property
+    def is_kitchen_staff(self):
+        return self.role == 'kitchen_staff'
 
     @property
     def is_customer(self):

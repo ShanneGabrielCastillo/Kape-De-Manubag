@@ -14,7 +14,7 @@ from django.http import StreamingHttpResponse, JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_GET
 
-from apps.accounts.decorators import cashier_or_admin_required
+from apps.accounts.decorators import cashier_or_admin_required, kitchen_or_admin_required
 from apps.realtime.broker import subscribe, unsubscribe
 
 
@@ -176,3 +176,37 @@ def customer_order_stream(request):
 
 def format_sse(event_type, data):
     return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+
+
+@login_required
+@kitchen_or_admin_required
+def kitchen_event_stream(request):
+
+    def stream():
+        client_queue = subscribe()
+        last_heartbeat = time.time()
+        try:
+            while True:
+                try:
+                    event = client_queue.get(timeout=15)
+                    evt = event['event']
+                    data = event['data']
+                    if evt == 'status_changed' and data.get('new_status') in ('preparing', 'ready'):
+                        yield format_sse('status_changed', data)
+                    elif evt == 'heartbeat':
+                        yield format_sse('heartbeat', data)
+                    # All other events dropped (new_order, payment_confirmed,
+                    # gcash_submitted, inventory_changed, etc.)
+                except queue.Empty:
+                    pass
+                if time.time() - last_heartbeat >= 20:
+                    yield format_sse('heartbeat', {'timestamp': time.time()})
+                    last_heartbeat = time.time()
+        except GeneratorExit:
+            unsubscribe(client_queue)
+            raise
+
+    response = StreamingHttpResponse(stream(), content_type='text/event-stream')
+    response['Cache-Control'] = 'no-cache'
+    response['X-Accel-Buffering'] = 'no'
+    return response

@@ -31,3 +31,27 @@ def cashier_or_admin_required(view_func):
         messages.error(request, 'Access denied. Staff privileges required.')
         return redirect('menu:index')
     return wrapper
+
+
+def kitchen_staff_required(view_func):
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect_to_login(request.get_full_path())
+        if request.user.is_kitchen_staff:
+            return view_func(request, *args, **kwargs)
+        messages.error(request, 'Access denied. Kitchen Staff privileges required.')
+        return redirect('menu:index')
+    return wrapper
+
+
+def kitchen_or_admin_required(view_func):
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect_to_login(request.get_full_path())
+        if request.user.is_kitchen_staff or request.user.is_admin_user:
+            return view_func(request, *args, **kwargs)
+        messages.error(request, 'Access denied.')
+        return redirect('menu:index')
+    return wrapper
