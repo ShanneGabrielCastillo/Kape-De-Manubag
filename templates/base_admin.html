@@ -16,11 +16,30 @@
       <!-- Brand text — hidden when collapsed -->
       <div class="brand-text">
         <span class="brand-name">Kape De Manubag</span>
-        <span class="brand-sub">Management System</span>
+        {% if user.is_kitchen_staff %}
+          <span class="brand-sub">Kitchen</span>
+        {% else %}
+          <span class="brand-sub">Management System</span>
+        {% endif %}
       </div>
     </div>
 
     <div class="sidebar-nav-wrapper">
+    {# ── Role-aware sidebar nav ───────────────────────────────────────────────── #}
+    {% if user.is_kitchen_staff %}
+    {# ── KITCHEN STAFF: restricted nav — Kitchen Orders only ─────────────────── #}
+    <nav class="sidebar-nav">
+      <div class="nav-section-title">Kitchen</div>
+      <a href="{% url 'kitchen:orders' %}"
+         class="sidebar-link {% if request.resolver_match.app_name == 'kitchen' %}active{% endif %}"
+         aria-label="Kitchen Orders">
+        <span class="nav-icon"><i data-lucide="utensils" class="nav-icon" aria-hidden="true"></i></span>
+        <span class="nav-label">Kitchen Orders</span>
+        <span class="sidebar-tooltip" aria-hidden="true">Kitchen Orders</span>
+      </a>
+    </nav>
+    {% else %}
+    {# ── ADMIN / CASHIER: full nav (unchanged) ────────────────────────────────── #}
     <nav class="sidebar-nav">
       <div class="nav-section-title">Overview</div>
       {# Dashboard: active only on the dashboard index view, not on any other dashboard-app view #}
@@ -136,6 +155,7 @@
         <span class="sidebar-tooltip" aria-hidden="true">Queue Board ↗</span>
       </a>
     </nav>
+    {% endif %}
     </div><!-- /.sidebar-nav-wrapper -->
 
     <div class="sidebar-user">
@@ -183,6 +203,7 @@
       </div>
       <div class="topbar-actions">
         {# Mobile order badge wrapper — badge is hidden on desktop via CSS #}
+        {% if not user.is_kitchen_staff %}
         <a href="{% url 'orders:order_list' %}"
            id="topbar-orders-link"
            class="topbar-orders-link"
@@ -195,6 +216,7 @@
                 aria-hidden="true"
                 style="display:none">0</span>
         </a>
+        {% endif %}
       </div>
     </header>
 
