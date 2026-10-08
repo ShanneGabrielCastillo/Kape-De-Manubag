@@ -54,23 +54,26 @@
 
 <script>
 (function () {
-  var btn      = document.getElementById('toggle-password');
-  var input    = document.querySelector('[name="password"]');
+  var btn   = document.getElementById('toggle-password');
+  var input = document.querySelector('[name="password"]');
   if (!btn || !input) return;
-
-  // .eye-closed = eye-off SVG (shown when password is hidden)
-  // .eye-open   = eye SVG    (shown when password is visible)
-  var iconHidden  = btn.querySelector('.eye-closed'); // eye-off
-  var iconVisible = btn.querySelector('.eye-open');   // eye
 
   input.style.paddingRight = '40px';
 
   btn.addEventListener('click', function () {
     var isHidden = input.type === 'password';
     input.type = isHidden ? 'text' : 'password';
-    // Show the icon that matches the NEW state
-    iconHidden.style.display  = isHidden ? 'none'        : 'inline-flex';
-    iconVisible.style.display = isHidden ? 'inline-flex' : 'none';
+
+    // Query inside the handler so we always get the live DOM element
+    // (Lucide replaces <i> with <svg> on DOMContentLoaded; if the
+    // click handler captured the <i> reference at init time the
+    // variable would point to a detached node after Lucide runs).
+    var iconHidden  = btn.querySelector('.eye-closed'); // eye-off — visible when hidden
+    var iconVisible = btn.querySelector('.eye-open');   // eye     — visible when shown
+
+    if (iconHidden)  iconHidden.style.display  = isHidden ? 'none'        : 'inline-flex';
+    if (iconVisible) iconVisible.style.display = isHidden ? 'inline-flex' : 'none';
+
     btn.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
     input.focus();
   });
