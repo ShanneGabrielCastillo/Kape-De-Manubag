@@ -13,7 +13,7 @@ gcashRef (optional): submitted GCash reference number to display for reference.
 <div id="payment-modal" class="modal-backdrop" style="display:none">
   <div class="modal">
     <div class="modal-header">
-      <h4>✓ Confirm Payment</h4>
+      <h4><i data-lucide="circle-check" class="btn-icon" aria-hidden="true"></i> Confirm Payment</h4>
       <button class="modal-close" onclick="document.getElementById('payment-modal').style.display='none'">×</button>
     </div>
     <div class="modal-body">
@@ -58,7 +58,7 @@ gcashRef (optional): submitted GCash reference number to display for reference.
           </div>
 
           <div style="background:#fffbeb;border:1.5px solid #fbbf24;border-radius:8px;padding:12px 16px;display:flex;align-items:flex-start;gap:8px">
-            <span style="font-size:1rem;flex-shrink:0;margin-top:1px">⚠️</span>
+            <span style="flex-shrink:0;margin-top:1px"><i data-lucide="triangle-alert" class="status-icon" aria-hidden="true"></i></span>
             <p style="margin:0;font-size:0.85rem;color:#92400e;line-height:1.55">
               Confirm that you have verified this GCash payment in the business GCash account before confirming.
             </p>
@@ -69,7 +69,7 @@ gcashRef (optional): submitted GCash reference number to display for reference.
     </div>
     <div class="modal-footer">
       <button onclick="document.getElementById('payment-modal').style.display='none'" class="btn btn-outline">Cancel</button>
-      <button onclick="document.getElementById('payment-form').dispatchEvent(new Event('submit'))" class="btn btn-primary">✓ Confirm Payment</button>
+      <button onclick="document.getElementById('payment-form').dispatchEvent(new Event('submit'))" class="btn btn-primary"><i data-lucide="circle-check" class="btn-icon" aria-hidden="true"></i> Confirm Payment</button>
     </div>
   </div>
 </div>

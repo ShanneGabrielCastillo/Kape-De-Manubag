@@ -2,6 +2,18 @@
    KAPE DE MANUBAG - Main JavaScript
    ===================================================== */
 
+// ── Lucide Icons — initialize on DOMContentLoaded ──
+document.addEventListener('DOMContentLoaded', function () {
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+});
+
+// ── Lucide reinit helper ──
+// Called after any dynamic HTML insertion (AJAX rows, mobile cards, modals)
+// to activate Lucide icons in the newly injected markup.
+window.reinitLucide = function () {
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+};
+
 // ── CSRF Token Helper ──
 function getCookie(name) {
   let cookieValue = null;
@@ -1421,6 +1433,16 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       collapseBtn.setAttribute('aria-label', 'Collapse sidebar');
       collapseBtn.setAttribute('aria-expanded', 'true');
+    }
+    // Update Lucide collapse icon
+    var iconEl = document.querySelector('#collapse-icon-el [data-lucide], #collapse-icon-el svg');
+    var collapseIconSpan = document.getElementById('collapse-icon-el');
+    if (collapseIconSpan) {
+      var iEl = collapseIconSpan.querySelector('[data-lucide]') || collapseIconSpan.querySelector('svg');
+      if (iEl) {
+        iEl.setAttribute('data-lucide', collapsed ? 'panel-left-open' : 'panel-left-close');
+        if (typeof lucide !== 'undefined') lucide.createIcons({ nodes: [iEl] });
+      }
     }
   }
 
