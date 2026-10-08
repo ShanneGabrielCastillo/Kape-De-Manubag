@@ -54,19 +54,23 @@
 
 <script>
 (function () {
-  var btn     = document.getElementById('toggle-password');
-  var input   = document.querySelector('[name="password"]');
-  var eyeOpen = btn.querySelector('.eye-open');
-  var eyeShut = btn.querySelector('.eye-closed');
+  var btn      = document.getElementById('toggle-password');
+  var input    = document.querySelector('[name="password"]');
   if (!btn || !input) return;
+
+  // .eye-closed = eye-off SVG (shown when password is hidden)
+  // .eye-open   = eye SVG    (shown when password is visible)
+  var iconHidden  = btn.querySelector('.eye-closed'); // eye-off
+  var iconVisible = btn.querySelector('.eye-open');   // eye
 
   input.style.paddingRight = '40px';
 
   btn.addEventListener('click', function () {
     var isHidden = input.type === 'password';
-    input.type   = isHidden ? 'text' : 'password';
-    eyeOpen.style.display = isHidden ? 'none' : '';
-    eyeShut.style.display = isHidden ? ''     : 'none';
+    input.type = isHidden ? 'text' : 'password';
+    // Show the icon that matches the NEW state
+    iconHidden.style.display  = isHidden ? 'none'        : 'inline-flex';
+    iconVisible.style.display = isHidden ? 'inline-flex' : 'none';
     btn.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
     input.focus();
   });
