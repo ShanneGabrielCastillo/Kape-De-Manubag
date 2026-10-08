@@ -2347,3 +2347,34 @@ tbody tr:last-child { border-bottom: none; }
   vertical-align: middle;
   flex-shrink: 0;
 }
+
+
+/* =====================================================
+   DESKTOP TOPBAR REMOVAL
+   The desktop topbar is now empty: the hamburger button
+   is already hidden on desktop (#sidebar-toggle {display:none}
+   base rule), and the mobile order badge is already hidden
+   on desktop (min-width:769px rule).  Hide the entire
+   topbar element so it occupies no layout space.
+   Scoped to the project's established desktop breakpoint
+   (min-width:768px) so the mobile topbar is untouched.
+   ===================================================== */
+@media (min-width: 768px) {
+
+  /* Remove the topbar from desktop layout entirely.
+     .main-content is flex-direction:column so .page-content
+     rises naturally to the top -- no margin/padding adjustment needed. */
+  .topbar {
+    display: none;
+  }
+
+  /* POS layout height fix: the desktop POS panel previously used
+     calc(100vh - var(--header-h)) (= 100vh - 65px) to account for
+     the topbar height. With the topbar gone, the full viewport height
+     is available. */
+  .pos-layout {
+    height: 100vh;
+  }
+
+}
+/* END DESKTOP TOPBAR REMOVAL */
