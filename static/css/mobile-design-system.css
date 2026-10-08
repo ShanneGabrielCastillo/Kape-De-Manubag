@@ -661,14 +661,6 @@
     height: 56px;
   }
 
-  .topbar-title {
-    font-size: 0.9rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 160px;
-  }
-
   .topbar-actions {
     gap: var(--mobile-space-xs);
     flex-shrink: 0;

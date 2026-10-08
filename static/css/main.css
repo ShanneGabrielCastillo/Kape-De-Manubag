@@ -467,7 +467,6 @@ tbody tr:last-child { border-bottom: none; }
   z-index: 50;
   gap: 16px;
 }
-.topbar-title { font-size: 1.1rem; font-weight: 700; color: var(--brown-dark); }
 .topbar-actions { display: flex; align-items: center; gap: 12px; }
 
 .page-content {

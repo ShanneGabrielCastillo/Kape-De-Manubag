@@ -295,13 +295,6 @@
   .main-content {
     padding-top: 56px;
   }
-  .topbar-title {
-    font-size: 0.9rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 150px;
-  }
   .topbar-actions {
     gap: 8px;
     flex-shrink: 0;
