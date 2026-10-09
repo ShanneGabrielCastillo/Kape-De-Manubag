@@ -21,6 +21,12 @@ def order_saved(sender, instance, created, **kwargs):
         # new_order explicitly once the transaction commits and totals are set.
         pass
     else:
+        # Allow callers to suppress the automatic in-transaction broadcast
+        # (e.g. mark_order_ready sets order._skip_realtime = True and then
+        # registers its own transaction.on_commit callback so the event fires
+        # only after the DB commit succeeds).
+        if getattr(order, '_skip_realtime', False):
+            return
         publish('status_changed', {
             'order_id':           order.pk,
             'order_number':       order.order_number,

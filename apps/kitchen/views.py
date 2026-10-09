@@ -39,11 +39,35 @@ def mark_order_ready(request, pk):
 
         order.status = 'ready'
         order.ready_at = timezone.now()
+        # Suppress the post_save signal's in-transaction broadcast so we can
+        # publish only after the transaction commits successfully.
+        order._skip_realtime = True
         order.save()
-        # signals.py fires status_changed automatically — no manual publish needed
 
         log_action(request.user, 'order.mark_ready', order,
                    detail='Kitchen staff marked order as ready.')
+
+        # Capture the values we need inside the closure before the atomic
+        # block exits (order.pk is stable; the other fields are already set).
+        _order_id    = order.pk
+        _order_num   = order.order_number
+        _queue_num   = order.queue_number
+        _status      = order.status            # 'ready'
+        _status_disp = order.get_status_display()
+        _is_paid     = order.is_paid
+
+        def _broadcast():
+            from apps.realtime.broker import publish
+            publish('status_changed', {
+                'order_id':           _order_id,
+                'order_number':       _order_num,
+                'queue_number':       _queue_num,
+                'new_status':         _status,
+                'new_status_display': _status_disp,
+                'is_paid':            _is_paid,
+            })
+
+        transaction.on_commit(_broadcast)
 
     return JsonResponse({
         'success': True,

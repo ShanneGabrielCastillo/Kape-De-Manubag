@@ -747,8 +747,17 @@ RealtimeConnection.on('status_changed', function(data) {
   }
 
   // ── 4. Keep row-level data attributes current ─────────────────────────
-  row.dataset.isPaid = isPaid ? 'true' : 'false';
-  row.dataset.status = newStatus;
+  row.dataset.isPaid        = isPaid ? 'true' : 'false';
+  row.dataset.status        = newStatus;
+  // statusDisplay and nextStatus are read by buildOrderCards() to render
+  // mobile card badges and advance buttons — keep them in sync.
+  row.dataset.statusDisplay = data.new_status_display || newStatus;
+  row.dataset.nextStatus    = nextStatus || '';
+  // Rebuild the mobile card so it reflects the new state (same pattern as
+  // the gcash_submitted handler).
+  if (typeof window.initResponsiveTables === 'function') {
+    window.initResponsiveTables();
+  }
   window.reinitLucide && window.reinitLucide();
 });
 
