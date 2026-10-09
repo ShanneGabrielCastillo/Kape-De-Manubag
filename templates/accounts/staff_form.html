@@ -7,17 +7,130 @@
 </div>
 <div class="card" style="max-width:560px">
   <div class="card-body">
-    <form method="post">
+    <form method="post" id="staff-create-form">
       {% csrf_token %}
-      {% for field in form %}
+
+      {# ── Username ── #}
       <div class="form-group">
-        <label class="form-label">{{ field.label }}</label>
-        {{ field }}
-        {% if field.errors %}<small style="color:var(--red-accent)">{{ field.errors.0 }}</small>{% endif %}
+        <label class="form-label">{{ form.username.label }}</label>
+        {{ form.username }}
+        {% if form.username.errors %}<small style="color:var(--red-accent)">{{ form.username.errors.0 }}</small>{% endif %}
       </div>
-      {% endfor %}
+
+      {# ── First Name ── #}
+      <div class="form-group">
+        <label class="form-label">{{ form.first_name.label }}</label>
+        {{ form.first_name }}
+        {% if form.first_name.errors %}<small style="color:var(--red-accent)">{{ form.first_name.errors.0 }}</small>{% endif %}
+      </div>
+
+      {# ── Last Name ── #}
+      <div class="form-group">
+        <label class="form-label">{{ form.last_name.label }}</label>
+        {{ form.last_name }}
+        {% if form.last_name.errors %}<small style="color:var(--red-accent)">{{ form.last_name.errors.0 }}</small>{% endif %}
+      </div>
+
+      {# ── Email ── #}
+      <div class="form-group">
+        <label class="form-label">{{ form.email.label }}</label>
+        {{ form.email }}
+        {% if form.email.errors %}<small style="color:var(--red-accent)">{{ form.email.errors.0 }}</small>{% endif %}
+      </div>
+
+      {# ── Role ── #}
+      <div class="form-group">
+        <label class="form-label">{{ form.role.label }}</label>
+        {{ form.role }}
+        {% if form.role.errors %}<small style="color:var(--red-accent)">{{ form.role.errors.0 }}</small>{% endif %}
+      </div>
+
+      {# ── Password ── #}
+      <div class="form-group">
+        <label class="form-label">{{ form.password1.label }}</label>
+        <div style="position:relative">
+          {{ form.password1 }}
+          <button type="button" class="pw-toggle" data-target="id_password1"
+                  aria-label="Show password"
+                  style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;color:#aaa;display:flex;align-items:center">
+            {% include "partials/eye_icon.html" %}
+          </button>
+        </div>
+        {% if form.password1.errors %}<small style="color:var(--red-accent)">{{ form.password1.errors.0 }}</small>{% endif %}
+      </div>
+
+      {# ── Confirm Password ── #}
+      <div class="form-group">
+        <label class="form-label">{{ form.password2.label }}</label>
+        <div style="position:relative">
+          {{ form.password2 }}
+          <button type="button" class="pw-toggle" data-target="id_password2"
+                  aria-label="Show confirm password"
+                  style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;color:#aaa;display:flex;align-items:center">
+            {% include "partials/eye_icon.html" %}
+          </button>
+        </div>
+        {# Live match indicator — populated by JS, empty until the user types #}
+        <div id="staff-pw-match" aria-live="polite"></div>
+        {% if form.password2.errors %}<small style="color:var(--red-accent)">{{ form.password2.errors.0 }}</small>{% endif %}
+      </div>
+
+      {# Non-field errors (e.g. password mismatch from Django) #}
+      {% if form.non_field_errors %}
+      <div class="alert alert-error" style="margin-bottom:1rem">
+        {{ form.non_field_errors.0 }}
+      </div>
+      {% endif %}
+
       <button type="submit" class="btn btn-primary">Save Staff</button>
     </form>
   </div>
 </div>
+
+<script>
+// ── Show/hide password toggle ─────────────────────────────────────────────────
+document.querySelectorAll('.pw-toggle').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var input = document.getElementById(btn.dataset.target);
+    if (!input) return;
+    var isHidden = input.type === 'password';
+    input.type = isHidden ? 'text' : 'password';
+    btn.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+    var open   = btn.querySelector('.eye-open');
+    var closed = btn.querySelector('.eye-closed');
+    if (open)   open.style.display   = isHidden ? 'none' : '';
+    if (closed) closed.style.display = isHidden ? ''     : 'none';
+    input.focus();
+  });
+});
+
+// ── Live password-confirmation match indicator ────────────────────────────────
+// Calculation is local — passwords are never sent anywhere except the normal
+// form POST. Nothing is stored in localStorage/sessionStorage/cookies.
+(function() {
+  var pw1 = document.getElementById('id_password1');
+  var pw2 = document.getElementById('id_password2');
+  var mi  = document.getElementById('staff-pw-match');
+
+  if (!pw1 || !pw2 || !mi) return;
+
+  function renderMatch() {
+    var v2 = pw2.value;
+    // Show nothing while the confirmation field is still empty
+    if (!v2) {
+      mi.innerHTML = '';
+      return;
+    }
+    if (pw1.value === v2) {
+      mi.innerHTML = '<span class="pw-match-ok">\u2713 Passwords match</span>';
+    } else {
+      mi.innerHTML = '<span class="pw-match-err">\u2717 Passwords do not match</span>';
+    }
+  }
+
+  // Update whenever either password field changes
+  pw1.addEventListener('input', renderMatch);
+  pw2.addEventListener('input', renderMatch);
+})();
+</script>
 {% endblock %}

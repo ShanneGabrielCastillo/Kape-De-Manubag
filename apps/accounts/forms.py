@@ -31,7 +31,6 @@ class StaffCreateForm(UserCreationForm):
     first_name = forms.CharField(required=True, widget=forms.TextInput(attrs={'class': 'form-control'}))
     last_name = forms.CharField(required=True, widget=forms.TextInput(attrs={'class': 'form-control'}))
     email = forms.EmailField(required=True, widget=forms.EmailInput(attrs={'class': 'form-control'}))
-    phone = forms.CharField(required=False, widget=forms.TextInput(attrs={'class': 'form-control'}))
     role = forms.ChoiceField(
         choices=[('cashier', 'Cashier'), ('admin', 'Admin'), ('kitchen_staff', 'Kitchen Staff')],
         widget=forms.Select(attrs={'class': 'form-control'})
@@ -39,7 +38,7 @@ class StaffCreateForm(UserCreationForm):
 
     class Meta:
         model = CustomUser
-        fields = ['username', 'first_name', 'last_name', 'email', 'phone', 'role', 'password1', 'password2']
+        fields = ['username', 'first_name', 'last_name', 'email', 'role', 'password1', 'password2']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

@@ -1,0 +1,31 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Add 'kitchen_staff' role value to the existing role system, extend authorization decorators, update login redirect, and fix existing views/forms that hardcode the staff role list. This is purely a backend role infrastructure change — no new app, no new URLs. Independent of FEAT-002 and FEAT-003 but both depend on it.",
+  "status": "pending",
+  "steps": [
+    "1. In apps/accounts/models.py: add ('kitchen_staff', 'Kitchen Staff') to ROLE_CHOICES list after ('cashier', 'Cashier'). Add property is_kitchen_staff returning self.role == 'kitchen_staff'. The role field max_length is 20 — 'kitchen_staff' is 13 characters, fine.",
+    "2. In apps/accounts/decorators.py: add kitchen_staff_required decorator following the exact pattern of cashier_or_admin_required. On unauthenticated: redirect_to_login(request.get_full_path()). On authenticated but wrong role: messages.error + redirect('menu:index'). Check request.user.is_kitchen_staff only (not admin/cashier — those have their own pages). Also add kitchen_or_admin_required decorator that allows is_kitchen_staff OR is_admin_user, for views that admins may also need to access (e.g., to troubleshoot kitchen orders).",
+    "3. In apps/accounts/views.py: update _default_login_redirect to add an elif branch: elif user.is_kitchen_staff: return 'kitchen:orders'. Place this check BEFORE the final return 'menu:index'. Also update staff_list view query: change role__in=['admin', 'cashier'] to role__in=['admin', 'cashier', 'kitchen_staff']. Also update password_reset_request view query: change role__in=['admin', 'cashier'] to role__in=['admin', 'cashier', 'kitchen_staff'].",
+    "4. In apps/accounts/forms.py: update StaffCreateForm.role field choices from [('cashier','Cashier'),('admin','Admin')] to [('cashier','Cashier'),('admin','Admin'),('kitchen_staff','Kitchen Staff')]. No migration needed — ROLE_CHOICES is not a DB constraint (CharField without choices enforcement at DB level).",
+    "5. Create migration apps/accounts/migrations/0005_customuser_kitchen_staff_role.py. This is a no-op migration (the role CharField has no DB-level constraint on choices, adding a new choice value does not change the schema). Use migrations.RunPython(migrations.RunPython.noop) or simply omit operations. Its only purpose is to document the feature in the migration history. Dependencies: [('accounts', '0004_customuser_profile_image_filename')]."
+  ],
+  "acceptance_criteria": [
+    "CustomUser.ROLE_CHOICES includes ('kitchen_staff', 'Kitchen Staff')",
+    "CustomUser.is_kitchen_staff property returns True when role='kitchen_staff', False otherwise",
+    "kitchen_staff_required decorator redirects unauthenticated users to login with next=, redirects wrong-role users to menu:index with error message",
+    "kitchen_or_admin_required decorator allows both kitchen_staff and admin users",
+    "_default_login_redirect returns 'kitchen:orders' for kitchen_staff users",
+    "staff_list view includes kitchen_staff accounts in the displayed list",
+    "StaffCreateForm.role choices include Kitchen Staff option",
+    "password_reset supports kitchen_staff email lookup",
+    "python manage.py migrate runs without errors"
+  ],
+  "verification": [
+    "python manage.py migrate  (should apply 0005 cleanly with no schema changes)",
+    "python manage.py shell -c \"from apps.accounts.models import CustomUser; print([c for c in CustomUser.ROLE_CHOICES])\"  (should include kitchen_staff)",
+    "python manage.py test apps.accounts  (all existing tests must pass)"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

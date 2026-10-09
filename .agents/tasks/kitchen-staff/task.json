@@ -1,0 +1,7 @@
+{
+  "task_id": "task-kitchen-staff",
+  "task_description": "Add a new restricted Kitchen Staff role to the Kape De Manubag POS system. Kitchen Staff can only see and interact with a dedicated /kitchen/ page showing orders in 'preparing' status. They can mark orders as 'ready'. They cannot access any other staff page. The role integrates with the existing SSE realtime broker and uses the existing order status workflow (awaiting_payment → preparing → ready → completed).",
+  "status": "pending",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003"],
+  "blocked_reason": null
+}

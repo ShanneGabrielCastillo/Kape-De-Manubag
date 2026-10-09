@@ -1,0 +1,36 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Create the apps/kitchen Django app with its view, URL, and model-free architecture. Add a 'mark_ready' AJAX endpoint that transitions order status from 'preparing' → 'ready'. This feature depends on FEAT-001 (kitchen_staff_required decorator must exist). Independent of FEAT-003 (which handles templates and JS).",
+  "status": "pending",
+  "steps": [
+    "1. Create directory apps/kitchen/ with __init__.py, apps.py, views.py, urls.py. No models.py needed (kitchen app has no DB models). Create apps/kitchen/apps.py with KitchenConfig class: name='apps.kitchen', verbose_name='Kitchen'.",
+    "2. Create apps/kitchen/views.py with two views:\n   - kitchen_orders(request): decorated with @login_required, @kitchen_staff_required (from apps.accounts.decorators). Queries Order.objects.filter(status='preparing').select_related('cashier').prefetch_related('items').order_by('queued_at', 'created_at'). Renders 'kitchen/orders.html' with context {'orders': orders}.\n   - mark_order_ready(request, pk): decorated with @login_required, @kitchen_staff_required, @require_POST. Uses transaction.atomic() + select_for_update(). Validates order.status == 'preparing', calls validate_status_transition('preparing','ready',order=order) (imported from apps.orders.services), sets order.ready_at = timezone.now(), sets order.status='ready', order.save(). Calls log_action(request.user, 'order.mark_ready', order, detail='Kitchen staff marked order as ready.'). Returns JsonResponse({'success': True, 'order_number': order.order_number, 'new_status': 'ready'}). On failure returns JsonResponse({'success': False, 'error': str(e)}, status=400). Does NOT call broker.publish directly — the post_save signal in apps/realtime/signals.py already fires status_changed on every Order.save(), which notifies all subscribers including the kitchen stream.",
+    "3. Create apps/kitchen/urls.py:\n   app_name = 'kitchen'\n   urlpatterns = [\n       path('', views.kitchen_orders, name='orders'),\n       path('<int:pk>/ready/', views.mark_order_ready, name='mark_ready'),\n   ]",
+    "4. In kape_de_manubag/settings.py: add 'apps.kitchen' to INSTALLED_APPS list after 'apps.chatbot'.",
+    "5. In kape_de_manubag/urls.py: add path('kitchen/', include('apps.kitchen.urls')) to urlpatterns. Place it after the existing app includes.",
+    "6. Create apps/kitchen/migrations/ directory with __init__.py only (no models = no migration file needed beyond the empty package).",
+    "7. In apps/realtime/views.py: add a new SSE endpoint kitchen_event_stream(request) decorated with @login_required, @kitchen_or_admin_required (from apps.accounts.decorators). It uses the same broker.subscribe()/unsubscribe() pattern as event_stream, but filters the events it forwards to only: 'status_changed' (where new_status == 'preparing' — order entered kitchen, or new_status == 'ready' — order left kitchen) and 'heartbeat'. This keeps kitchen clients from seeing financial events (new_order with totals, payment_confirmed, gcash_submitted, inventory_changed). The stream function yields format_sse for matching events and heartbeats every 20s. Add URL: in apps/realtime/urls.py, add path('kitchen-stream/', views.kitchen_event_stream, name='kitchen_event_stream').",
+    "8. In templates/base.html: add 'kitchen:orders' to window.KDM_URLS JS object: kitchenStream: '{% url \"realtime:kitchen_event_stream\" %}'. This URL reference must be conditionally rendered only when the URL resolves — wrap in try/except templatetag or add it unconditionally since it will always exist after FEAT-002."
+  ],
+  "acceptance_criteria": [
+    "GET /kitchen/ returns 200 for kitchen_staff user, shows orders with status='preparing'",
+    "GET /kitchen/ for unauthenticated user redirects to /accounts/login/?next=/kitchen/",
+    "GET /kitchen/ for cashier/admin returns 403 or redirects to menu:index (kitchen_staff_required blocks non-kitchen roles)",
+    "POST /kitchen/<pk>/ready/ transitions a 'preparing' order to 'ready', sets ready_at, creates audit log entry",
+    "POST /kitchen/<pk>/ready/ on a non-'preparing' order returns 400 JSON error",
+    "GET /realtime/kitchen-stream/ returns SSE stream for kitchen_staff user",
+    "GET /realtime/kitchen-stream/ for unauthenticated returns redirect to login",
+    "python manage.py migrate runs clean",
+    "python manage.py check runs clean (no system check errors)"
+  ],
+  "verification": [
+    "python manage.py check  (no errors)",
+    "python manage.py migrate  (no-op, no new migrations needed for kitchen app)",
+    "python manage.py test apps.kitchen  (all tests pass)",
+    "python manage.py test apps.orders  (existing order tests still pass)",
+    "python manage.py test apps.realtime  (existing realtime tests still pass)"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

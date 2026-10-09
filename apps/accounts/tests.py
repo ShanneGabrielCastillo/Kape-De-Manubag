@@ -394,7 +394,7 @@ class RoleManagementTests(TestCase):
         self.client.force_login(self.admin)
         response = self.client.post('/accounts/staff/create/', {
             'username': 'new_staff', 'first_name': 'New', 'last_name': 'Staff',
-            'email': 'new@example.com', 'phone': '', 'role': 'cashier',
+            'email': 'new@example.com', 'role': 'cashier',
             'password1': 'staff-pass-123', 'password2': 'staff-pass-123',
         })
         self.assertEqual(response.status_code, 302)
