@@ -15,7 +15,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Load environment variables from the project's .env file (if present).
 # An explicit path is used so behaviour is identical no matter the current
 # working directory (runserver, gunicorn, WSGI, cron, etc.).
-load_dotenv(BASE_DIR / '.env')
+load_dotenv(BASE_DIR / '.env', override=True)
 
 
 # ── Environment helpers ──────────────────────────────────────────────────────

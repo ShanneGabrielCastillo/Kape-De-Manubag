@@ -39,40 +39,20 @@ class CheckoutForm(forms.Form):
 class GCashSubmissionForm(forms.Form):
     """Submitted by the customer to provide GCash payment evidence.
 
-    The reference number is required; the proof screenshot is optional.
-    Validation reuses the existing production-grade image validator from
-    validators.py (same rules as profile / product image uploads).
+    A screenshot of the payment is required.  The reference number field has
+    been removed from the customer-facing flow — staff verifies the actual
+    payment using the uploaded screenshot.
 
     IMPORTANT: submitting this form NEVER sets is_paid=True.  Only an
     authorized staff member can confirm the payment via the staff-side
     verify_gcash_payment view.
     """
-    gcash_reference = forms.CharField(
-        max_length=50,
-        min_length=3,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'e.g. 1234567890123',
-            'autocomplete': 'off',
-            'inputmode': 'text',
-        }),
-        help_text='Enter the GCash reference number from your transaction.',
-    )
     gcash_proof = forms.ImageField(
-        required=False,
+        required=True,
         validators=[validate_payment_proof_upload],
         widget=forms.FileInput(attrs={
             'class': 'form-control',
             'accept': 'image/*',
         }),
-        help_text='Optional: upload a screenshot of your GCash payment receipt.',
+        help_text='Upload a screenshot of your GCash payment receipt.',
     )
-
-    def clean_gcash_reference(self):
-        ref = self.cleaned_data.get('gcash_reference', '').strip()
-        if not ref:
-            raise forms.ValidationError('GCash reference number is required.')
-        # Normalize: strip surrounding whitespace only.
-        # We do NOT enforce a strict numeric format because GCash reference
-        # formats may vary and we don't want to reject legitimate references.
-        return ref

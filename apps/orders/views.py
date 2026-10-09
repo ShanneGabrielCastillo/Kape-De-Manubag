@@ -745,24 +745,7 @@ def submit_gcash_payment(request, tracking_token):
         errors = {field: errs[0] for field, errs in form.errors.items()}
         return JsonResponse({'success': False, 'errors': errors}, status=400)
 
-    reference = form.cleaned_data['gcash_reference']
-    proof_file = form.cleaned_data.get('gcash_proof')
-
-    # ── Duplicate reference check (read-only, before lock) ────────────────
-    duplicate_qs = Order.objects.filter(
-        gcash_reference=reference,
-        gcash_status__in=('pending', 'verified'),
-    ).exclude(pk=order.pk)
-    if duplicate_qs.exists():
-        return JsonResponse({
-            'success': False,
-            'errors': {
-                'gcash_reference': (
-                    'This GCash reference number has already been submitted '
-                    'for another order. Please check the reference and try again.'
-                ),
-            },
-        }, status=400)
+    proof_file = form.cleaned_data['gcash_proof']
 
     # ── Atomic write — lock only for the actual update ────────────────────
     with transaction.atomic():
@@ -779,20 +762,18 @@ def submit_gcash_payment(request, tracking_token):
                 'gcash_status': order.gcash_status,
             })
 
-        order.gcash_reference = reference
         order.gcash_status = 'pending'
         order.gcash_submitted_at = timezone.now()
-        if proof_file:
-            order.gcash_proof = proof_file
+        order.gcash_proof = proof_file
         order.save(update_fields=[
-            'gcash_reference', 'gcash_status', 'gcash_submitted_at', 'gcash_proof',
+            'gcash_status', 'gcash_submitted_at', 'gcash_proof',
         ])
 
         log_action(
             None,
             'order.gcash_submitted',
             order,
-            detail=f'GCash ref: {reference} — proof: {"yes" if proof_file else "no"}',
+            detail='GCash screenshot uploaded',
         )
 
         # Broadcast AFTER the transaction commits so the event never arrives
@@ -801,11 +782,11 @@ def submit_gcash_payment(request, tracking_token):
         def _broadcast_gcash_submitted():
             from apps.realtime.broker import publish as rt_publish
             rt_publish('gcash_submitted', {
-                'order_id':        order.pk,
-                'order_number':    order.order_number,
-                'customer_name':   order.customer_name,
-                'total':           float(order.total),
-                'gcash_reference': reference,
+                'order_id':      order.pk,
+                'order_number':  order.order_number,
+                'customer_name': order.customer_name,
+                'total':         float(order.total),
+                'has_proof':     True,
             })
         transaction.on_commit(_broadcast_gcash_submitted)
 

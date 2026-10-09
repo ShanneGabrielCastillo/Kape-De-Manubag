@@ -7,8 +7,10 @@ stock levels, inventory logs) roll back together. These tests verify the
 success paths and inject mid-transaction failures to prove the rollback.
 """
 import json
+from io import BytesIO
 from unittest import mock
 
+from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -1206,12 +1208,12 @@ class PaymentFirstFlowTests(TestCase):
 
     def test_process_payment_gcash_blocked_for_customer_order(self):
         """process_payment must reject GCash for customer orders that have a
-        pending submitted reference — those must go through verify_gcash_payment."""
+        pending submitted screenshot — those must go through verify_gcash_payment."""
         self.client.force_login(self.cashier)
         order = self._customer_order()
         order.payment_method = 'gcash'
         order.gcash_status = 'pending'
-        order.gcash_reference = 'REMOTE123'
+        order.gcash_reference = 'REMOTE123'  # historical order — field preserved for backward compat
         order.save(update_fields=['payment_method', 'gcash_status', 'gcash_reference'])
 
         response = self.client.post(
@@ -1327,14 +1329,47 @@ class PaymentFirstFlowTests(TestCase):
         order.save(update_fields=['payment_method'])
         return order
 
+    @staticmethod
+    def _fake_screenshot(name='proof.jpg', size=1024, content_type='image/jpeg'):
+        """Return a minimal valid in-memory uploaded image file for GCash tests.
+
+        Uses a real 1×1 JPEG so Pillow content-verification in the validator
+        passes without requiring Cloudinary or local-filesystem writes.
+        """
+        try:
+            from PIL import Image as PILImage
+            buf = BytesIO()
+            img = PILImage.new('RGB', (1, 1), color=(200, 100, 50))
+            img.save(buf, format='JPEG')
+            buf.seek(0)
+            return InMemoryUploadedFile(
+                buf, 'gcash_proof', name, content_type, buf.getbuffer().nbytes, None
+            )
+        except ImportError:
+            # Pillow not available — create the raw JPEG bytes manually.
+            # This is a minimal valid 1×1 JPEG so content validation still passes.
+            raw = (
+                b'\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00'
+                b'\xff\xdb\x00C\x00\x08\x06\x06\x07\x06\x05\x08\x07\x07\x07\t\t'
+                b'\x08\n\x0c\x14\r\x0c\x0b\x0b\x0c\x19\x12\x13\x0f\x14\x1d\x1a'
+                b'\x1f\x1e\x1d\x1a\x1c\x1c $.\' ",#\x1c\x1c(7),01444\x1f\'9=82<.342\x1e'
+                b'7=&\x1c8+I\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+            )
+            buf = BytesIO(raw)
+            return InMemoryUploadedFile(
+                buf, 'gcash_proof', name, content_type, len(raw), None
+            )
+
     def test_submit_gcash_payment_sets_pending_status(self):
-        """Customer submits GCash reference → gcash_status becomes pending, is_paid stays False."""
+        """Customer submits GCash screenshot → gcash_status becomes pending, is_paid stays False."""
         order = self._gcash_order()
-        response = self.client.post(
-            reverse('orders:submit_gcash_payment', kwargs={'tracking_token': order.tracking_token}),
-            {'gcash_reference': 'REF1234567890', 'csrfmiddlewaretoken': 'dummy'},
-        )
-        # Use Django test client which handles CSRF automatically
+        with mock.patch('cloudinary_storage.storage.MediaCloudinaryStorage.save', return_value='gcash_proofs/proof.jpg'), \
+             mock.patch('cloudinary_storage.storage.MediaCloudinaryStorage.url', return_value='https://res.cloudinary.com/test/proof.jpg'):
+            response = self.client.post(
+                reverse('orders:submit_gcash_payment', kwargs={'tracking_token': order.tracking_token}),
+                {'gcash_proof': self._fake_screenshot()},
+                format='multipart',
+            )
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertTrue(data['success'])
@@ -1343,18 +1378,20 @@ class PaymentFirstFlowTests(TestCase):
         self.assertEqual(order.gcash_status, 'pending')
         self.assertFalse(order.is_paid)  # CRITICAL: must NOT be paid
         self.assertEqual(order.status, 'awaiting_payment')  # status unchanged
-        self.assertEqual(order.gcash_reference, 'REF1234567890')
+        # gcash_reference is not set by new submissions — remains empty
+        self.assertEqual(order.gcash_reference, '')
 
     def test_submit_gcash_idempotent_for_pending(self):
         """Re-submitting when already pending returns success without re-writing."""
         order = self._gcash_order()
         order.gcash_status = 'pending'
-        order.gcash_reference = 'ORIGINAL123'
+        order.gcash_reference = 'ORIGINAL123'  # historical order may have reference
         order.save(update_fields=['gcash_status', 'gcash_reference'])
 
         response = self.client.post(
             reverse('orders:submit_gcash_payment', kwargs={'tracking_token': order.tracking_token}),
-            {'gcash_reference': 'DIFFERENT456'},
+            {'gcash_proof': self._fake_screenshot()},
+            format='multipart',
         )
         data = response.json()
         self.assertTrue(data['success'])
@@ -1363,33 +1400,45 @@ class PaymentFirstFlowTests(TestCase):
         order.refresh_from_db()
         self.assertEqual(order.gcash_reference, 'ORIGINAL123')  # unchanged
 
-    def test_submit_gcash_rejects_empty_reference(self):
-        """Empty reference number must be rejected."""
+    def test_submit_gcash_rejects_missing_screenshot(self):
+        """Submission without a screenshot must be rejected with a field error."""
         order = self._gcash_order()
         response = self.client.post(
             reverse('orders:submit_gcash_payment', kwargs={'tracking_token': order.tracking_token}),
-            {'gcash_reference': ''},
+            {},  # no gcash_proof field
         )
         data = response.json()
         self.assertFalse(data['success'])
-        self.assertIn('gcash_reference', data.get('errors', {}))
+        self.assertIn('gcash_proof', data.get('errors', {}))
+
+    def test_submit_gcash_requires_proof_image(self):
+        """Submission with an empty screenshot field must be rejected."""
+        order = self._gcash_order()
+        response = self.client.post(
+            reverse('orders:submit_gcash_payment', kwargs={'tracking_token': order.tracking_token}),
+            {'gcash_proof': ''},
+        )
+        data = response.json()
+        self.assertFalse(data['success'])
+        self.assertIn('gcash_proof', data.get('errors', {}))
 
     def test_submit_gcash_blocks_on_paid_order(self):
-        """Cannot submit GCash reference if order is already paid."""
+        """Cannot submit GCash screenshot if order is already paid."""
         order = self._gcash_order()
         order.is_paid = True
         order.save(update_fields=['is_paid'])
 
         response = self.client.post(
             reverse('orders:submit_gcash_payment', kwargs={'tracking_token': order.tracking_token}),
-            {'gcash_reference': 'REF123'},
+            {'gcash_proof': self._fake_screenshot()},
+            format='multipart',
         )
         data = response.json()
         self.assertFalse(data['success'])
         self.assertIn('already been paid', data['error'])
 
     def test_submit_gcash_blocks_on_cancelled_order(self):
-        """Cannot submit GCash reference on a cancelled order."""
+        """Cannot submit GCash screenshot on a cancelled order."""
         order = self._gcash_order()
         order.status = 'cancelled'
         order.cancelled_at = timezone.now()
@@ -1397,41 +1446,52 @@ class PaymentFirstFlowTests(TestCase):
 
         response = self.client.post(
             reverse('orders:submit_gcash_payment', kwargs={'tracking_token': order.tracking_token}),
-            {'gcash_reference': 'REF123'},
+            {'gcash_proof': self._fake_screenshot()},
+            format='multipart',
         )
         data = response.json()
         self.assertFalse(data['success'])
 
     def test_submit_gcash_blocks_on_cash_order(self):
-        """submit_gcash_payment must reject cash orders."""
+        """submit_gcash_payment must reject cash orders regardless of proof."""
         order = self._customer_order()  # payment_method='cash' by default
         response = self.client.post(
             reverse('orders:submit_gcash_payment', kwargs={'tracking_token': order.tracking_token}),
-            {'gcash_reference': 'REF123'},
+            {'gcash_proof': self._fake_screenshot()},
+            format='multipart',
         )
         data = response.json()
         self.assertFalse(data['success'])
 
-    def test_submit_gcash_blocks_duplicate_reference(self):
-        """Same reference number cannot be used on two different orders."""
-        order1 = self._gcash_order()
-        order1.gcash_status = 'pending'
-        order1.gcash_reference = 'DUPREF123'
-        order1.save(update_fields=['gcash_status', 'gcash_reference'])
+    def test_submit_gcash_screenshot_does_not_set_paid(self):
+        """A successful screenshot submission must never set is_paid=True."""
+        order = self._gcash_order()
+        with mock.patch('cloudinary_storage.storage.MediaCloudinaryStorage.save', return_value='gcash_proofs/proof.jpg'), \
+             mock.patch('cloudinary_storage.storage.MediaCloudinaryStorage.url', return_value='https://res.cloudinary.com/test/proof.jpg'):
+            response = self.client.post(
+                reverse('orders:submit_gcash_payment', kwargs={'tracking_token': order.tracking_token}),
+                {'gcash_proof': self._fake_screenshot()},
+                format='multipart',
+            )
+        self.assertEqual(response.status_code, 200)
+        order.refresh_from_db()
+        self.assertFalse(order.is_paid)        # CRITICAL — screenshot ≠ payment confirmed
+        self.assertEqual(order.gcash_status, 'pending')
+        self.assertEqual(order.status, 'awaiting_payment')
 
-        order2 = Order.objects.create(
-            customer_name='Another Customer',
-            status='awaiting_payment',
-            payment_method='gcash',
-        )
-
-        response = self.client.post(
-            reverse('orders:submit_gcash_payment', kwargs={'tracking_token': order2.tracking_token}),
-            {'gcash_reference': 'DUPREF123'},
-        )
+    def test_submit_gcash_no_duplicate_reference_check(self):
+        """Duplicate reference check is removed — screenshot-only submission does not block on references."""
+        order = self._gcash_order()
+        with mock.patch('cloudinary_storage.storage.MediaCloudinaryStorage.save', return_value='gcash_proofs/proof.jpg'), \
+             mock.patch('cloudinary_storage.storage.MediaCloudinaryStorage.url', return_value='https://res.cloudinary.com/test/proof.jpg'):
+            response = self.client.post(
+                reverse('orders:submit_gcash_payment', kwargs={'tracking_token': order.tracking_token}),
+                {'gcash_proof': self._fake_screenshot()},
+                format='multipart',
+            )
         data = response.json()
-        self.assertFalse(data['success'])
-        self.assertIn('gcash_reference', data.get('errors', {}))
+        # Should succeed — no reference number involved, no duplicate check
+        self.assertTrue(data['success'])
 
     def test_verify_gcash_marks_paid_and_prepares(self):
         """Staff verification: gcash_status→verified, is_paid→True, status→preparing."""

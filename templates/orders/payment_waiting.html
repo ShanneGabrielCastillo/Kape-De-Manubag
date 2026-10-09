@@ -166,11 +166,11 @@
       {% if order.is_paid %}
         Your payment has been verified. Please wait while your order is being prepared.
       {% elif order.payment_method == 'gcash' and order.gcash_status == 'pending' %}
-        Your GCash reference has been submitted. Staff will verify your payment shortly.
+        Your GCash payment screenshot has been submitted. Staff will verify your payment shortly.
       {% elif order.payment_method == 'gcash' and order.gcash_status == 'rejected' %}
-        Your payment could not be verified. Please check the details and re-submit.
+        Your payment could not be verified. Please upload a new payment screenshot and re-submit.
       {% elif order.payment_method == 'gcash' %}
-        Please pay via GCash using the details below, then submit your reference number.
+        Please pay via GCash using the details below, then upload your payment screenshot.
       {% else %}
         Please proceed to the cashier to complete your payment.
       {% endif %}
@@ -216,8 +216,8 @@
       2. Enter the number above or scan the QR code<br>
       3. Enter exactly <strong>₱{{ order.total|floatformat:2 }}</strong><br>
       4. Complete the payment<br>
-      5. Copy the 13-digit reference number<br>
-      6. Enter it below and tap Submit
+      5. Take a screenshot of the successful transaction<br>
+      6. Upload it below and tap Submit
     </div>
     {% endif %}
   </div>
@@ -234,34 +234,35 @@
   {% if order.payment_method == 'gcash' and not order.is_paid and order.gcash_status in 'none,rejected' %}
   <div class="waiting-card" id="gcash-form-card">
     <div class="waiting-card-label">
-      {% if order.gcash_status == 'rejected' %}Re-Submit Payment{% else %}Submit Payment Reference{% endif %}
+      {% if order.gcash_status == 'rejected' %}Re-Submit Payment{% else %}Submit Payment Screenshot{% endif %}
     </div>
 
     {% if order.gcash_status == 'rejected' %}
     <div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:0.85rem;color:#991b1b">
       ❌ Your previous submission was not verified.
       {% if order.gcash_notes %}<br><strong>Reason:</strong> {{ order.gcash_notes }}{% endif %}
-      <br>Please check your GCash app and re-enter the correct reference number.
+      <br>Please upload a new screenshot showing your successful GCash payment.
     </div>
     {% endif %}
 
     <form class="gcash-submit-form" id="gcash-submit-form" enctype="multipart/form-data" novalidate>
       {% csrf_token %}
       <div>
-        <label class="form-label" for="id_gcash_reference">GCash Reference Number *</label>
-        {{ gcash_form.gcash_reference }}
-        <div class="field-error" id="error-gcash_reference"></div>
-        <div style="font-size:0.75rem;color:#aaa;margin-top:4px">The 13-digit number from your GCash transaction receipt.</div>
-      </div>
-      <div>
-        <label class="form-label" for="id_gcash_proof">Payment Screenshot (optional)</label>
+        <label class="form-label" for="id_gcash_proof">Payment Screenshot <span style="color:var(--caramel)">*</span></label>
         {{ gcash_form.gcash_proof }}
         <div class="field-error" id="error-gcash_proof"></div>
-        <div style="font-size:0.75rem;color:#aaa;margin-top:4px">JPG, PNG or WEBP · max 3 MB</div>
+        <div style="font-size:0.75rem;color:#aaa;margin-top:4px">JPG, PNG or WEBP · max 3 MB · Required</div>
+        <div style="font-size:0.8rem;color:#666;margin-top:6px;background:#f8f4ef;border-radius:6px;padding:8px 10px;line-height:1.5">
+          Please upload a screenshot of your successful GCash payment. Our staff will review it before confirming your order.
+        </div>
+        <div id="gcash-proof-preview" style="display:none;margin-top:8px">
+          <img id="gcash-proof-img" src="" alt="Selected screenshot" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid #d1d5db;object-fit:contain;display:block">
+          <div id="gcash-proof-filename" style="font-size:0.75rem;color:#888;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+        </div>
       </div>
       <div id="gcash-submit-error" style="display:none;background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;font-size:0.85rem;color:#991b1b"></div>
       <button type="submit" class="btn btn-primary btn-block" id="gcash-submit-btn">
-        <i data-lucide="send" class="btn-icon" aria-hidden="true"></i> Submit Payment for Verification
+        <i data-lucide="send" class="btn-icon" aria-hidden="true"></i> Submit Payment Screenshot for Verification
       </button>
     </form>
   </div>
@@ -276,7 +277,7 @@
       <span id="pay-status-text">Waiting for Verification</span>
     </div>
     <p style="margin-top:10px;font-size:0.8rem;color:#aaa" id="pay-status-hint">
-      Our staff will check your GCash account and verify your payment shortly.
+      Our staff will review your screenshot and verify your payment shortly.
     </p>
   </div>
   {% endif %}
@@ -411,6 +412,28 @@ function copyToClipboard(text, btn) {
   var form = document.getElementById('gcash-submit-form');
   if (!form) return;
 
+  // ── Image preview on file selection ──
+  var proofInput = document.getElementById('id_gcash_proof');
+  if (proofInput) {
+    proofInput.addEventListener('change', function() {
+      var preview = document.getElementById('gcash-proof-preview');
+      var img = document.getElementById('gcash-proof-img');
+      var fname = document.getElementById('gcash-proof-filename');
+      if (this.files && this.files[0]) {
+        var file = this.files[0];
+        var reader = new FileReader();
+        reader.onload = function(e) {
+          if (img) img.src = e.target.result;
+          if (fname) fname.textContent = file.name;
+          if (preview) preview.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+      } else {
+        if (preview) preview.style.display = 'none';
+      }
+    });
+  }
+
   form.addEventListener('submit', async function(e) {
     e.preventDefault();
     var btn = document.getElementById('gcash-submit-btn');
@@ -455,7 +478,7 @@ function copyToClipboard(text, btn) {
         var title = document.getElementById('waiting-title');
         if (title) title.textContent = 'Payment Submitted';
         var subtitle = document.getElementById('waiting-subtitle');
-        if (subtitle) subtitle.textContent = 'Your GCash reference has been submitted. Staff will verify your payment shortly.';
+        if (subtitle) subtitle.textContent = 'Your GCash payment screenshot has been submitted. Staff will verify your payment shortly.';
 
         // Show pending card
         var pendingCard = document.getElementById('gcash-pending-card');
@@ -477,7 +500,7 @@ function copyToClipboard(text, btn) {
           errBox.textContent = data.error;
           errBox.style.display = 'block';
         }
-        if (btn) { btn.disabled = false; btn.textContent = '📨 Submit Payment for Verification'; }
+        if (btn) { btn.disabled = false; btn.textContent = '📨 Submit Payment Screenshot for Verification'; }
       }
     } catch(err) {
       clearTimeout(timeoutId);
@@ -487,7 +510,7 @@ function copyToClipboard(text, btn) {
         errBox.textContent = 'Network error — please check your connection and try again.';
       }
       errBox.style.display = 'block';
-      if (btn) { btn.disabled = false; btn.textContent = '📨 Submit Payment for Verification'; }
+      if (btn) { btn.disabled = false; btn.textContent = '📨 Submit Payment Screenshot for Verification'; }
     }
   });
 })();
