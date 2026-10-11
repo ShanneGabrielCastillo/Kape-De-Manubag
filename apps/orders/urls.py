@@ -28,6 +28,7 @@ urlpatterns = [
     path('manage/<int:pk>/accept/', views.accept_order, name='accept_order'),
     path('manage/<int:pk>/gcash/verify/', views.verify_gcash_payment, name='verify_gcash_payment'),
     path('manage/<int:pk>/gcash/reject/', views.reject_gcash_payment, name='reject_gcash_payment'),
+    path('manage/<int:pk>/gcash-details/', views.gcash_payment_detail, name='gcash_payment_detail'),
     path('manage/<int:pk>/receipt/', views.print_receipt, name='print_receipt'),
     path('pos/', views.cashier_pos, name='pos'),
     path('pos/create/', views.create_pos_order, name='create_pos_order'),

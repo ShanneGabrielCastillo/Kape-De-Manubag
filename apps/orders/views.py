@@ -1370,6 +1370,58 @@ def reject_gcash_payment(request, pk):
 
 @login_required
 @cashier_or_admin_required
+def gcash_payment_detail(request, pk):
+    """Return GCash payment fields for a pending order as JSON.
+
+    Used by the in-page verification modal on the Order Management table so
+    staff can review and act on a GCash submission without leaving the page.
+
+    The endpoint deliberately loads only the fields needed by the modal and
+    nothing else (no tracking_token, no internal flags).  The order_list view
+    defers gcash_reference, gcash_submitted_at and gcash_proof, so those
+    fields are fetched here via a targeted query on demand.
+
+    Guard: returns 400 if the order is not a pending GCash order — opening
+    the modal must never show stale or irrelevant payment data.
+    """
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    order = get_object_or_404(
+        Order.objects.only(
+            'order_number', 'customer_name', 'total',
+            'payment_method', 'is_paid',
+            'gcash_status', 'gcash_reference',
+            'gcash_submitted_at', 'gcash_proof',
+        ),
+        pk=pk,
+    )
+
+    if order.payment_method != 'gcash' or order.gcash_status != 'pending' or order.is_paid:
+        return JsonResponse({'error': 'Not a pending GCash order'}, status=400)
+
+    gcash_submitted_at = None
+    if order.gcash_submitted_at:
+        local_dt = timezone.localtime(order.gcash_submitted_at)
+        gcash_submitted_at = local_dt.strftime('%B %-d, %Y %-I:%M %p')
+
+    gcash_proof_url = None
+    if order.gcash_proof:
+        gcash_proof_url = order.gcash_proof.url
+
+    return JsonResponse({
+        'order_number':      order.order_number,
+        'customer_name':     order.customer_name,
+        'total':             float(order.total),
+        'gcash_status':      order.gcash_status,
+        'gcash_reference':   order.gcash_reference,
+        'gcash_submitted_at': gcash_submitted_at,
+        'gcash_proof_url':   gcash_proof_url,
+    })
+
+
+@login_required
+@cashier_or_admin_required
 def print_receipt(request, pk):
     # select_related('cashier') preloads the staff member printed on the
     # receipt (order.cashier.get_full_name) -- one query instead of a lazy

@@ -1614,3 +1614,151 @@ class PaymentFirstFlowTests(TestCase):
         self.assertFalse(order.is_paid)
 
 
+class GCashPaymentDetailTest(TestCase):
+    """Tests for the gcash_payment_detail JSON endpoint.
+
+    GET /manage/<pk>/gcash-details/ returns GCash submission fields for the
+    in-page verification modal.  Access requires cashier or admin role.
+    """
+
+    def setUp(self):
+        self.cashier = CustomUser.objects.create_user(
+            username='detail_cashier', password=PASSWORD, role='cashier',
+        )
+        self.kitchen = CustomUser.objects.create_user(
+            username='detail_kitchen', password=PASSWORD, role='kitchen_staff',
+        )
+        self.category = Category.objects.create(name='Drinks', slug='drinks-detail')
+        self.product = Product.objects.create(
+            category=self.category, name='Matcha Latte', price='90.00',
+            stock_quantity=10,
+        )
+
+    def _gcash_pending_order(self):
+        """Create a customer GCash order with gcash_status='pending'."""
+        order = Order.objects.create(
+            customer_name='GCash Customer',
+            status='awaiting_payment',
+            payment_method='gcash',
+            gcash_status='pending',
+        )
+        OrderItem.objects.create(
+            order=order, product=self.product,
+            product_name=self.product.name,
+            category_name=self.category.name,
+            packaging_eligible=False,
+            size='none', quantity=1,
+            unit_price='90.00', subtotal='90.00',
+        )
+        order.subtotal = 90
+        order.total = 90
+        order.stock_deducted = True
+        order.save(update_fields=['subtotal', 'total', 'stock_deducted'])
+        return order
+
+    def _url(self, pk):
+        return reverse('orders:gcash_payment_detail', args=[pk])
+
+    # ── Happy path ─────────────────────────────────────────────────────────
+
+    def test_cashier_gets_200_with_correct_fields(self):
+        """Authenticated cashier on a pending GCash order receives 200 JSON with all expected fields."""
+        self.client.force_login(self.cashier)
+        order = self._gcash_pending_order()
+
+        response = self.client.get(self._url(order.pk))
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data['order_number'], order.order_number)
+        self.assertEqual(data['customer_name'], 'GCash Customer')
+        self.assertAlmostEqual(data['total'], 90.0)
+        self.assertEqual(data['gcash_status'], 'pending')
+        self.assertIn('gcash_reference', data)
+        self.assertIn('gcash_submitted_at', data)
+        self.assertIn('gcash_proof_url', data)
+
+    def test_response_does_not_include_tracking_token(self):
+        """The JSON response must not expose the order's tracking_token."""
+        self.client.force_login(self.cashier)
+        order = self._gcash_pending_order()
+
+        response = self.client.get(self._url(order.pk))
+
+        data = response.json()
+        self.assertNotIn('tracking_token', data)
+
+    # ── Guard: 400 for non-pending states ──────────────────────────────────
+
+    def test_returns_400_for_already_paid_order(self):
+        """Returns 400 when the order is already paid (is_paid=True)."""
+        self.client.force_login(self.cashier)
+        order = self._gcash_pending_order()
+        order.is_paid = True
+        order.gcash_status = 'verified'
+        order.save(update_fields=['is_paid', 'gcash_status'])
+
+        response = self.client.get(self._url(order.pk))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('error', response.json())
+
+    def test_returns_400_for_cash_order(self):
+        """Returns 400 when payment_method is not 'gcash'."""
+        self.client.force_login(self.cashier)
+        order = Order.objects.create(
+            customer_name='Cash Customer',
+            status='awaiting_payment',
+            payment_method='cash',
+            gcash_status='none',
+        )
+
+        response = self.client.get(self._url(order.pk))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('error', response.json())
+
+    def test_returns_400_for_gcash_not_pending(self):
+        """Returns 400 when payment_method is 'gcash' but gcash_status is not 'pending'."""
+        self.client.force_login(self.cashier)
+        order = self._gcash_pending_order()
+        order.gcash_status = 'none'
+        order.save(update_fields=['gcash_status'])
+
+        response = self.client.get(self._url(order.pk))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('error', response.json())
+
+    # ── Authorization ──────────────────────────────────────────────────────
+
+    def test_unauthenticated_request_redirects_to_login(self):
+        """Unauthenticated requests are redirected to the login page."""
+        order = self._gcash_pending_order()
+
+        response = self.client.get(self._url(order.pk))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('login', response.url)
+
+    def test_kitchen_staff_cannot_access_endpoint(self):
+        """Kitchen staff (non-cashier) must not gain access — redirected away."""
+        self.client.force_login(self.kitchen)
+        order = self._gcash_pending_order()
+
+        response = self.client.get(self._url(order.pk))
+
+        # cashier_or_admin_required redirects unauthorized staff to menu:index
+        self.assertEqual(response.status_code, 302)
+        self.assertNotEqual(response.status_code, 200)
+
+    # ── Method guard ───────────────────────────────────────────────────────
+
+    def test_post_returns_405(self):
+        """Only GET is allowed; POST returns 405."""
+        self.client.force_login(self.cashier)
+        order = self._gcash_pending_order()
+
+        response = self.client.post(self._url(order.pk))
+
+        self.assertEqual(response.status_code, 405)
