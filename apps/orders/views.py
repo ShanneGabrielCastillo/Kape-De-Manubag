@@ -1403,10 +1403,22 @@ def gcash_payment_detail(request, pk):
     gcash_submitted_at = None
     if order.gcash_submitted_at:
         local_dt = timezone.localtime(order.gcash_submitted_at)
-        gcash_submitted_at = local_dt.strftime('%B %-d, %Y %-I:%M %p')
+        # %-d and %-I are Linux-only strftime codes (no leading zero) and
+        # raise ValueError on Windows.  Build the string cross-platform.
+        day_str    = str(local_dt.day)
+        hour_12    = local_dt.hour % 12 or 12
+        hour_str   = str(hour_12)
+        minute_str = local_dt.strftime('%M')
+        period     = local_dt.strftime('%p')
+        gcash_submitted_at = (
+            local_dt.strftime('%B ')
+            + day_str
+            + local_dt.strftime(', %Y ')
+            + hour_str + ':' + minute_str + ' ' + period
+        )
 
     gcash_proof_url = None
-    if order.gcash_proof:
+    if order.gcash_proof and order.gcash_proof.name:
         gcash_proof_url = order.gcash_proof.url
 
     return JsonResponse({
