@@ -391,6 +391,9 @@
             data-total-raw="{{ order.total }}"
             data-payment-method="{{ order.payment_method }}"
             data-gcash-status="{{ order.gcash_status }}"
+            data-gcash-detail-url="{% url 'orders:gcash_payment_detail' order.pk %}"
+            data-gcash-verify-url="{% url 'orders:verify_gcash_payment' order.pk %}"
+            data-gcash-reject-url="{% url 'orders:reject_gcash_payment' order.pk %}"
         >
           <td><a href="{% url 'orders:order_detail' order.pk %}" class="order-num-link">{{ order.order_number }}</a></td>
           <td>{{ order.customer_name }}</td>
@@ -423,7 +426,7 @@
             {% if order.status == 'awaiting_payment' %}
               {# Show payment action based on exact GCash state #}
               {% if order.payment_method == 'gcash' and order.gcash_status == 'pending' %}
-                <a href="{% url 'orders:order_detail' order.pk %}" class="btn btn-sm btn-primary"><i data-lucide="badge-check" class="btn-icon" aria-hidden="true"></i> Verify GCash</a>
+                <button onclick="openGcashVerifyModal({{ order.pk }}, '{% url 'orders:gcash_payment_detail' order.pk %}', '{% url 'orders:verify_gcash_payment' order.pk %}', '{% url 'orders:reject_gcash_payment' order.pk %}')" class="btn btn-sm btn-primary"><i data-lucide="badge-check" class="btn-icon" aria-hidden="true"></i> Verify GCash</button>
               {% else %}
                 {# Cash, GCash-none, GCash-rejected: all show Pay #}
                 <button onclick="openPaymentModal({{ order.pk }}, {{ order.total }}, '{% url 'orders:process_payment' order.pk %}', '{{ order.payment_method }}', '')" class="btn btn-sm btn-caramel"><i data-lucide="credit-card" class="btn-icon" aria-hidden="true"></i> Pay</button>
@@ -466,6 +469,100 @@
 
 <!-- Payment Modal -->
 {% include "partials/payment_modal.html" %}
+
+<!-- GCash Verification Modal -->
+<div id="gcash-om-backdrop" class="modal-backdrop" style="display:none"
+     role="dialog" aria-modal="true" aria-labelledby="gcash-om-title">
+  <div class="modal" style="max-width:520px;width:100%;box-sizing:border-box;max-height:90vh;display:flex;flex-direction:column">
+    <!-- Header -->
+    <div class="modal-header" style="background:#1e40af;flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:1.25rem;line-height:1"><i data-lucide="badge-check" class="action-icon" aria-hidden="true"></i></span>
+        <h4 id="gcash-om-title" style="color:#fff;margin:0">Verify GCash Payment</h4>
+      </div>
+      <button class="modal-close" id="gcash-om-close"
+              style="color:#fff;opacity:0.8;background:none;border:none;font-size:1.3rem;cursor:pointer;padding:0;line-height:1"
+              aria-label="Close">&#x00D7;</button>
+    </div>
+    <!-- Body: scrollable -->
+    <div class="modal-body" id="gcash-om-body" style="overflow-y:auto;flex:1;min-height:0">
+      <!-- Loading state -->
+      <div id="gcash-om-loading" style="text-align:center;padding:40px 0;color:#aaa">
+        <i data-lucide="loader" aria-hidden="true" style="animation:spin 1s linear infinite"></i> Loading&hellip;
+      </div>
+      <!-- Fetch error state (hidden by default) -->
+      <div id="gcash-om-error" style="display:none;color:#991b1b;background:#fee2e2;border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:0.88rem"></div>
+      <!-- Content (hidden until loaded) -->
+      <div id="gcash-om-content" style="display:none">
+        <!-- Order summary card -->
+        <div style="background:var(--cream);border-radius:10px;padding:14px 16px;margin-bottom:14px;display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+            <span style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#aaa">Order</span>
+            <span id="gcash-om-order-number" style="font-weight:700;color:var(--caramel);font-family:'Playfair Display',serif"></span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+            <span style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#aaa">Customer</span>
+            <span id="gcash-om-customer" style="font-weight:600;color:var(--brown-dark)"></span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+            <span style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#aaa">Amount</span>
+            <span id="gcash-om-amount" style="font-weight:700;color:var(--brown-dark);font-size:1.05rem"></span>
+          </div>
+          <div id="gcash-om-ref-row" style="display:none;justify-content:space-between;align-items:flex-start;gap:8px">
+            <span style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#aaa;padding-top:2px">Reference #</span>
+            <code id="gcash-om-reference" style="background:#dbeafe;color:#1e40af;padding:3px 10px;border-radius:5px;font-size:0.88rem;word-break:break-all;max-width:70%;display:inline-block"></code>
+          </div>
+          <div id="gcash-om-date-row" style="display:none;justify-content:space-between;align-items:baseline;gap:8px">
+            <span style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#aaa">Submitted</span>
+            <span id="gcash-om-submitted-at" style="font-size:0.82rem;color:#666"></span>
+          </div>
+        </div>
+        <!-- Screenshot -->
+        <div id="gcash-om-screenshot-wrap" style="display:none;margin-bottom:14px">
+          <div style="font-size:0.78rem;color:#888;margin-bottom:6px">Payment Screenshot:</div>
+          <a id="gcash-om-screenshot-link" href="#" target="_blank" rel="noopener" style="display:inline-block;max-width:100%">
+            <img id="gcash-om-screenshot-img" src="" alt="GCash payment screenshot"
+                 style="max-width:100%;max-height:260px;border-radius:8px;border:1px solid #93c5fd;object-fit:contain;display:block">
+          </a>
+          <div style="font-size:0.75rem;color:#1e40af;margin-top:4px">
+            <a id="gcash-om-fullsize-link" href="#" target="_blank" rel="noopener" style="color:#1e40af">Open full size &#x2197;</a>
+          </div>
+        </div>
+        <div id="gcash-om-no-screenshot" style="display:none;font-size:0.82rem;color:#aaa;margin-bottom:14px">No screenshot uploaded.</div>
+        <!-- Verification warning -->
+        <div style="background:#fffbeb;border:1.5px solid #fbbf24;border-radius:8px;padding:10px 14px;display:flex;align-items:flex-start;gap:8px;margin-bottom:4px">
+          <span style="font-size:1rem;flex-shrink:0;margin-top:1px"><i data-lucide="triangle-alert" class="status-icon" aria-hidden="true"></i></span>
+          <p style="margin:0;font-size:0.83rem;color:#92400e;line-height:1.55">
+            Review the screenshot and confirm the payment is visible in the business GCash account before verifying. Do not verify if you have not checked.
+          </p>
+        </div>
+        <!-- Rejection reason input (shown only when rejecting) -->
+        <div id="gcash-om-reject-wrap" style="display:none;margin-top:12px">
+          <label for="gcash-om-reject-note" class="form-label" style="font-size:0.82rem">Rejection reason <span style="color:#aaa;font-weight:400">(optional)</span></label>
+          <textarea id="gcash-om-reject-note" class="form-control" rows="2" maxlength="300"
+                    placeholder="e.g. Reference not found in GCash account"
+                    style="resize:vertical;font-size:0.88rem"></textarea>
+        </div>
+        <!-- Inline error during verify/reject actions -->
+        <div id="gcash-om-action-error" style="display:none;color:#991b1b;background:#fee2e2;border-radius:8px;padding:10px 12px;margin-top:12px;font-size:0.85rem"></div>
+      </div>
+    </div>
+    <!-- Footer -->
+    <div class="modal-footer" id="gcash-om-footer" style="flex-shrink:0">
+      <!-- Initial footer: Verify + Reject + Cancel -->
+      <div id="gcash-om-footer-main" style="display:none;width:100%;flex-direction:column;gap:8px">
+        <button id="gcash-om-close-btn" class="btn btn-outline btn-block">Cancel</button>
+        <button id="gcash-om-reject-start" class="btn btn-block" style="color:var(--red-accent,#dc2626);border:1px solid var(--red-accent,#dc2626)"><i data-lucide="x" class="btn-icon" aria-hidden="true"></i> Reject Payment</button>
+        <button id="gcash-om-verify-btn" class="btn btn-primary btn-block"><i data-lucide="badge-check" class="btn-icon" aria-hidden="true"></i> Verify Payment</button>
+      </div>
+      <!-- Rejection confirmation footer: Confirm Reject + Back -->
+      <div id="gcash-om-footer-reject" style="display:none;width:100%;flex-direction:column;gap:8px">
+        <button id="gcash-om-reject-back" class="btn btn-outline btn-block">Back</button>
+        <button id="gcash-om-reject-confirm" class="btn btn-block" style="background:var(--red-accent,#dc2626);color:#fff;border:none"><i data-lucide="x" class="btn-icon" aria-hidden="true"></i> Confirm Rejection</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- Mobile footer hint -->
 <div class="om-footer-hint">
@@ -624,6 +721,18 @@ RealtimeConnection.on('new_order', function(order) {
     row.dataset.totalRaw     = order.total         || '0';
     row.dataset.status       = order.status        || 'awaiting_payment';
     row.dataset.statusDisplay= order.status_display || (STATUS_LABELS[order.status] || order.status);
+    // Declare URL consts before they are referenced by row.dataset.*
+    const statusFormUrl = `{% url 'orders:update_status' 0 %}`.replace('/0/', `/${order.order_id}/`);
+    const detailUrl     = `{% url 'orders:order_detail' 0 %}`.replace('/0/', `/${order.order_id}/`);
+    const receiptUrl    = `{% url 'orders:print_receipt' 0 %}`.replace('/0/', `/${order.order_id}/`);
+    const advanceUrl    = `{% url 'orders:quick_status_advance' 0 %}`.replace('/0/', `/${order.order_id}/`);
+    const payUrl        = `{% url 'orders:process_payment' 0 %}`.replace('/0/', `/${order.order_id}/`);
+    const acceptUrl     = `{% url 'orders:accept_order' 0 %}`.replace('/0/', `/${order.order_id}/`);
+
+    const gcashDetailUrl = `{% url 'orders:gcash_payment_detail' 0 %}`.replace('/0/', `/${order.order_id}/`);
+    const gcashVerifyUrl = `{% url 'orders:verify_gcash_payment' 0 %}`.replace('/0/', `/${order.order_id}/`);
+    const gcashRejectUrl = `{% url 'orders:reject_gcash_payment' 0 %}`.replace('/0/', `/${order.order_id}/`);
+
     row.dataset.nextStatus   = '';
     row.dataset.date         = 'Just now';
     row.dataset.detailUrl    = detailUrl;
@@ -635,6 +744,9 @@ RealtimeConnection.on('new_order', function(order) {
     row.dataset.isPaid       = order.is_paid ? 'true' : 'false';
     row.dataset.paymentMethod = order.payment_method || 'cash';
     row.dataset.gcashStatus  = order.gcash_status || 'none';
+    row.dataset.gcashDetailUrl = gcashDetailUrl;
+    row.dataset.gcashVerifyUrl = gcashVerifyUrl;
+    row.dataset.gcashRejectUrl = gcashRejectUrl;
     row.className = 'new-order-highlight';
 
     // The status select for a brand-new (awaiting_payment) order — no
@@ -644,12 +756,6 @@ RealtimeConnection.on('new_order', function(order) {
       <option value="pending" selected>Pending</option>
       ${allowedNext.map(v => `<option value="${v}">${STATUS_LABELS[v]}</option>`).join('')}
     </select>`;
-    const statusFormUrl = `{% url 'orders:update_status' 0 %}`.replace('/0/', `/${order.order_id}/`);
-    const detailUrl     = `{% url 'orders:order_detail' 0 %}`.replace('/0/', `/${order.order_id}/`);
-    const receiptUrl    = `{% url 'orders:print_receipt' 0 %}`.replace('/0/', `/${order.order_id}/`);
-    const advanceUrl    = `{% url 'orders:quick_status_advance' 0 %}`.replace('/0/', `/${order.order_id}/`);
-    const payUrl        = `{% url 'orders:process_payment' 0 %}`.replace('/0/', `/${order.order_id}/`);
-    const acceptUrl     = `{% url 'orders:accept_order' 0 %}`.replace('/0/', `/${order.order_id}/`);
 
     const csrfInput = `<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">`;
 
@@ -832,8 +938,18 @@ RealtimeConnection.on('gcash_submitted', function(data) {
   // 3. Update the Payment column (column index 6).
   const payCell = row.cells[6];
   if (payCell) {
-    const detailUrl = row.dataset.detailUrl || '';
-    payCell.innerHTML = `<a href="${escHtml(detailUrl)}" class="btn btn-sm btn-primary"><i data-lucide="badge-check" class="btn-icon" aria-hidden="true"></i> Verify GCash</a>`;
+    // Ensure the row has the gcash URL dataset attributes (in case the row
+    // was inserted before the SSE event and the data-attrs were not set yet).
+    if (!row.dataset.gcashDetailUrl) {
+      row.dataset.gcashDetailUrl = `{% url 'orders:gcash_payment_detail' 0 %}`.replace('/0/', `/${data.order_id}/`);
+    }
+    if (!row.dataset.gcashVerifyUrl) {
+      row.dataset.gcashVerifyUrl = `{% url 'orders:verify_gcash_payment' 0 %}`.replace('/0/', `/${data.order_id}/`);
+    }
+    if (!row.dataset.gcashRejectUrl) {
+      row.dataset.gcashRejectUrl = `{% url 'orders:reject_gcash_payment' 0 %}`.replace('/0/', `/${data.order_id}/`);
+    }
+    payCell.innerHTML = `<button onclick="openGcashVerifyModal(${data.order_id}, '${escHtml(row.dataset.gcashDetailUrl)}', '${escHtml(row.dataset.gcashVerifyUrl)}', '${escHtml(row.dataset.gcashRejectUrl)}')" class="btn btn-sm btn-primary"><i data-lucide="badge-check" class="btn-icon" aria-hidden="true"></i> Verify GCash</button>`;
   }
 
   // 4. Rebuild the mobile card so it reflects the new state.
@@ -915,8 +1031,8 @@ RealtimeConnection.on('gcash_submitted', function(data) {
       const payMethod   = d.paymentMethod || 'cash';
 
       if (payMethod === 'gcash' && gcashStatus === 'pending') {
-        // Customer has submitted a GCash reference — show Verify link
-        payHtml = `<a href="${escHtml(d.detailUrl || '')}" class="btn btn-sm btn-primary"><i data-lucide="badge-check" class="btn-icon" aria-hidden="true"></i> Verify GCash</a>`;
+        // Customer has submitted a GCash reference — show Verify button (opens modal)
+        payHtml = `<button onclick="openGcashVerifyModal(${escHtml(d.orderId)}, '${escHtml(d.gcashDetailUrl||'')}', '${escHtml(d.gcashVerifyUrl||'')}', '${escHtml(d.gcashRejectUrl||'')}')" class="btn btn-sm btn-primary"><i data-lucide="badge-check" class="btn-icon" aria-hidden="true"></i> Verify GCash</button>`;
       } else if (payMethod === 'gcash' && gcashStatus === 'rejected') {
         payHtml = `<span style="font-size:0.75rem;color:#991b1b">❌ Rejected</span>`;
       } else {
@@ -1068,5 +1184,356 @@ RealtimeConnection.on('gcash_submitted', function(data) {
     if (url) window.location.href = url;
   });
 }());
+
+// ── GCash Verification Modal ──────────────────────────────────────────────
+(function () {
+  const backdrop   = document.getElementById('gcash-om-backdrop');
+  if (!backdrop) return;
+
+  // State
+  let _orderId    = null;
+  let _verifyUrl  = '';
+  let _rejectUrl  = '';
+  let _triggerBtn = null;
+  let _submitting = false;
+
+  // Element refs
+  const loadingEl    = document.getElementById('gcash-om-loading');
+  const errorEl      = document.getElementById('gcash-om-error');
+  const contentEl    = document.getElementById('gcash-om-content');
+  const orderNumEl   = document.getElementById('gcash-om-order-number');
+  const customerEl   = document.getElementById('gcash-om-customer');
+  const amountEl     = document.getElementById('gcash-om-amount');
+  const refRowEl     = document.getElementById('gcash-om-ref-row');
+  const referenceEl  = document.getElementById('gcash-om-reference');
+  const dateRowEl    = document.getElementById('gcash-om-date-row');
+  const submittedEl  = document.getElementById('gcash-om-submitted-at');
+  const screenshotWrap = document.getElementById('gcash-om-screenshot-wrap');
+  const screenshotLink = document.getElementById('gcash-om-screenshot-link');
+  const screenshotImg  = document.getElementById('gcash-om-screenshot-img');
+  const fullsizeLink   = document.getElementById('gcash-om-fullsize-link');
+  const noScreenEl   = document.getElementById('gcash-om-no-screenshot');
+  const rejectWrapEl = document.getElementById('gcash-om-reject-wrap');
+  const rejectNoteEl = document.getElementById('gcash-om-reject-note');
+  const actionErrEl  = document.getElementById('gcash-om-action-error');
+  const footerMain   = document.getElementById('gcash-om-footer-main');
+  const footerReject = document.getElementById('gcash-om-footer-reject');
+  const closeBtn     = document.getElementById('gcash-om-close');
+  const closeBtnFooter = document.getElementById('gcash-om-close-btn');
+  const verifyBtn    = document.getElementById('gcash-om-verify-btn');
+  const rejectStart  = document.getElementById('gcash-om-reject-start');
+  const rejectBack   = document.getElementById('gcash-om-reject-back');
+  const rejectConfirm = document.getElementById('gcash-om-reject-confirm');
+
+  function _showEl(el, displayVal) {
+    el.style.display = displayVal || 'block';
+  }
+  function _hideEl(el) {
+    el.style.display = 'none';
+  }
+
+  function _showActionError(msg) {
+    actionErrEl.textContent = msg;
+    _showEl(actionErrEl);
+  }
+  function _hideActionError() {
+    _hideEl(actionErrEl);
+    actionErrEl.textContent = '';
+  }
+
+  function _onKey(e) {
+    if (e.key === 'Escape' && !_submitting) _closeModal();
+  }
+
+  function _resetModal() {
+    _submitting = false;
+    // Reset footer to main state
+    _hideEl(footerReject);
+    _hideEl(footerMain);
+    _hideEl(rejectWrapEl);
+    // Reset rejection textarea
+    if (rejectNoteEl) rejectNoteEl.value = '';
+    // Reset button states
+    if (verifyBtn)     { verifyBtn.disabled = false; verifyBtn.innerHTML = '<i data-lucide="badge-check" class="btn-icon" aria-hidden="true"></i> Verify Payment'; }
+    if (rejectStart)   { rejectStart.disabled = false; }
+    if (rejectConfirm) { rejectConfirm.disabled = false; rejectConfirm.innerHTML = '<i data-lucide="x" class="btn-icon" aria-hidden="true"></i> Confirm Rejection'; }
+    _hideActionError();
+  }
+
+  function _closeModal() {
+    backdrop.style.display = 'none';
+    document.body.style.overflow = '';
+    document.removeEventListener('keydown', _onKey);
+    _resetModal();
+    if (_triggerBtn && typeof _triggerBtn.focus === 'function') {
+      try { _triggerBtn.focus(); } catch(e) {}
+    }
+  }
+
+  function openGcashVerifyModal(orderId, detailApiUrl, verifyUrl, rejectUrl) {
+    _orderId    = orderId;
+    _verifyUrl  = verifyUrl;
+    _rejectUrl  = rejectUrl;
+    _triggerBtn = document.activeElement;
+
+    // Show backdrop, lock body scroll
+    backdrop.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    // Show loading, hide content/error, hide footers
+    _showEl(loadingEl);
+    _hideEl(errorEl);
+    _hideEl(contentEl);
+    _hideEl(footerMain);
+    _hideEl(footerReject);
+    _hideActionError();
+
+    // Escape key support
+    document.addEventListener('keydown', _onKey);
+
+    // Fetch GCash details
+    fetch(detailApiUrl, { credentials: 'same-origin' })
+      .then(function(resp) {
+        if (!resp.ok) {
+          return resp.json().then(function(d) {
+            throw new Error(d.error || 'Failed to load payment details (HTTP ' + resp.status + ')');
+          }).catch(function(e) {
+            if (e instanceof SyntaxError) throw new Error('Failed to load payment details (HTTP ' + resp.status + ')');
+            throw e;
+          });
+        }
+        return resp.json();
+      })
+      .then(function(data) {
+        // Populate order summary
+        orderNumEl.textContent  = data.order_number  || '';
+        customerEl.textContent  = data.customer_name || '';
+        amountEl.textContent    = '₱' + parseFloat(data.total || 0).toFixed(2);
+
+        if (data.gcash_reference) {
+          referenceEl.textContent = data.gcash_reference;
+          _showEl(refRowEl, 'flex');
+        } else {
+          _hideEl(refRowEl);
+        }
+
+        if (data.gcash_submitted_at) {
+          submittedEl.textContent = data.gcash_submitted_at;
+          _showEl(dateRowEl, 'flex');
+        } else {
+          _hideEl(dateRowEl);
+        }
+
+        // Screenshot
+        if (data.gcash_proof_url) {
+          screenshotImg.src         = data.gcash_proof_url;
+          screenshotLink.href       = data.gcash_proof_url;
+          if (fullsizeLink) fullsizeLink.href = data.gcash_proof_url;
+          _showEl(screenshotWrap);
+          _hideEl(noScreenEl);
+        } else {
+          _hideEl(screenshotWrap);
+          _showEl(noScreenEl);
+        }
+
+        // Show content, hide loading
+        _hideEl(loadingEl);
+        _showEl(contentEl);
+        _showEl(footerMain, 'flex');
+        window.reinitLucide && window.reinitLucide();
+      })
+      .catch(function(err) {
+        _hideEl(loadingEl);
+        errorEl.textContent = err.message || 'Failed to load payment details. Please try again.';
+        _showEl(errorEl);
+        // Keep close button accessible but no footer actions
+      });
+  }
+
+  // Backdrop click: close if not submitting
+  backdrop.addEventListener('click', function(e) {
+    if (e.target === backdrop && !_submitting) _closeModal();
+  });
+
+  // Close button (header ×)
+  if (closeBtn) closeBtn.addEventListener('click', function() {
+    if (!_submitting) _closeModal();
+  });
+
+  // Close button (footer Cancel)
+  if (closeBtnFooter) closeBtnFooter.addEventListener('click', function() {
+    if (!_submitting) _closeModal();
+  });
+
+  // Verify Payment
+  if (verifyBtn) verifyBtn.addEventListener('click', function() {
+    if (_submitting) return;
+    _submitting = true;
+    _hideActionError();
+    verifyBtn.disabled   = true;
+    verifyBtn.textContent = '⏳ Verifying…';
+    if (rejectStart) rejectStart.disabled = true;
+
+    fetch(_verifyUrl, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'X-CSRFToken': getCookie('csrftoken') }
+    })
+    .then(function(resp) { return resp.json(); })
+    .then(function(data) {
+      if (data.success) {
+        _closeModal();
+        showToast('GCash payment verified! Order is now Preparing.', 'success');
+        updateRowAfterGcashVerify(_orderId, data);
+      } else {
+        _submitting = false;
+        verifyBtn.disabled   = false;
+        verifyBtn.innerHTML  = '<i data-lucide="badge-check" class="btn-icon" aria-hidden="true"></i> Verify Payment';
+        if (rejectStart) rejectStart.disabled = false;
+        _showActionError(data.error || 'Verification failed. Please try again.');
+        window.reinitLucide && window.reinitLucide();
+      }
+    })
+    .catch(function() {
+      _submitting = false;
+      verifyBtn.disabled   = false;
+      verifyBtn.innerHTML  = '<i data-lucide="badge-check" class="btn-icon" aria-hidden="true"></i> Verify Payment';
+      if (rejectStart) rejectStart.disabled = false;
+      _showActionError('Network error — please try again.');
+      showToast('Network error — please try again.', 'error');
+      window.reinitLucide && window.reinitLucide();
+    });
+  });
+
+  // Reject: start (show rejection UI)
+  if (rejectStart) rejectStart.addEventListener('click', function() {
+    _hideEl(footerMain);
+    _showEl(rejectWrapEl);
+    _showEl(footerReject, 'flex');
+    if (rejectNoteEl) rejectNoteEl.focus();
+  });
+
+  // Reject: back (hide rejection UI)
+  if (rejectBack) rejectBack.addEventListener('click', function() {
+    _hideEl(footerReject);
+    _hideEl(rejectWrapEl);
+    _showEl(footerMain, 'flex');
+    if (rejectNoteEl) rejectNoteEl.value = '';
+    _hideActionError();
+  });
+
+  // Reject: confirm
+  if (rejectConfirm) rejectConfirm.addEventListener('click', function() {
+    if (_submitting) return;
+    _submitting = true;
+    _hideActionError();
+    rejectConfirm.disabled   = true;
+    rejectConfirm.textContent = '⏳ Rejecting…';
+
+    const fd = new FormData();
+    fd.append('rejection_note', rejectNoteEl ? rejectNoteEl.value : '');
+
+    fetch(_rejectUrl, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'X-CSRFToken': getCookie('csrftoken') },
+      body: fd
+    })
+    .then(function(resp) { return resp.json(); })
+    .then(function(data) {
+      if (data.success) {
+        _closeModal();
+        showToast('Payment submission rejected. Customer has been notified.', 'info');
+        updateRowAfterGcashReject(_orderId);
+      } else {
+        _submitting = false;
+        rejectConfirm.disabled   = false;
+        rejectConfirm.innerHTML  = '<i data-lucide="x" class="btn-icon" aria-hidden="true"></i> Confirm Rejection';
+        _showActionError(data.error || 'Rejection failed. Please try again.');
+        window.reinitLucide && window.reinitLucide();
+      }
+    })
+    .catch(function() {
+      _submitting = false;
+      rejectConfirm.disabled   = false;
+      rejectConfirm.innerHTML  = '<i data-lucide="x" class="btn-icon" aria-hidden="true"></i> Confirm Rejection';
+      _showActionError('Network error — please try again.');
+      window.reinitLucide && window.reinitLucide();
+    });
+  });
+
+  // Expose for inline onclick handlers in the template
+  window.openGcashVerifyModal = openGcashVerifyModal;
+}());
+
+// ── Post-verify row update ────────────────────────────────────────────────
+function updateRowAfterGcashVerify(orderId, data) {
+  const row = document.querySelector('tr[data-order-id="' + orderId + '"]');
+  if (!row) return;
+
+  const statusDisplay = data.new_status_display || 'Preparing';
+
+  // Update row dataset
+  row.dataset.isPaid         = 'true';
+  row.dataset.status         = 'preparing';
+  row.dataset.statusDisplay  = statusDisplay;
+  row.dataset.nextStatus     = 'ready';
+  row.dataset.gcashStatus    = 'verified';
+
+  // Status column (index 5)
+  const statusCell = row.cells[5];
+  if (statusCell) {
+    statusCell.innerHTML = `<span class="badge badge-preparing" style="font-size:0.8rem;padding:5px 10px">${escHtml(statusDisplay)}</span>`;
+  }
+
+  // Payment column (index 6)
+  const payCell = row.cells[6];
+  if (payCell) {
+    payCell.innerHTML = '<span class="badge badge-paid">Paid</span>';
+  }
+
+  // Actions column (last cell)
+  const actionsCell = row.cells[row.cells.length - 1];
+  if (actionsCell) {
+    const advanceUrl = row.dataset.advanceUrl || '';
+    const receiptUrl = row.dataset.receiptUrl || '';
+    actionsCell.innerHTML = `<div style="display:flex;gap:4px;flex-wrap:wrap">
+      <a href="${escHtml(receiptUrl)}" class="btn btn-sm btn-outline" target="_blank"><i data-lucide="printer" class="btn-icon" aria-hidden="true"></i></a>
+      <button onclick="quickAdvance('${escHtml(advanceUrl)}', this)" class="btn btn-sm btn-caramel"
+              data-next-status="ready" data-is-paid="true">&#9654; Ready</button>
+    </div>`;
+  }
+
+  window.initResponsiveTables && window.initResponsiveTables();
+  window.reinitLucide && window.reinitLucide();
+}
+
+// ── Post-reject row update ────────────────────────────────────────────────
+function updateRowAfterGcashReject(orderId) {
+  const row = document.querySelector('tr[data-order-id="' + orderId + '"]');
+  if (!row) return;
+
+  // Update row dataset
+  row.dataset.gcashStatus = 'rejected';
+  row.dataset.status      = 'awaiting_payment';
+
+  // Status column (index 5)
+  const statusCell = row.cells[5];
+  if (statusCell) {
+    statusCell.innerHTML = `<span class="badge" style="background:#fee2e2;color:#991b1b;font-size:0.8rem;padding:5px 10px"><i data-lucide="circle-x" class="status-icon" aria-hidden="true"></i> GCash Rejected</span>`;
+  }
+
+  // Payment column (index 6) — show Pay button for resubmission
+  const payCell = row.cells[6];
+  if (payCell) {
+    const payUrl     = row.dataset.payUrl      || '';
+    const total      = parseFloat(row.dataset.totalRaw || '0').toFixed(2);
+    const payMethod  = row.dataset.paymentMethod || 'gcash';
+    payCell.innerHTML = `<button onclick="openPaymentModal(${orderId}, ${total}, '${escHtml(payUrl)}', '${escHtml(payMethod)}', '')" class="btn btn-sm btn-caramel"><i data-lucide="credit-card" class="btn-icon" aria-hidden="true"></i> Pay</button>`;
+  }
+
+  window.initResponsiveTables && window.initResponsiveTables();
+  window.reinitLucide && window.reinitLucide();
+}
 </script>
 {% endblock %}
