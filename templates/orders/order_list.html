@@ -4,6 +4,40 @@
 
 {% block extra_css %}
 <style>
+/* ── Order number link ─────────────────────────────────────────────────── */
+.order-num-link {
+  font-weight: 700;
+  color: var(--caramel);
+  text-decoration: none;
+  border-radius: 3px;
+  transition: color 0.15s;
+}
+.order-num-link:hover {
+  color: var(--brown-dark);
+  text-decoration: underline;
+}
+.order-num-link:focus-visible {
+  outline: 2px solid var(--caramel);
+  outline-offset: 2px;
+}
+
+/* ── Clickable order rows (desktop only) ──────────────────────────────── */
+@media (min-width: 768px) {
+  .table-orders tbody tr[data-detail-url] {
+    cursor: pointer;
+  }
+  .table-orders tbody tr[data-detail-url]:hover {
+    background: rgba(193, 122, 59, 0.08);
+  }
+}
+
+/* ── Mobile: one-button actions layout ────────────────────────────────── */
+@media (max-width: 767.98px) {
+  .om-actions.om-actions--1 {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ══════════════════════════════════════════════════════════════
    ORDER LIST — MOBILE CARD UI  (≤ 767px only, desktop untouched)
    ══════════════════════════════════════════════════════════════ */
@@ -358,7 +392,7 @@
             data-payment-method="{{ order.payment_method }}"
             data-gcash-status="{{ order.gcash_status }}"
         >
-          <td><a href="{% url 'orders:order_detail' order.pk %}" style="font-weight:700;color:var(--caramel)">{{ order.order_number }}</a></td>
+          <td><a href="{% url 'orders:order_detail' order.pk %}" class="order-num-link">{{ order.order_number }}</a></td>
           <td>{{ order.customer_name }}</td>
           <td>
             <div>{{ order.get_order_type_display }}</div>
@@ -403,7 +437,6 @@
           <td style="font-size:0.8rem;color:#aaa;white-space:nowrap">{{ order.created_at|date:"M d, g:i A" }}</td>
           <td>
             <div style="display:flex;gap:4px;flex-wrap:wrap">
-              <a href="{% url 'orders:order_detail' order.pk %}" class="btn btn-sm btn-outline">View</a>
               <a href="{% url 'orders:print_receipt' order.pk %}" class="btn btn-sm btn-outline" target="_blank"><i data-lucide="printer" class="btn-icon" aria-hidden="true"></i></a>
               {% if order.next_status %}
               <button onclick="quickAdvance('{% url 'orders:quick_status_advance' order.pk %}', this)" class="btn btn-sm btn-caramel" title="Advance to {{ order.next_status }}" data-next-status="{{ order.next_status }}" data-is-paid="{{ order.is_paid|yesno:'true,false' }}">▶ {{ order.next_status|title }}</button>
@@ -630,7 +663,6 @@ RealtimeConnection.on('new_order', function(order) {
       paymentCellHtml = `<button onclick="openPaymentModal(${order.order_id}, ${Number(order.total).toFixed(2)}, '${payUrl}', '${escHtml(order.payment_method || 'cash')}', '')" class="btn btn-sm btn-caramel"><i data-lucide="credit-card" class="btn-icon" aria-hidden="true"></i> Pay</button>`;
       actionCellHtml = `
         <div style="display:flex;gap:4px;flex-wrap:wrap">
-          <a href="${detailUrl}" class="btn btn-sm btn-outline">View</a>
           <a href="${receiptUrl}" class="btn btn-sm btn-outline" target="_blank"><i data-lucide="printer" class="btn-icon" aria-hidden="true"></i></a>
         </div>`;
     } else {
@@ -643,7 +675,6 @@ RealtimeConnection.on('new_order', function(order) {
       paymentCellHtml = `<button onclick="openPaymentModal(${order.order_id}, ${Number(order.total).toFixed(2)}, '${payUrl}', '${escHtml(order.payment_method || 'cash')}', '')" class="btn btn-sm btn-caramel">Pay</button>`;
       actionCellHtml = `
         <div style="display:flex;gap:4px;flex-wrap:wrap">
-          <a href="${detailUrl}" class="btn btn-sm btn-outline">View</a>
           <a href="${receiptUrl}" class="btn btn-sm btn-outline" target="_blank"><i data-lucide="printer" class="btn-icon" aria-hidden="true"></i></a>
           <button onclick="quickAdvance('${advanceUrl}')" class="btn btn-sm btn-caramel" title="Advance to Preparing"><i data-lucide="chevron-right" class="btn-icon" aria-hidden="true"></i> Preparing</button>
         </div>`;
@@ -654,7 +685,7 @@ RealtimeConnection.on('new_order', function(order) {
       : '—';
 
     row.innerHTML = `
-      <td><a href="${detailUrl}" style="font-weight:700;color:var(--caramel)">${escHtml(order.order_number)}</a></td>
+      <td><a href="${detailUrl}" class="order-num-link">${escHtml(order.order_number)}</a></td>
       <td>${escHtml(order.customer_name)}</td>
       <td><div>${escHtml(order.order_type)}</div></td>
       <td>${itemCountDisplay}</td>
@@ -759,6 +790,20 @@ RealtimeConnection.on('status_changed', function(data) {
     window.initResponsiveTables();
   }
   window.reinitLucide && window.reinitLucide();
+
+  // ── Notify cashier/admin when kitchen marks an order ready ───────────────
+  // This toast only appears on staff pages using RealtimeConnection (cashier/
+  // admin order list). Kitchen Staff use a separate SSE stream and never run
+  // this handler. The kitchen page already shows its own local confirmation
+  // ("marked Ready!") from the fetch response, so there is no duplication.
+  if (newStatus === 'ready') {
+    if (typeof showToast === 'function') {
+      showToast('🍳 Order #' + escHtml(data.order_number) + ' is Ready', 'success', 5000);
+    }
+    if (typeof playNotificationSound === 'function') {
+      playNotificationSound();
+    }
+  }
 });
 
 // ── Real-time: GCash reference submitted by customer ──────────────────────
@@ -921,7 +966,6 @@ RealtimeConnection.on('gcash_submitted', function(data) {
       </div>`;
 
     // ── Action buttons ──
-    const viewBtn    = `<a href="${escHtml(d.detailUrl || '')}" class="btn btn-sm btn-outline">View</a>`;
     const printBtn   = `<a href="${escHtml(d.receiptUrl || '')}" class="btn btn-sm btn-outline" target="_blank"><i data-lucide="printer" class="btn-icon" aria-hidden="true"></i></a>`;
     let advanceBtn   = '';
     if (nextStatus && !isTerminal) {
@@ -933,10 +977,9 @@ RealtimeConnection.on('gcash_submitted', function(data) {
                       <i data-lucide="chevron-right" class="btn-icon" aria-hidden="true"></i> ${escHtml(nextLabel)}
                     </button>`;
     }
-    const actionCount = advanceBtn ? 3 : 2;
+    const actionCount = advanceBtn ? 2 : 1;
     const actionsHtml = `
-      <div class="om-actions${actionCount === 2 ? ' om-actions--2' : ''}">
-        ${viewBtn}
+      <div class="om-actions${actionCount === 1 ? ' om-actions--1' : ' om-actions--2'}">
         ${printBtn}
         ${advanceBtn}
       </div>`;
@@ -1004,6 +1047,26 @@ RealtimeConnection.on('gcash_submitted', function(data) {
     return r;
   };
 
-})();
+}());
+
+// ── Clickable order rows — event delegation ───────────────────────────────
+// One handler on tbody covers all rows including those inserted by SSE.
+// Interactive elements (links, buttons) keep their own behavior.
+(function () {
+  const tbody = document.querySelector('.table-orders tbody');
+  if (!tbody) return;
+
+  tbody.addEventListener('click', function (e) {
+    // Walk up from the click target to the nearest <tr> with a detail URL.
+    const row = e.target.closest('tr[data-detail-url]');
+    if (!row) return;
+
+    // If the click landed on (or inside) any interactive element, let it handle itself.
+    if (e.target.closest('a, button, input, select, textarea, form, label')) return;
+
+    const url = row.dataset.detailUrl;
+    if (url) window.location.href = url;
+  });
+}());
 </script>
 {% endblock %}
