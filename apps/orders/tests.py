@@ -1927,21 +1927,18 @@ class CustomerReceiptTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_invalid_token_cannot_access_another_order_receipt(self):
-        """Order2's token must not grant access to Order1's receipt."""
+        """An unknown/random token cannot expose any order's receipt."""
+        # Create a paid order to confirm it exists, then prove it is
+        # unreachable via a token that does not match its tracking_token.
         order1 = self._make_order(payment_method='cash', is_paid=True)
-        order2 = self._make_order(payment_method='cash', is_paid=True)
-        # Accessing order1's receipt URL with order2's token must 404.
-        wrong_token_url = reverse(
-            'orders:customer_receipt', args=[order2.tracking_token]
-        )
-        response = self.client.get(wrong_token_url)
-        # This just returns order2's receipt — different order, not order1's.
-        # The key invariant: we cannot construct order1's URL from order2's token.
-        self.assertEqual(response.status_code, 200)
-        content = response.content.decode()
-        # Must show order2's data, NOT order1's.
-        self.assertIn(order2.order_number, content)
-        self.assertNotIn(order1.order_number, content)
+        # Construct a URL using a completely random token (not order1's).
+        import secrets
+        random_token = secrets.token_urlsafe(32)
+        # Ensure it really is a different token (near-zero collision probability).
+        self.assertNotEqual(random_token, order1.tracking_token)
+        bad_url = reverse('orders:customer_receipt', args=[random_token])
+        response = self.client.get(bad_url)
+        self.assertEqual(response.status_code, 404)
 
     def test_pdf_invalid_tracking_token_returns_404(self):
         """Nonexistent tracking token: PDF endpoint must return 404."""

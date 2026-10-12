@@ -49,11 +49,8 @@
       If you've already paid, please wait a moment — your receipt will become available as soon as the payment is verified.
     </div>
     <div class="links">
-      <a href="{% url 'orders:payment_waiting' order.tracking_token %}" class="btn btn-primary">
-        💳 View Payment Status
-      </a>
-      <a href="{% url 'orders:order_tracker' order.tracking_token %}" class="btn btn-secondary">
-        ← Back to Order Tracking
+      <a href="{% url 'orders:order_tracker' order.tracking_token %}" class="btn btn-primary">
+        📋 View Order Status
       </a>
     </div>
   </div>
