@@ -104,7 +104,30 @@
     }
     previousStatus = data.status;
 
+    // Update receipt section visibility when payment is confirmed.
+    updateReceiptSection(data.is_paid);
+
     if (data.is_final) stopAll();
+  }
+
+  // ── Receipt section visibility ─────────────────────────────────────────────
+  // Shows View/Download Receipt buttons when isPaid becomes true.
+  // Idempotent: safe to call multiple times with the same value.
+  function updateReceiptSection(isPaid) {
+    const unavailableMsg  = document.getElementById('receipt-unavailable-msg');
+    const btnView         = document.getElementById('btn-view-receipt');
+    const btnDownload     = document.getElementById('btn-download-receipt');
+
+    if (!unavailableMsg && !btnView) return; // elements not present (different page)
+
+    if (isPaid) {
+      if (unavailableMsg) unavailableMsg.style.display = 'none';
+      if (btnView)     { btnView.style.display = 'flex'; }
+      if (btnDownload) { btnDownload.style.display = 'flex'; }
+    }
+    // Never hide the buttons once shown — if they were already visible (server-
+    // rendered for a paid order), don't hide them even if isPaid arrives false
+    // due to a stale intermediate poll during the payment transition.
   }
 
   // ── Stop everything once the order reaches a terminal state ──────────────
@@ -216,6 +239,12 @@
 
     updateHeroClass(config.initialStatus);
     updateProgressSteps(config.initialStatus);
+
+    // Apply the server-rendered initial paid state so receipt buttons appear
+    // immediately on page load when the order is already paid.
+    if (config.initialIsPaid) {
+      updateReceiptSection(true);
+    }
 
     if (isFinal) {
       // Order is already in a terminal state; show it statically.

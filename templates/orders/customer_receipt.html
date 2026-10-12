@@ -1,0 +1,334 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Receipt — {{ order.order_number }} — Kape De Manubag</title>
+  <link rel="icon" type="image/svg+xml" href="{% static 'images/favicon.svg' %}">
+  <link rel="stylesheet" href="{% static 'css/main.css' %}">
+  <link rel="stylesheet" href="{% static 'css/mobile-design-system.css' %}">
+  <link rel="stylesheet" href="{% static 'css/responsive.css' %}">
+  <style>
+    html { overflow-x: hidden; }
+    body { background: var(--cream-light); overflow-x: hidden; max-width: 100vw; }
+
+    .receipt-page {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 20px 16px 60px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    /* Receipt card — consistent with .tracker-card */
+    .receipt-card {
+      background: var(--cream-white);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 24px 20px;
+      margin-bottom: 16px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .receipt-header {
+      text-align: center;
+      padding-bottom: 16px;
+      border-bottom: 2px dashed var(--cream);
+      margin-bottom: 16px;
+    }
+    .receipt-business-name {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--brown-dark);
+    }
+    .receipt-subtitle {
+      font-size: 0.8rem;
+      color: #888;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+
+    .receipt-section-label {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #aaa;
+      margin-bottom: 10px;
+    }
+
+    .receipt-info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 5px 0;
+      font-size: 0.88rem;
+      border-bottom: 1px solid var(--cream);
+      gap: 8px;
+    }
+    .receipt-info-row:last-child { border-bottom: none; }
+    .receipt-info-label { color: #888; flex-shrink: 0; }
+    .receipt-info-value { font-weight: 600; color: var(--brown-dark); text-align: right; }
+
+    /* Items table */
+    .receipt-items-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #aaa;
+      padding-bottom: 6px;
+      border-bottom: 2px solid var(--cream);
+      margin-bottom: 8px;
+    }
+    .receipt-item-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--cream);
+      font-size: 0.88rem;
+      gap: 8px;
+    }
+    .receipt-item-row:last-child { border-bottom: none; }
+    .receipt-item-name { color: var(--brown-dark); flex: 1; }
+    .receipt-item-size {
+      font-size: 0.78rem;
+      color: #aaa;
+      display: block;
+    }
+    .receipt-item-qty { color: #888; white-space: nowrap; text-align: right; min-width: 60px; }
+    .receipt-item-subtotal {
+      font-weight: 600;
+      color: var(--caramel);
+      white-space: nowrap;
+      text-align: right;
+      min-width: 70px;
+    }
+
+    /* Totals */
+    .receipt-total-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 5px 0;
+      font-size: 0.88rem;
+      color: #666;
+    }
+    .receipt-total-row.grand-total {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--brown-dark);
+      border-top: 2px solid var(--brown-dark);
+      margin-top: 8px;
+      padding-top: 10px;
+    }
+
+    /* Payment confirmed badge */
+    .receipt-confirmed-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #d4edda;
+      color: #155724;
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+
+    /* Action buttons */
+    .receipt-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 4px;
+    }
+    .receipt-actions .btn {
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    @media print {
+      .no-print { display: none !important; }
+      nav { display: none !important; }
+      body { background: #fff; }
+      .receipt-page { padding: 0; max-width: 100%; }
+      .receipt-card { box-shadow: none; border: none; padding: 0; margin-bottom: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav style="background:var(--brown-dark);padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:52px;position:sticky;top:0;z-index:50" class="no-print">
+  <span style="font-family:'Playfair Display',serif;font-weight:700;color:var(--gold);font-size:1rem">☕ Kape De Manubag</span>
+  <a href="{% url 'orders:order_tracker' order.tracking_token %}" style="color:rgba(255,255,255,0.7);font-size:0.85rem;text-decoration:none">← Back to Tracking</a>
+</nav>
+
+<div class="receipt-page">
+
+  <!-- Receipt card -->
+  <div class="receipt-card">
+
+    <!-- Business header -->
+    <div class="receipt-header">
+      <div class="receipt-business-name">☕ KAPE DE MANUBAG</div>
+      <div class="receipt-subtitle">Digital Receipt</div>
+    </div>
+
+    <!-- Order info -->
+    <div class="receipt-section-label">Order Details</div>
+    <div class="receipt-info-row">
+      <span class="receipt-info-label">Receipt No.</span>
+      <span class="receipt-info-value">{{ order.order_number }}</span>
+    </div>
+    <div class="receipt-info-row">
+      <span class="receipt-info-label">Date</span>
+      <span class="receipt-info-value">{{ order.created_at|date:"M d, Y" }}</span>
+    </div>
+    <div class="receipt-info-row">
+      <span class="receipt-info-label">Time</span>
+      <span class="receipt-info-value">{{ order.created_at|date:"g:i A" }}</span>
+    </div>
+    <div class="receipt-info-row">
+      <span class="receipt-info-label">Customer</span>
+      <span class="receipt-info-value">{{ order.customer_name }}</span>
+    </div>
+    <div class="receipt-info-row">
+      <span class="receipt-info-label">Order Type</span>
+      <span class="receipt-info-value">{{ order.get_order_type_display }}</span>
+    </div>
+    {% if order.table_number %}
+    <div class="receipt-info-row">
+      <span class="receipt-info-label">Table</span>
+      <span class="receipt-info-value">{{ order.table_number }}</span>
+    </div>
+    {% endif %}
+    <div class="receipt-info-row" style="margin-bottom:16px">
+      <span class="receipt-info-label">Payment Method</span>
+      <span class="receipt-info-value">{{ order.get_payment_method_display }}</span>
+    </div>
+
+    <!-- Items -->
+    <div style="margin-top:16px;border-top:2px dashed var(--cream);padding-top:16px">
+      <div class="receipt-section-label">Items Ordered</div>
+      <div class="receipt-items-header">
+        <span style="flex:1">Item</span>
+        <span style="min-width:60px;text-align:right">Qty × Price</span>
+        <span style="min-width:70px;text-align:right">Amount</span>
+      </div>
+      {% for item in items %}
+      <div class="receipt-item-row">
+        <div class="receipt-item-name">
+          {{ item.product_name }}
+          {% if item.size != 'none' %}<span class="receipt-item-size">({{ item.get_size_display }})</span>{% endif %}
+          {% if item.notes %}<span class="receipt-item-size">Note: {{ item.notes }}</span>{% endif %}
+        </div>
+        <div class="receipt-item-qty">{{ item.quantity }} × ₱{{ item.unit_price|floatformat:2 }}</div>
+        <div class="receipt-item-subtotal">₱{{ item.subtotal|floatformat:2 }}</div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Totals -->
+    <div style="margin-top:16px;border-top:2px dashed var(--cream);padding-top:16px">
+      <div class="receipt-total-row">
+        <span>Subtotal</span>
+        <span>₱{{ order.subtotal|floatformat:2 }}</span>
+      </div>
+      {% if order.packaging_fee and order.packaging_fee > 0 %}
+      <div class="receipt-total-row">
+        <span>📦 Packaging Fee</span>
+        <span>₱{{ order.packaging_fee|floatformat:2 }}</span>
+      </div>
+      {% endif %}
+      {% if order.discount and order.discount > 0 %}
+      <div class="receipt-total-row">
+        <span>Discount</span>
+        <span>-₱{{ order.discount|floatformat:2 }}</span>
+      </div>
+      {% endif %}
+      <div class="receipt-total-row grand-total">
+        <span>TOTAL</span>
+        <span>₱{{ order.total|floatformat:2 }}</span>
+      </div>
+    </div>
+
+    <!-- Payment section -->
+    <div style="margin-top:16px;border-top:2px dashed var(--cream);padding-top:16px">
+      <div class="receipt-section-label">Payment</div>
+      <div class="receipt-info-row">
+        <span class="receipt-info-label">Method</span>
+        <span class="receipt-info-value">{{ order.get_payment_method_display }}</span>
+      </div>
+      <div class="receipt-info-row">
+        <span class="receipt-info-label">Amount Paid</span>
+        <span class="receipt-info-value">₱{{ order.amount_paid|floatformat:2 }}</span>
+      </div>
+      {% if order.payment_method == 'cash' %}
+      <div class="receipt-info-row">
+        <span class="receipt-info-label">Change</span>
+        <span class="receipt-info-value">₱{{ order.change_amount|floatformat:2 }}</span>
+      </div>
+      {% endif %}
+      {% if order.gcash_reference %}
+      <div class="receipt-info-row">
+        <span class="receipt-info-label">GCash Ref.</span>
+        <span class="receipt-info-value">{{ order.gcash_reference }}</span>
+      </div>
+      {% endif %}
+      <div class="receipt-info-row">
+        <span class="receipt-info-label">Status</span>
+        <span class="receipt-info-value">
+          <span class="receipt-confirmed-badge">✓ Payment Confirmed</span>
+        </span>
+      </div>
+      {% if order.gcash_verified_at %}
+      <div class="receipt-info-row">
+        <span class="receipt-info-label">Confirmed At</span>
+        <span class="receipt-info-value">{{ order.gcash_verified_at|date:"M d, Y g:i A" }}</span>
+      </div>
+      {% else %}
+      <div class="receipt-info-row">
+        <span class="receipt-info-label">Confirmed At</span>
+        <span class="receipt-info-value" style="color:#aaa">—</span>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Footer -->
+    <div style="text-align:center;margin-top:20px;padding-top:16px;border-top:2px dashed var(--cream);color:#aaa;font-size:0.78rem">
+      Thank you for visiting!<br>
+      Kape De Manubag — {{ order.created_at|date:"Y" }}
+    </div>
+
+  </div><!-- /receipt-card -->
+
+  <!-- Actions — hidden when printing -->
+  <div class="receipt-card no-print">
+    <div class="receipt-section-label" style="margin-bottom:14px">Actions</div>
+    <div class="receipt-actions">
+      <button onclick="window.print()" class="btn btn-secondary">
+        🖨️ Print Receipt
+      </button>
+      <a href="{{ pdf_url }}" class="btn btn-primary" download>
+        ⬇️ Download Receipt (PDF)
+      </a>
+      <a href="{% url 'orders:order_tracker' order.tracking_token %}" class="btn btn-secondary" style="background:transparent;color:var(--brown-dark);border:1.5px solid var(--cream)">
+        ← Back to Order Tracking
+      </a>
+    </div>
+  </div>
+
+</div><!-- /receipt-page -->
+
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<script>document.addEventListener('DOMContentLoaded', function () { if (typeof lucide !== 'undefined') lucide.createIcons(); });</script>
+</body>
+</html>

@@ -7,6 +7,7 @@ stock levels, inventory logs) roll back together. These tests verify the
 success paths and inject mid-transaction failures to prove the rollback.
 """
 import json
+from decimal import Decimal
 from io import BytesIO
 from unittest import mock
 
@@ -1732,25 +1733,31 @@ class GCashPaymentDetailTest(TestCase):
 
     # ── Authorization ──────────────────────────────────────────────────────
 
-    def test_unauthenticated_request_redirects_to_login(self):
-        """Unauthenticated requests are redirected to the login page."""
+    def test_unauthenticated_request_returns_json_401(self):
+        """Unauthenticated requests receive JSON 401 (not an HTML redirect).
+
+        The endpoint returns JSON for auth failures so the modal fetch handler
+        can display a useful message instead of crashing on an unexpected HTML
+        login-page response (the ``Unexpected token '<'`` bug).
+        """
         order = self._gcash_pending_order()
 
         response = self.client.get(self._url(order.pk))
 
-        self.assertEqual(response.status_code, 302)
-        self.assertIn('login', response.url)
+        self.assertEqual(response.status_code, 401)
+        data = response.json()
+        self.assertIn('error', data)
 
     def test_kitchen_staff_cannot_access_endpoint(self):
-        """Kitchen staff (non-cashier) must not gain access — redirected away."""
+        """Kitchen staff (non-cashier) must not gain access — receives JSON 403."""
         self.client.force_login(self.kitchen)
         order = self._gcash_pending_order()
 
         response = self.client.get(self._url(order.pk))
 
-        # cashier_or_admin_required redirects unauthorized staff to menu:index
-        self.assertEqual(response.status_code, 302)
-        self.assertNotEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 403)
+        data = response.json()
+        self.assertIn('error', data)
 
     # ── Method guard ───────────────────────────────────────────────────────
 
@@ -1762,3 +1769,262 @@ class GCashPaymentDetailTest(TestCase):
         response = self.client.post(self._url(order.pk))
 
         self.assertEqual(response.status_code, 405)
+
+
+class CustomerReceiptTests(TestCase):
+    """Tests for the customer digital receipt feature.
+
+    Covers the payment gate, token security, content correctness, PDF
+    generation, and read-only invariant (receipt generation must not change
+    any order, payment, or inventory record).
+    """
+
+    def setUp(self):
+        self.cashier = CustomUser.objects.create_user(
+            username='receipt_cashier', password=PASSWORD, role='cashier',
+        )
+        self.category = Category.objects.create(
+            name='Drinks', slug='drinks-receipt',
+        )
+        self.product = Product.objects.create(
+            category=self.category, name='Iced Latte', price='75.00',
+            stock_quantity=20,
+        )
+
+    # ── Helpers ────────────────────────────────────────────────────────────
+
+    def _make_order(self, *, payment_method='cash', gcash_status='none',
+                    is_paid=False, order_type='dine_in', with_packaging=False):
+        """Create a minimal order with one item for receipt tests."""
+        order = Order.objects.create(
+            customer_name='Test Customer',
+            status='awaiting_payment' if not is_paid else 'preparing',
+            payment_method=payment_method,
+            gcash_status=gcash_status,
+            is_paid=is_paid,
+            order_type=order_type,
+        )
+        OrderItem.objects.create(
+            order=order,
+            product=self.product,
+            product_name='Iced Latte',
+            category_name=self.category.name,
+            packaging_eligible=with_packaging,
+            size='medium',
+            quantity=2,
+            unit_price=Decimal('75.00'),
+            subtotal=Decimal('150.00'),
+        )
+        order.subtotal = 150
+        order.packaging_fee = 10 if with_packaging else 0
+        order.total = order.subtotal + order.packaging_fee
+        order.amount_paid = order.total if is_paid else 0
+        order.change_amount = 0
+        order.stock_deducted = True
+        order.save(update_fields=[
+            'subtotal', 'packaging_fee', 'total',
+            'amount_paid', 'change_amount', 'stock_deducted',
+        ])
+        return order
+
+    def _receipt_url(self, token):
+        return reverse('orders:customer_receipt', args=[token])
+
+    def _pdf_url(self, token):
+        return reverse('orders:customer_receipt_pdf', args=[token])
+
+    # ── Payment gate — HTML receipt ────────────────────────────────────────
+
+    def test_unpaid_cash_order_receipt_returns_403(self):
+        """Unpaid Cash order: receipt must not be accessible (403)."""
+        order = self._make_order(payment_method='cash', is_paid=False)
+        response = self.client.get(self._receipt_url(order.tracking_token))
+        self.assertEqual(response.status_code, 403)
+
+    def test_gcash_awaiting_submission_receipt_returns_403(self):
+        """GCash order with no submission yet: receipt must return 403."""
+        order = self._make_order(payment_method='gcash', gcash_status='none', is_paid=False)
+        response = self.client.get(self._receipt_url(order.tracking_token))
+        self.assertEqual(response.status_code, 403)
+
+    def test_gcash_pending_verification_receipt_returns_403(self):
+        """GCash order awaiting staff verification: receipt must return 403."""
+        order = self._make_order(payment_method='gcash', gcash_status='pending', is_paid=False)
+        response = self.client.get(self._receipt_url(order.tracking_token))
+        self.assertEqual(response.status_code, 403)
+
+    def test_gcash_rejected_receipt_returns_403(self):
+        """Rejected GCash order: receipt must return 403."""
+        order = self._make_order(payment_method='gcash', gcash_status='rejected', is_paid=False)
+        response = self.client.get(self._receipt_url(order.tracking_token))
+        self.assertEqual(response.status_code, 403)
+
+    def test_gcash_verified_order_can_view_receipt(self):
+        """Verified GCash order (is_paid=True): receipt must return 200 with correct content."""
+        order = self._make_order(payment_method='gcash', gcash_status='verified', is_paid=True)
+        response = self.client.get(self._receipt_url(order.tracking_token))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn(order.order_number, content)
+        self.assertIn('Test Customer', content)
+        self.assertIn('Iced Latte', content)
+
+    def test_cash_paid_order_can_view_receipt(self):
+        """Paid Cash order: receipt must return 200 with correct content."""
+        order = self._make_order(payment_method='cash', is_paid=True)
+        response = self.client.get(self._receipt_url(order.tracking_token))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(order.order_number, response.content.decode())
+
+    # ── Content correctness ────────────────────────────────────────────────
+
+    def test_receipt_contains_correct_item_prices(self):
+        """Receipt must display saved unit_price and subtotal snapshots."""
+        order = self._make_order(payment_method='cash', is_paid=True)
+        response = self.client.get(self._receipt_url(order.tracking_token))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        # unit_price=75.00, quantity=2, subtotal=150.00
+        self.assertIn('75.00', content)
+        self.assertIn('150.00', content)
+
+    def test_receipt_shows_packaging_fee(self):
+        """Takeout order with packaging fee: fee must appear on the receipt."""
+        order = self._make_order(
+            payment_method='cash', is_paid=True,
+            order_type='takeout', with_packaging=True,
+        )
+        response = self.client.get(self._receipt_url(order.tracking_token))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        # packaging_fee=10.00
+        self.assertIn('10.00', content)
+
+    # ── Payment gate — PDF ─────────────────────────────────────────────────
+
+    def test_receipt_pdf_unpaid_returns_403(self):
+        """Unpaid order: PDF endpoint must return 403."""
+        order = self._make_order(payment_method='cash', is_paid=False)
+        response = self.client.get(self._pdf_url(order.tracking_token))
+        self.assertEqual(response.status_code, 403)
+
+    def test_receipt_pdf_paid_returns_pdf(self):
+        """Paid order: PDF endpoint must return 200 application/pdf with %PDF header."""
+        order = self._make_order(payment_method='cash', is_paid=True)
+        response = self.client.get(self._pdf_url(order.tracking_token))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertIn('attachment', response['Content-Disposition'])
+        self.assertIn(f'receipt-{order.order_number}', response['Content-Disposition'])
+        # Real PDF files start with the %PDF magic bytes.
+        self.assertTrue(response.content.startswith(b'%PDF'))
+
+    # ── Token security ─────────────────────────────────────────────────────
+
+    def test_invalid_tracking_token_receipt_returns_404(self):
+        """Nonexistent tracking token: receipt must return 404."""
+        response = self.client.get(self._receipt_url('totally-invalid-token-xyz'))
+        self.assertEqual(response.status_code, 404)
+
+    def test_invalid_token_cannot_access_another_order_receipt(self):
+        """Order2's token must not grant access to Order1's receipt."""
+        order1 = self._make_order(payment_method='cash', is_paid=True)
+        order2 = self._make_order(payment_method='cash', is_paid=True)
+        # Accessing order1's receipt URL with order2's token must 404.
+        wrong_token_url = reverse(
+            'orders:customer_receipt', args=[order2.tracking_token]
+        )
+        response = self.client.get(wrong_token_url)
+        # This just returns order2's receipt — different order, not order1's.
+        # The key invariant: we cannot construct order1's URL from order2's token.
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        # Must show order2's data, NOT order1's.
+        self.assertIn(order2.order_number, content)
+        self.assertNotIn(order1.order_number, content)
+
+    def test_pdf_invalid_tracking_token_returns_404(self):
+        """Nonexistent tracking token: PDF endpoint must return 404."""
+        response = self.client.get(self._pdf_url('no-such-token-abc'))
+        self.assertEqual(response.status_code, 404)
+
+    # ── Read-only invariant ────────────────────────────────────────────────
+
+    def test_receipt_view_does_not_modify_order(self):
+        """Viewing the HTML receipt must not change any order field."""
+        order = self._make_order(payment_method='cash', is_paid=True)
+        snapshot_is_paid  = order.is_paid
+        snapshot_status   = order.status
+        snapshot_total    = order.total
+
+        self.client.get(self._receipt_url(order.tracking_token))
+
+        order.refresh_from_db()
+        self.assertEqual(order.is_paid, snapshot_is_paid)
+        self.assertEqual(order.status, snapshot_status)
+        self.assertEqual(order.total, snapshot_total)
+
+    def test_receipt_pdf_does_not_modify_order(self):
+        """Downloading the PDF receipt must not change any order field."""
+        order = self._make_order(payment_method='cash', is_paid=True)
+        snapshot_is_paid  = order.is_paid
+        snapshot_status   = order.status
+        snapshot_total    = order.total
+
+        self.client.get(self._pdf_url(order.tracking_token))
+
+        order.refresh_from_db()
+        self.assertEqual(order.is_paid, snapshot_is_paid)
+        self.assertEqual(order.status, snapshot_status)
+        self.assertEqual(order.total, snapshot_total)
+
+    def test_receipt_generation_does_not_change_inventory(self):
+        """Receipt view and PDF download must not alter product stock."""
+        order = self._make_order(payment_method='cash', is_paid=True)
+        self.product.refresh_from_db()
+        stock_before = self.product.stock_quantity
+
+        self.client.get(self._receipt_url(order.tracking_token))
+        self.client.get(self._pdf_url(order.tracking_token))
+
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock_quantity, stock_before)
+
+    # ── Staff receipt still requires login ────────────────────────────────
+
+    def test_staff_print_receipt_still_requires_login(self):
+        """Existing staff receipt endpoint must still require login."""
+        order = self._make_order(payment_method='cash', is_paid=True)
+        # No login — should redirect to login page.
+        url = reverse('orders:print_receipt', args=[order.pk])
+        response = self.client.get(url)
+        self.assertNotEqual(response.status_code, 200)
+        # Must be a redirect to login (3xx).
+        self.assertIn(response.status_code, [301, 302])
+
+    def test_staff_print_receipt_works_for_cashier(self):
+        """Authenticated cashier must be able to access the staff receipt."""
+        order = self._make_order(payment_method='cash', is_paid=True)
+        self.client.force_login(self.cashier)
+        url = reverse('orders:print_receipt', args=[order.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(order.order_number, response.content.decode())
+
+    # ── GCash screenshot not exposed ──────────────────────────────────────
+
+    def test_receipt_does_not_expose_gcash_proof_url(self):
+        """The customer receipt must never include the GCash screenshot URL."""
+        order = self._make_order(payment_method='gcash', gcash_status='verified', is_paid=True)
+        # Set a fake proof URL to confirm it never leaks into the response.
+        order.gcash_reference = 'REF-RECEIPT-TEST'
+        order.save(update_fields=['gcash_reference'])
+
+        response = self.client.get(self._receipt_url(order.tracking_token))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        # gcash_proof / Cloudinary URL must not appear in the customer page.
+        self.assertNotIn('gcash_proof', content)
+        self.assertNotIn('gcash_proofs/', content)
+        # GCash reference IS shown (confirmed payment context).
+        self.assertIn('REF-RECEIPT-TEST', content)

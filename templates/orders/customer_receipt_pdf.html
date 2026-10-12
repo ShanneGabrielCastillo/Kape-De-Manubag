@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Receipt — {{ order.order_number }} — Kape De Manubag</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 2cm 2.5cm;
+    }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 11pt;
+      color: #222;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* Header */
+    .receipt-header {
+      text-align: center;
+      border-bottom: 2px dashed #ccc;
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+    }
+    .business-name {
+      font-size: 18pt;
+      font-weight: bold;
+      color: #3d1a0f;
+    }
+    .receipt-label {
+      font-size: 9pt;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-top: 4px;
+    }
+
+    /* Section labels */
+    .section-label {
+      font-size: 8pt;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #999;
+      margin-bottom: 6px;
+      margin-top: 14px;
+    }
+
+    /* Info rows */
+    table.info-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10pt;
+    }
+    table.info-table td {
+      padding: 4px 0;
+      vertical-align: top;
+      border-bottom: 1px solid #eee;
+    }
+    table.info-table td.label {
+      color: #888;
+      width: 40%;
+    }
+    table.info-table td.value {
+      font-weight: bold;
+      color: #222;
+      text-align: right;
+    }
+
+    /* Divider */
+    .dashed-divider {
+      border: none;
+      border-top: 1.5px dashed #ccc;
+      margin: 14px 0;
+    }
+
+    /* Items table */
+    table.items-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10pt;
+    }
+    table.items-table thead tr th {
+      font-size: 8pt;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #999;
+      border-bottom: 1.5px solid #ccc;
+      padding: 4px 4px 8px 4px;
+    }
+    table.items-table thead tr th.right { text-align: right; }
+    table.items-table tbody tr td {
+      padding: 6px 4px;
+      vertical-align: top;
+      border-bottom: 1px solid #f0f0f0;
+      font-size: 10pt;
+    }
+    table.items-table tbody tr td.right { text-align: right; }
+    table.items-table tbody tr td.item-size {
+      font-size: 8.5pt;
+      color: #888;
+    }
+
+    /* Totals table */
+    table.totals-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10pt;
+      margin-top: 8px;
+    }
+    table.totals-table td {
+      padding: 4px 4px;
+    }
+    table.totals-table td.right { text-align: right; }
+    table.totals-table tr.grand-total td {
+      font-size: 12pt;
+      font-weight: bold;
+      color: #3d1a0f;
+      border-top: 2px solid #3d1a0f;
+      padding-top: 8px;
+      margin-top: 4px;
+    }
+
+    /* Payment confirmed badge */
+    .confirmed-badge {
+      background: #d4edda;
+      color: #155724;
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 9.5pt;
+      font-weight: bold;
+    }
+
+    /* Footer */
+    .receipt-footer {
+      text-align: center;
+      font-size: 9pt;
+      color: #aaa;
+      border-top: 1.5px dashed #ccc;
+      padding-top: 14px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="receipt-header">
+    <div class="business-name">&#x2615; KAPE DE MANUBAG</div>
+    <div class="receipt-label">Digital Receipt</div>
+  </div>
+
+  <!-- Order Details -->
+  <div class="section-label">Order Details</div>
+  <table class="info-table">
+    <tbody>
+      <tr>
+        <td class="label">Receipt No.</td>
+        <td class="value">{{ order.order_number }}</td>
+      </tr>
+      <tr>
+        <td class="label">Date</td>
+        <td class="value">{{ order.created_at|date:"M d, Y" }}</td>
+      </tr>
+      <tr>
+        <td class="label">Time</td>
+        <td class="value">{{ order.created_at|date:"g:i A" }}</td>
+      </tr>
+      <tr>
+        <td class="label">Customer</td>
+        <td class="value">{{ order.customer_name }}</td>
+      </tr>
+      <tr>
+        <td class="label">Order Type</td>
+        <td class="value">{{ order.get_order_type_display }}</td>
+      </tr>
+      {% if order.table_number %}
+      <tr>
+        <td class="label">Table</td>
+        <td class="value">{{ order.table_number }}</td>
+      </tr>
+      {% endif %}
+      <tr>
+        <td class="label">Payment Method</td>
+        <td class="value">{{ order.get_payment_method_display }}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <hr class="dashed-divider">
+
+  <!-- Items -->
+  <div class="section-label">Items Ordered</div>
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th style="text-align:left">Item</th>
+        <th class="right">Qty</th>
+        <th class="right">Unit Price</th>
+        <th class="right">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td>
+          {{ item.product_name }}
+          {% if item.size != 'none' %}
+          <br><span class="item-size">({{ item.get_size_display }})</span>
+          {% endif %}
+          {% if item.notes %}
+          <br><span class="item-size">Note: {{ item.notes }}</span>
+          {% endif %}
+        </td>
+        <td class="right">{{ item.quantity }}</td>
+        <td class="right">&#x20B1;{{ item.unit_price|floatformat:2 }}</td>
+        <td class="right">&#x20B1;{{ item.subtotal|floatformat:2 }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <hr class="dashed-divider">
+
+  <!-- Totals -->
+  <div class="section-label">Order Total</div>
+  <table class="totals-table">
+    <tbody>
+      <tr>
+        <td>Subtotal</td>
+        <td class="right">&#x20B1;{{ order.subtotal|floatformat:2 }}</td>
+      </tr>
+      {% if order.packaging_fee and order.packaging_fee > 0 %}
+      <tr>
+        <td>Packaging Fee</td>
+        <td class="right">&#x20B1;{{ order.packaging_fee|floatformat:2 }}</td>
+      </tr>
+      {% endif %}
+      {% if order.discount and order.discount > 0 %}
+      <tr>
+        <td>Discount</td>
+        <td class="right">-&#x20B1;{{ order.discount|floatformat:2 }}</td>
+      </tr>
+      {% endif %}
+      <tr class="grand-total">
+        <td>TOTAL</td>
+        <td class="right">&#x20B1;{{ order.total|floatformat:2 }}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <hr class="dashed-divider">
+
+  <!-- Payment -->
+  <div class="section-label">Payment</div>
+  <table class="info-table">
+    <tbody>
+      <tr>
+        <td class="label">Method</td>
+        <td class="value">{{ order.get_payment_method_display }}</td>
+      </tr>
+      <tr>
+        <td class="label">Amount Paid</td>
+        <td class="value">&#x20B1;{{ order.amount_paid|floatformat:2 }}</td>
+      </tr>
+      {% if order.payment_method == 'cash' %}
+      <tr>
+        <td class="label">Change</td>
+        <td class="value">&#x20B1;{{ order.change_amount|floatformat:2 }}</td>
+      </tr>
+      {% endif %}
+      {% if order.gcash_reference %}
+      <tr>
+        <td class="label">GCash Ref.</td>
+        <td class="value">{{ order.gcash_reference }}</td>
+      </tr>
+      {% endif %}
+      <tr>
+        <td class="label">Status</td>
+        <td class="value"><span class="confirmed-badge">&#x2713; Payment Confirmed</span></td>
+      </tr>
+      {% if order.gcash_verified_at %}
+      <tr>
+        <td class="label">Confirmed At</td>
+        <td class="value">{{ order.gcash_verified_at|date:"M d, Y g:i A" }}</td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+
+  <!-- Footer -->
+  <div class="receipt-footer">
+    Thank you for visiting! &mdash; Kape De Manubag<br>
+    {{ order.created_at|date:"Y" }} &mdash; All rights reserved
+  </div>
+
+</body>
+</html>

@@ -249,6 +249,42 @@
     </div>
   </div>
 
+  <!-- Receipt Section -->
+  <div class="tracker-card" id="receipt-section">
+    <div class="tracker-card-label">Receipt</div>
+    {% if order.is_paid %}
+    <a href="{% url 'orders:customer_receipt' order.tracking_token %}"
+       class="btn btn-primary btn-block" id="btn-view-receipt"
+       style="display:flex;align-items:center;justify-content:center;gap:6px">
+      🧾 View Receipt
+    </a>
+    <a href="{% url 'orders:customer_receipt_pdf' order.tracking_token %}"
+       class="btn btn-secondary btn-block" id="btn-download-receipt"
+       style="margin-top:8px;display:flex;align-items:center;justify-content:center;gap:6px"
+       download>
+      ⬇️ Download Receipt (PDF)
+    </a>
+    <p id="receipt-unavailable-msg" style="display:none;font-size:0.82rem;color:#aaa;text-align:center;margin:0">
+      🧾 Your receipt will be available after payment is confirmed.
+    </p>
+    {% else %}
+    <a href="{% url 'orders:customer_receipt' order.tracking_token %}"
+       class="btn btn-primary btn-block" id="btn-view-receipt"
+       style="display:none;align-items:center;justify-content:center;gap:6px">
+      🧾 View Receipt
+    </a>
+    <a href="{% url 'orders:customer_receipt_pdf' order.tracking_token %}"
+       class="btn btn-secondary btn-block" id="btn-download-receipt"
+       style="display:none;margin-top:8px;align-items:center;justify-content:center;gap:6px"
+       download>
+      ⬇️ Download Receipt (PDF)
+    </a>
+    <p id="receipt-unavailable-msg" style="font-size:0.82rem;color:#aaa;text-align:center;margin:0">
+      🧾 Your receipt will be available after payment is confirmed.
+    </p>
+    {% endif %}
+  </div>
+
   <p style="text-align:center;font-size:0.75rem;color:#bbb;margin-top:8px" id="tracker-connection-hint">
     🔄 Connecting for live updates…
   </p>
@@ -280,6 +316,10 @@ window.TRACKER_CONFIG = {
   apiUrl:        '{% url "orders:api_track_order" order.tracking_token %}',
   sseUrl:        '{% url "realtime:customer_order_stream" %}?tracking_token={{ order.tracking_token|urlencode }}',
   pollInterval:  5000,
+  // Receipt URLs (pre-computed by Django so no URL construction is done in JS).
+  receiptUrl:     '{% url "orders:customer_receipt" order.tracking_token %}',
+  receiptPdfUrl:  '{% url "orders:customer_receipt_pdf" order.tracking_token %}',
+  initialIsPaid:  {{ order.is_paid|yesno:"true,false" }},
 };
 </script>
 <script src="{% static 'js/order_tracker.js' %}"></script>

@@ -8,6 +8,7 @@ import time
 
 from django.conf import settings
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import Http404, JsonResponse
@@ -1368,8 +1369,6 @@ def reject_gcash_payment(request, pk):
     })
 
 
-@login_required
-@cashier_or_admin_required
 def gcash_payment_detail(request, pk):
     """Return GCash payment fields for a pending order as JSON.
 
@@ -1383,9 +1382,21 @@ def gcash_payment_detail(request, pk):
 
     Guard: returns 400 if the order is not a pending GCash order — opening
     the modal must never show stale or irrelevant payment data.
+
+    Auth: returns JSON 401/403 instead of an HTML redirect so the modal JS
+    can handle session-expiry gracefully without receiving an unexpected HTML
+    page that breaks JSON.parse().
     """
     if request.method != 'GET':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    # Inline auth checks — return JSON errors instead of HTML redirects so
+    # the modal fetch handler can display a meaningful message rather than
+    # crashing on ``Unexpected token '<'``.
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required. Please log in again.'}, status=401)
+    if not (request.user.is_admin_user or request.user.is_cashier):
+        return JsonResponse({'error': 'Access denied. Staff privileges required.'}, status=403)
 
     order = get_object_or_404(
         Order.objects.only(
@@ -1719,11 +1730,12 @@ def order_tracker(request, tracking_token):
             'order_number', 'queue_number', 'status',
             'customer_name', 'order_type', 'table_number',
             'packaging_fee', 'total', 'created_at', 'tracking_token',
+            'is_paid',
         ),
         tracking_token=tracking_token,
     )
     items = order.items.only(
-        'product_name', 'size', 'quantity',
+        'product_name', 'size', 'quantity', 'subtotal',
     )
     return render(request, 'orders/order_tracker.html', {
         'order': order,
@@ -1912,3 +1924,123 @@ def api_awaiting_payment_count(request):
     """
     count = Order.objects.filter(status='awaiting_payment').count()
     return JsonResponse({'count': count})
+
+
+# ── Customer digital receipts ──────────────────────────────────────────────────
+
+def customer_receipt(request, tracking_token):
+    """Customer-facing digital receipt page.  No login required.
+
+    Accessible only when order.is_paid is True — enforced server-side,
+    not just by hiding buttons in the UI.
+
+    The GCash screenshot (gcash_proof) is never sent to the template or
+    exposed in the response.
+
+    Access is gated by the cryptographically random tracking_token — the same
+    mechanism used by order_tracker and all other customer-facing views.
+    """
+    order = get_object_or_404(
+        Order.objects.only(
+            'order_number', 'customer_name', 'order_type', 'table_number',
+            'status', 'is_paid', 'payment_method', 'amount_paid',
+            'change_amount', 'subtotal', 'discount', 'packaging_fee',
+            'total', 'created_at', 'gcash_status', 'gcash_reference',
+            'gcash_verified_at', 'tracking_token',
+        ),
+        tracking_token=tracking_token,
+    )
+
+    # Server-side payment gate — NOT just a hidden button.
+    if not order.is_paid:
+        return render(
+            request,
+            'orders/customer_receipt_unavailable.html',
+            {'order': order},
+            status=403,
+        )
+
+    items = order.items.only(
+        'product_name', 'size', 'quantity', 'unit_price', 'subtotal',
+    )
+
+    pdf_url = reverse('orders:customer_receipt_pdf', args=[tracking_token])
+
+    return render(request, 'orders/customer_receipt.html', {
+        'order': order,
+        'items': items,
+        'pdf_url': pdf_url,
+    })
+
+
+def customer_receipt_pdf(request, tracking_token):
+    """Customer-facing receipt PDF download.  No login required.
+
+    Generates a real PDF in memory using xhtml2pdf — does NOT rename an HTML
+    file to .pdf.  Read-only: this view never modifies any order, payment,
+    or inventory record.
+
+    Same token validation and payment gate as customer_receipt.
+    """
+    from io import BytesIO
+    from django.template.loader import render_to_string
+    from xhtml2pdf import pisa
+
+    order = get_object_or_404(
+        Order.objects.only(
+            'order_number', 'customer_name', 'order_type', 'table_number',
+            'status', 'is_paid', 'payment_method', 'amount_paid',
+            'change_amount', 'subtotal', 'discount', 'packaging_fee',
+            'total', 'created_at', 'gcash_status', 'gcash_reference',
+            'gcash_verified_at', 'tracking_token',
+        ),
+        tracking_token=tracking_token,
+    )
+
+    # Server-side payment gate — same as the HTML receipt view.
+    if not order.is_paid:
+        return render(
+            request,
+            'orders/customer_receipt_unavailable.html',
+            {'order': order},
+            status=403,
+        )
+
+    items = order.items.only(
+        'product_name', 'size', 'quantity', 'unit_price', 'subtotal',
+    )
+
+    # Render the PDF-specific template to an HTML string.
+    html_string = render_to_string('orders/customer_receipt_pdf.html', {
+        'order': order,
+        'items': items,
+        'request': request,
+    })
+
+    # Convert the HTML string to a PDF byte stream in memory.
+    # pisa.CreatePDF writes to the destination buffer and sets .err if
+    # conversion fails.  Writing to disk is never needed.
+    buffer = BytesIO()
+    result = pisa.CreatePDF(html_string, dest=buffer)
+
+    if result.err:
+        logger.error(
+            'xhtml2pdf failed for order %s (tracking_token=%s): err=%s',
+            order.order_number, tracking_token, result.err,
+        )
+        from django.http import HttpResponse
+        return HttpResponse(
+            'PDF could not be generated. Please try the HTML receipt instead.',
+            status=500,
+        )
+
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+
+    safe_order_number = order.order_number.replace('/', '-')
+    filename = f'receipt-{safe_order_number}.pdf'
+
+    from django.http import HttpResponse
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response

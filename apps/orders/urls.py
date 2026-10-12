@@ -39,6 +39,11 @@ urlpatterns = [
     # rather than the predictable order_number.  The token is URL-safe base64
     # (~43 characters) and cannot be enumerated from the order number.
     path('track/<str:tracking_token>/', views.order_tracker, name='order_tracker'),
+    # Customer digital receipts — available only after payment is confirmed.
+    # Both endpoints are gated server-side by order.is_paid via the same
+    # tracking_token mechanism as the rest of the customer-facing tracker.
+    path('track/<str:tracking_token>/receipt/', views.customer_receipt, name='customer_receipt'),
+    path('track/<str:tracking_token>/receipt/pdf/', views.customer_receipt_pdf, name='customer_receipt_pdf'),
     path('queue-board/', views.queue_board, name='queue_board'),
     path('api/track/<str:tracking_token>/', views.api_track_order, name='api_track_order'),
     path('api/queue-board/', views.api_queue_board, name='api_queue_board'),
