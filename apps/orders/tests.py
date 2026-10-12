@@ -2025,3 +2025,348 @@ class CustomerReceiptTests(TestCase):
         self.assertNotIn('gcash_proofs/', content)
         # GCash reference IS shown (confirmed payment context).
         self.assertIn('REF-RECEIPT-TEST', content)
+
+
+# ── PaidAtTimestampTests ───────────────────────────────────────────────────────
+
+PASSWORD_PAT = 'kdm-paidat-pass-1'
+
+
+class PaidAtTimestampTests(TestCase):
+    """Regression tests for the paid_at payment-confirmation timestamp field.
+
+    Covers:
+    1.  Cash payment confirmation sets paid_at.
+    2.  GCash verification sets paid_at.
+    3.  Unpaid order has paid_at = None.
+    4.  Rejected GCash payment has paid_at = None.
+    5.  GCash screenshot upload does NOT set paid_at.
+    6.  Calling Cash confirmation twice does NOT reset the original paid_at.
+    7.  Calling GCash verification twice does NOT reset the original paid_at.
+    8.  HTML receipt shows the correct paid_at for a new paid order.
+    9.  PDF receipt shows the correct paid_at for a new paid order.
+    10. Historical order with paid_at=None and gcash_verified_at set → receipt
+        shows the gcash_verified_at fallback.
+    11. Historical order with paid_at=None and gcash_verified_at=None → receipt
+        shows 'Confirmation time unavailable'.
+    12. Receipt generation (HTML + PDF) is read-only: order fields unchanged.
+    """
+
+    def setUp(self):
+        self.cashier = CustomUser.objects.create_user(
+            username='paidat_cashier', password=PASSWORD_PAT, role='cashier',
+        )
+        self.category = Category.objects.create(
+            name='Drinks', slug='drinks-paidat',
+        )
+        self.product = Product.objects.create(
+            category=self.category, name='Latte', price='80.00',
+            stock_quantity=50,
+        )
+        self.client.force_login(self.cashier)
+
+    # ── Helpers ────────────────────────────────────────────────────────────
+
+    def _awaiting_cash_order(self):
+        """Create an awaiting_payment Cash order with one item."""
+        order = Order.objects.create(
+            customer_name='Test Customer',
+            status='awaiting_payment',
+            payment_method='cash',
+            is_paid=False,
+        )
+        OrderItem.objects.create(
+            order=order,
+            product=self.product,
+            product_name='Latte',
+            category_name=self.category.name,
+            packaging_eligible=False,
+            size='none',
+            quantity=1,
+            unit_price=Decimal('80.00'),
+            subtotal=Decimal('80.00'),
+        )
+        order.subtotal = Decimal('80.00')
+        order.total = Decimal('80.00')
+        order.stock_deducted = True
+        order.save(update_fields=['subtotal', 'total', 'stock_deducted'])
+        return order
+
+    def _awaiting_gcash_order(self, gcash_status='pending'):
+        """Create an awaiting_payment GCash order with a submitted reference."""
+        order = Order.objects.create(
+            customer_name='Test Customer',
+            status='awaiting_payment',
+            payment_method='gcash',
+            gcash_status=gcash_status,
+            gcash_reference='REF-PAT-001',
+            is_paid=False,
+        )
+        OrderItem.objects.create(
+            order=order,
+            product=self.product,
+            product_name='Latte',
+            category_name=self.category.name,
+            packaging_eligible=False,
+            size='none',
+            quantity=1,
+            unit_price=Decimal('80.00'),
+            subtotal=Decimal('80.00'),
+        )
+        order.subtotal = Decimal('80.00')
+        order.total = Decimal('80.00')
+        order.stock_deducted = True
+        order.save(update_fields=['subtotal', 'total', 'stock_deducted'])
+        return order
+
+    def _pay_cash(self, order):
+        return self.client.post(
+            reverse('orders:process_payment', args=[order.pk]),
+            {'payment_method': 'cash', 'amount_paid': '80.00'},
+        )
+
+    def _verify_gcash(self, order):
+        return self.client.post(
+            reverse('orders:verify_gcash_payment', args=[order.pk]),
+        )
+
+    def _receipt_url(self, token):
+        return reverse('orders:customer_receipt', args=[token])
+
+    def _pdf_url(self, token):
+        return reverse('orders:customer_receipt_pdf', args=[token])
+
+    # ── 1. Cash payment confirmation sets paid_at ──────────────────────────
+
+    def test_cash_payment_sets_paid_at(self):
+        """process_payment (Cash) must set paid_at to a non-null, tz-aware datetime."""
+        order = self._awaiting_cash_order()
+        before = timezone.now()
+        self._pay_cash(order)
+        order.refresh_from_db()
+        self.assertTrue(order.is_paid)
+        self.assertIsNotNone(order.paid_at)
+        # Must be timezone-aware.
+        self.assertIsNotNone(order.paid_at.tzinfo)
+        # Must be set to approximately now (within 10 seconds of test execution).
+        self.assertGreaterEqual(order.paid_at, before)
+
+    # ── 2. GCash verification sets paid_at ─────────────────────────────────
+
+    def test_gcash_verification_sets_paid_at(self):
+        """verify_gcash_payment must set paid_at to a non-null, tz-aware datetime."""
+        order = self._awaiting_gcash_order(gcash_status='pending')
+        before = timezone.now()
+        self._verify_gcash(order)
+        order.refresh_from_db()
+        self.assertTrue(order.is_paid)
+        self.assertIsNotNone(order.paid_at)
+        self.assertIsNotNone(order.paid_at.tzinfo)
+        self.assertGreaterEqual(order.paid_at, before)
+
+    # ── 3. Unpaid order has paid_at = None ─────────────────────────────────
+
+    def test_unpaid_order_paid_at_is_none(self):
+        """A newly created, unpaid order must have paid_at = None."""
+        order = self._awaiting_cash_order()
+        order.refresh_from_db()
+        self.assertFalse(order.is_paid)
+        self.assertIsNone(order.paid_at)
+
+    # ── 4. Rejected GCash has paid_at = None ───────────────────────────────
+
+    def test_rejected_gcash_paid_at_is_none(self):
+        """Rejecting a GCash payment must not set paid_at."""
+        order = self._awaiting_gcash_order(gcash_status='pending')
+        self.client.post(
+            reverse('orders:reject_gcash_payment', args=[order.pk]),
+            {'notes': 'Invalid reference'},
+        )
+        order.refresh_from_db()
+        self.assertFalse(order.is_paid)
+        self.assertIsNone(order.paid_at)
+
+    # ── 5. GCash screenshot upload does NOT set paid_at ────────────────────
+
+    def test_gcash_screenshot_upload_does_not_set_paid_at(self):
+        """Submitting a GCash screenshot must not set paid_at or is_paid."""
+        # Create a GCash order with no submission yet.
+        order = self._awaiting_gcash_order(gcash_status='none')
+        # Reset gcash_status to 'none' for clean state.
+        order.gcash_status = 'none'
+        order.gcash_reference = ''
+        order.save(update_fields=['gcash_status', 'gcash_reference'])
+
+        # Post the GCash submission — customer submitting their reference.
+        self.client.logout()  # This is a customer-facing, unauthenticated endpoint.
+        self.client.post(
+            reverse('orders:submit_gcash_payment', args=[order.tracking_token]),
+            {
+                'gcash_reference': 'REF-UPLOAD-TEST',
+                'tracking_token': order.tracking_token,
+            },
+            content_type='application/json',
+        )
+        order.refresh_from_db()
+        self.assertFalse(order.is_paid)
+        self.assertIsNone(order.paid_at)
+
+    # ── 6. Cash confirmation twice does NOT reset paid_at ──────────────────
+
+    def test_cash_confirmation_twice_does_not_reset_paid_at(self):
+        """A duplicate Cash confirmation request must not reset the original paid_at."""
+        order = self._awaiting_cash_order()
+        # First confirmation.
+        self._pay_cash(order)
+        order.refresh_from_db()
+        original_paid_at = order.paid_at
+        self.assertIsNotNone(original_paid_at)
+
+        # Second attempt — order is already paid; should be rejected.
+        self._pay_cash(order)
+        order.refresh_from_db()
+        # paid_at must be unchanged.
+        self.assertEqual(order.paid_at, original_paid_at)
+
+    # ── 7. GCash verification twice does NOT reset paid_at ─────────────────
+
+    def test_gcash_verification_twice_does_not_reset_paid_at(self):
+        """A duplicate GCash verification request must not reset the original paid_at."""
+        order = self._awaiting_gcash_order(gcash_status='pending')
+        # First verification.
+        self._verify_gcash(order)
+        order.refresh_from_db()
+        original_paid_at = order.paid_at
+        self.assertIsNotNone(original_paid_at)
+
+        # Second attempt — order is already paid; should be rejected with 400.
+        resp = self._verify_gcash(order)
+        self.assertFalse(resp.json()['success'])
+        order.refresh_from_db()
+        self.assertEqual(order.paid_at, original_paid_at)
+
+    # ── 8. HTML receipt shows correct paid_at ─────────────────────────────
+
+    def test_html_receipt_shows_paid_at(self):
+        """HTML receipt must display the paid_at timestamp for a new paid order."""
+        order = self._awaiting_cash_order()
+        self._pay_cash(order)
+        order.refresh_from_db()
+        self.assertIsNotNone(order.paid_at)
+
+        self.client.logout()  # Receipt is customer-facing, no login required.
+        response = self.client.get(self._receipt_url(order.tracking_token))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        # The formatted paid_at date should appear in the page.
+        from django.utils.formats import date_format
+        expected = date_format(
+            timezone.localtime(order.paid_at), 'M d, Y g:i A',
+        )
+        self.assertIn(expected, content)
+        # The fallback text must NOT appear when paid_at is set.
+        self.assertNotIn('Confirmation time unavailable', content)
+
+    # ── 9. PDF receipt shows correct paid_at ──────────────────────────────
+
+    def test_pdf_receipt_shows_paid_at(self):
+        """PDF receipt must be generated successfully for an order with paid_at set."""
+        order = self._awaiting_cash_order()
+        self._pay_cash(order)
+        order.refresh_from_db()
+        self.assertIsNotNone(order.paid_at)
+
+        self.client.logout()
+        response = self.client.get(self._pdf_url(order.tracking_token))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        # Real PDF bytes start with %PDF.
+        self.assertTrue(response.content.startswith(b'%PDF'))
+
+    # ── 10. Historical order: paid_at=None, gcash_verified_at set → fallback
+
+    def test_html_receipt_gcash_verified_at_fallback(self):
+        """Historical GCash order with paid_at=None must show gcash_verified_at fallback."""
+        historical_time = timezone.now()
+        order = Order.objects.create(
+            customer_name='Historical Customer',
+            status='preparing',
+            payment_method='gcash',
+            gcash_status='verified',
+            gcash_reference='REF-HIST',
+            gcash_verified_at=historical_time,
+            is_paid=True,
+            paid_at=None,  # Historical — confirmation time not recorded.
+            amount_paid=Decimal('80.00'),
+            total=Decimal('80.00'),
+            subtotal=Decimal('80.00'),
+            stock_deducted=True,
+        )
+        OrderItem.objects.create(
+            order=order, product=self.product, product_name='Latte',
+            category_name=self.category.name, packaging_eligible=False,
+            size='none', quantity=1,
+            unit_price=Decimal('80.00'), subtotal=Decimal('80.00'),
+        )
+
+        self.client.logout()
+        response = self.client.get(self._receipt_url(order.tracking_token))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        # Fallback: gcash_verified_at must be shown.
+        from django.utils.formats import date_format
+        expected = date_format(
+            timezone.localtime(historical_time), 'M d, Y g:i A',
+        )
+        self.assertIn(expected, content)
+        self.assertIn('GCash verification time', content)
+        # Primary paid_at fallback text must NOT appear.
+        self.assertNotIn('Confirmation time unavailable', content)
+
+    # ── 11. Historical order: both paid_at and gcash_verified_at are None ──
+
+    def test_html_receipt_confirmation_time_unavailable(self):
+        """Historical order with both timestamps null must show fallback text."""
+        order = Order.objects.create(
+            customer_name='Old Customer',
+            status='preparing',
+            payment_method='cash',
+            is_paid=True,
+            paid_at=None,
+            gcash_verified_at=None,
+            amount_paid=Decimal('80.00'),
+            total=Decimal('80.00'),
+            subtotal=Decimal('80.00'),
+            stock_deducted=True,
+        )
+        OrderItem.objects.create(
+            order=order, product=self.product, product_name='Latte',
+            category_name=self.category.name, packaging_eligible=False,
+            size='none', quantity=1,
+            unit_price=Decimal('80.00'), subtotal=Decimal('80.00'),
+        )
+
+        self.client.logout()
+        response = self.client.get(self._receipt_url(order.tracking_token))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('Confirmation time unavailable', response.content.decode())
+
+    # ── 12. Receipt generation is read-only (paid_at unchanged after GET) ──
+
+    def test_receipt_generation_does_not_modify_paid_at(self):
+        """Viewing HTML and PDF receipts must not change paid_at or any other field."""
+        order = self._awaiting_cash_order()
+        self._pay_cash(order)
+        order.refresh_from_db()
+        snapshot_paid_at  = order.paid_at
+        snapshot_is_paid  = order.is_paid
+        snapshot_status   = order.status
+
+        self.client.logout()
+        self.client.get(self._receipt_url(order.tracking_token))
+        self.client.get(self._pdf_url(order.tracking_token))
+
+        order.refresh_from_db()
+        self.assertEqual(order.paid_at, snapshot_paid_at)
+        self.assertEqual(order.is_paid, snapshot_is_paid)
+        self.assertEqual(order.status, snapshot_status)

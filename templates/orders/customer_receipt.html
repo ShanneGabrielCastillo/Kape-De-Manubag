@@ -289,15 +289,20 @@
           <span class="receipt-confirmed-badge">✓ Payment Confirmed</span>
         </span>
       </div>
-      {% if order.gcash_verified_at %}
+      {% if order.paid_at %}
       <div class="receipt-info-row">
         <span class="receipt-info-label">Confirmed At</span>
-        <span class="receipt-info-value">{{ order.gcash_verified_at|date:"M d, Y g:i A" }}</span>
+        <span class="receipt-info-value">{{ order.paid_at|date:"M d, Y g:i A" }}</span>
+      </div>
+      {% elif order.gcash_verified_at %}
+      <div class="receipt-info-row">
+        <span class="receipt-info-label">Confirmed At</span>
+        <span class="receipt-info-value">{{ order.gcash_verified_at|date:"M d, Y g:i A" }} <span style="font-weight:400;color:#888;font-size:0.8em">(GCash verification time)</span></span>
       </div>
       {% else %}
       <div class="receipt-info-row">
         <span class="receipt-info-label">Confirmed At</span>
-        <span class="receipt-info-value" style="color:#aaa">—</span>
+        <span class="receipt-info-value" style="color:#aaa">Confirmation time unavailable</span>
       </div>
       {% endif %}
     </div>

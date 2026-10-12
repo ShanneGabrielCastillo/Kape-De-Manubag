@@ -281,10 +281,20 @@
         <td class="label">Status</td>
         <td class="value"><span class="confirmed-badge">&#x2713; Payment Confirmed</span></td>
       </tr>
-      {% if order.gcash_verified_at %}
+      {% if order.paid_at %}
       <tr>
         <td class="label">Confirmed At</td>
-        <td class="value">{{ order.gcash_verified_at|date:"M d, Y g:i A" }}</td>
+        <td class="value">{{ order.paid_at|date:"M d, Y g:i A" }}</td>
+      </tr>
+      {% elif order.gcash_verified_at %}
+      <tr>
+        <td class="label">Confirmed At</td>
+        <td class="value">{{ order.gcash_verified_at|date:"M d, Y g:i A" }} (GCash verification time)</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td class="label">Confirmed At</td>
+        <td class="value" style="color:#aaa">Confirmation time unavailable</td>
       </tr>
       {% endif %}
     </tbody>

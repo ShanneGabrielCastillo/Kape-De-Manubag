@@ -1004,6 +1004,10 @@ def process_payment(request, pk):
             return JsonResponse({'success': False, 'error': 'Insufficient payment amount'})
 
         order.is_paid = True
+        # Record the confirmation timestamp on the first successful payment
+        # only — duplicate requests must not reset the original timestamp.
+        if not order.paid_at:
+            order.paid_at = timezone.now()
         # Always use the order's stored payment_method — never trust the
         # browser-submitted value.  The browser sends it for UI purposes
         # but the DB record is authoritative.
@@ -1258,6 +1262,10 @@ def verify_gcash_payment(request, pk):
         order.gcash_verified_at = now
         order.gcash_verified_by = request.user
         order.is_paid = True
+        # Record the confirmation timestamp on the first successful verification
+        # only — duplicate requests must not reset the original timestamp.
+        if not order.paid_at:
+            order.paid_at = now
         order.amount_paid = order.total
         order.change_amount = Decimal('0.00')
         order.cashier = request.user
@@ -1946,7 +1954,7 @@ def customer_receipt(request, tracking_token):
             'status', 'is_paid', 'payment_method', 'amount_paid',
             'change_amount', 'subtotal', 'discount', 'packaging_fee',
             'total', 'created_at', 'gcash_status', 'gcash_reference',
-            'gcash_verified_at', 'tracking_token',
+            'gcash_verified_at', 'paid_at', 'tracking_token',
         ),
         tracking_token=tracking_token,
     )
@@ -1992,7 +2000,7 @@ def customer_receipt_pdf(request, tracking_token):
             'status', 'is_paid', 'payment_method', 'amount_paid',
             'change_amount', 'subtotal', 'discount', 'packaging_fee',
             'total', 'created_at', 'gcash_status', 'gcash_reference',
-            'gcash_verified_at', 'tracking_token',
+            'gcash_verified_at', 'paid_at', 'tracking_token',
         ),
         tracking_token=tracking_token,
     )
