@@ -1786,7 +1786,7 @@ def api_track_order(request, tracking_token):
     try:
         order = Order.objects.only(
             'order_number', 'queue_number', 'customer_name',
-            'order_type', 'status', 'table_number', 'is_paid',
+            'order_type', 'status', 'table_number',
             # created_at is required by get_queue_position() — must be in
             # only() to avoid a deferred-field lazy-load on every poll.
             'created_at', 'queued_at', 'ready_at',
@@ -1812,7 +1812,6 @@ def api_track_order(request, tracking_token):
         'status':             order.status,
         'status_display':     order.get_status_display(),
         'status_emoji':       order.status_emoji,
-        'is_paid':            order.is_paid,
         'queue_position':     queue_position,
         'estimated_minutes':  estimated_minutes,
         'table_number':       order.table_number or '',

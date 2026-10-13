@@ -43,9 +43,19 @@ def _make_cart(client, product, quantity=1):
     return cart
 
 
-def _post_checkout(client, customer_name='Test Customer', order_type='dine_in', token=None):
-    """Submit a checkout POST.  Does NOT follow redirects."""
-    payload = {'customer_name': customer_name, 'order_type': order_type}
+def _post_checkout(client, customer_name='Test Customer', order_type='dine_in',
+                   token=None, payment_method='cash'):
+    """Submit a checkout POST.  Does NOT follow redirects.
+
+    payment_method defaults to 'cash' to satisfy the mandatory CheckoutForm
+    ChoiceField added with the payment-first ordering flow.  Individual tests
+    that exercise GCash paths can pass payment_method='gcash' explicitly.
+    """
+    payload = {
+        'customer_name': customer_name,
+        'order_type': order_type,
+        'payment_method': payment_method,  # required by CheckoutForm (payment-first flow)
+    }
     if token:
         payload['request_token'] = token
     return client.post(reverse('orders:checkout'), payload)
@@ -69,11 +79,22 @@ class OrderRateLimitTests(TestCase):
         return _post_checkout(self.client)
 
     def _place_order_success(self):
-        """Place an order and assert it succeeded (redirects to success page)."""
+        """Place an order and assert it succeeded (redirects to payment-waiting page).
+
+        The payment-first checkout flow redirects to /orders/waiting/<token>/
+        (orders:payment_waiting) on success.
+
+        Failure modes:
+          - status 200:              order was rate-limited (checkout page re-rendered)
+          - 302 to /orders/cart/:    stock adjustment triggered; customer must review cart
+          - 302 to /menu/:           cart was empty at POST time
+        """
         resp = self._place_order()
-        # On success the view redirects to order_success
         self.assertEqual(resp.status_code, 302, "Expected redirect after order")
-        self.assertIn('/orders/success/', resp['Location'])
+        # Payment-first flow: successful checkout redirects to payment-waiting page.
+        self.assertIn('/orders/waiting/', resp['Location'])
+        self.assertRegex(resp['Location'], r'/orders/waiting/[^/]+/',
+                         "Redirect must include a non-empty tracking token")
         return resp
 
     # ── core rate-limit tests ──────────────────────────────────────────────
@@ -170,21 +191,25 @@ class OrderRateLimitTests(TestCase):
         """Replaying the same request_token (double-click) must not count twice."""
         _make_cart(self.client, self.product)
         page = self.client.get(reverse('orders:checkout'))
+        self.assertEqual(page.status_code, 200,
+                         "Checkout GET requires a non-empty cart to render context")
         token = page.context['request_token']
 
         payload = {'customer_name': 'Test', 'order_type': 'dine_in',
-                   'request_token': token}
+                   'request_token': token,
+                   'payment_method': 'cash'}  # required by CheckoutForm (payment-first flow)
         # First real submission
         resp1 = self.client.post(reverse('orders:checkout'), payload)
-        self.assertIn('/orders/success/', resp1['Location'])
+        self.assertIn('/orders/waiting/', resp1['Location'])  # payment-first: payment-waiting page
         self.assertEqual(Order.objects.count(), 1)
 
-        # Replay (same token) — server returns original order, rate counter
-        # must not increment again for the replay.
+        # Replay (same token) — server returns original order via the early-exit
+        # posted_token duplicate check (before cart check and rate-limit check).
+        # Rate counter must not increment again for the replay.
         # Seed a new cart item so cart is not empty, then replay old token
         _make_cart(self.client, self.product)
         resp2 = self.client.post(reverse('orders:checkout'), payload)
-        self.assertIn('/orders/success/', resp2['Location'])
+        self.assertIn('/orders/waiting/', resp2['Location'])  # idempotency replay also → waiting page
         # Still only ONE order
         self.assertEqual(Order.objects.count(), 1)
 
@@ -210,7 +235,7 @@ class OrderRateLimitTests(TestCase):
         _make_cart(client_b, self.product)
         resp_b = _post_checkout(client_b)
         self.assertEqual(resp_b.status_code, 302)
-        self.assertIn('/orders/success/', resp_b['Location'])
+        self.assertIn('/orders/waiting/', resp_b['Location'])  # payment-first flow
 
     # ── error message content ──────────────────────────────────────────────
 
