@@ -131,6 +131,7 @@
   .pos-item .item-name { font-size: 0.75rem; }
   /* Customer info inputs */
   #pos-customer-name { min-height: 44px; font-size: 0.9rem; }
+  #pos-notes { min-height: 44px; }
   /* ── Order line: two-row layout so every control is a 40px+ touch target ── */
   .pos-order-item { flex-wrap: wrap; }
   .pos-item-name   { order: 1; flex: 1 1 60%; }
@@ -265,6 +266,10 @@
         <label style="display:flex;align-items:center;gap:5px;font-size:0.82rem;cursor:pointer;font-weight:600">
           <input type="radio" name="pos-payment-method" value="gcash"> <i data-lucide="smartphone" class="btn-icon" aria-hidden="true"></i> GCash
         </label>
+      </div>
+      <div style="margin-top:8px">
+        <label for="pos-notes" style="font-size:0.78rem;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:4px">Order Notes</label>
+        <textarea id="pos-notes" placeholder="Add special instructions or notes for this order..." class="form-control" style="font-size:0.82rem;padding:6px 10px;resize:vertical;min-height:60px" maxlength="1000" rows="2"></textarea>
       </div>
     </div>
 

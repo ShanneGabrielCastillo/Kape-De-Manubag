@@ -840,6 +840,7 @@ window.POS = {
       orderType: document.querySelector('[name=pos-order-type]:checked')?.value || 'dine_in',
       paymentMethod: document.querySelector('[name=pos-payment-method]:checked')?.value || 'cash',
       requestToken: this._requestToken || null,
+      notes: document.getElementById('pos-notes')?.value || '',
       savedAt: new Date().toISOString(),
     };
   },
@@ -861,7 +862,7 @@ window.POS = {
   },
 
   initDraftPersistence() {
-    ['pos-customer-name'].forEach(id => {
+    ['pos-customer-name', 'pos-notes'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.addEventListener('input', () => this.saveDraft());
     });
@@ -924,6 +925,8 @@ window.POS = {
     this._requestToken = draft.requestToken || null;
     const nameEl = document.getElementById('pos-customer-name');
     if (nameEl) nameEl.value = draft.customerName || '';
+    const notesEl = document.getElementById('pos-notes');
+    if (notesEl) notesEl.value = draft.notes || '';
     const orderTypeRadio = document.querySelector(`[name=pos-order-type][value="${draft.orderType || 'dine_in'}"]`);
     if (orderTypeRadio) orderTypeRadio.checked = true;
     const payMethodRadio = document.querySelector(`[name=pos-payment-method][value="${draft.paymentMethod || 'cash'}"]`);
@@ -1263,6 +1266,7 @@ window.POS = {
             order_type: orderType,
             payment_method: paymentMethod,
             request_token: requestToken,
+            notes: (document.getElementById('pos-notes')?.value || '').trim(),
             items: this.items.map(i => ({ product_id: i.id, size: i.size, quantity: i.qty })),
           }),
         });
@@ -1319,6 +1323,8 @@ window.POS = {
             // The order is placed: the temporary cart served its purpose.
             this.clearDraft();
             document.getElementById('pos-customer-name').value = '';
+            const notesEl = document.getElementById('pos-notes');
+            if (notesEl) notesEl.value = '';
             return;
           }
           if (!failure) {

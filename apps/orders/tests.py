@@ -369,6 +369,110 @@ class PosOrderAtomicityTests(TestCase):
         self.assertEqual(finance.get_cash_sales(), Decimal('0.00'))
         self.assertGreater(finance.get_gcash_sales(), Decimal('0.00'))
 
+    # ── Order notes ────────────────────────────────────────────────────────
+
+    def _post_pos_with_notes(self, notes, payment_method='cash', quantity=2):
+        """Helper: creates a POS order with notes."""
+        item = {'product_id': self.product.pk, 'quantity': quantity, 'size': 'none'}
+        return self.client.post(
+            reverse('orders:create_pos_order'),
+            json.dumps({
+                'customer_name': 'Walk-in Customer',
+                'items': [item],
+                'order_type': 'dine_in',
+                'payment_method': payment_method,
+                'notes': notes,
+            }),
+            content_type='application/json',
+        )
+
+    def test_pos_order_with_notes_saves_correctly(self):
+        """POS order with notes stores the notes text on the Order."""
+        response = self._post_pos_with_notes('Extra sugar please')
+        data = response.json()
+        self.assertTrue(data['success'])
+        order = Order.objects.get(pk=data['order_id'])
+        self.assertEqual(order.notes, 'Extra sugar please')
+
+    def test_pos_order_without_notes_succeeds(self):
+        """POS order without a notes key creates successfully with empty notes."""
+        response = self._post_pos(quantity=1)
+        data = response.json()
+        self.assertTrue(data['success'])
+        order = Order.objects.get(pk=data['order_id'])
+        self.assertEqual(order.notes, '')
+
+    def test_pos_order_notes_saved_for_cash_and_gcash(self):
+        """Notes persist for both Cash and GCash POS orders."""
+        cash_response = self._post_pos_with_notes(
+            'Cash order note', payment_method='cash', quantity=1
+        )
+        gcash_response = self._post_pos_with_notes(
+            'GCash order note', payment_method='gcash', quantity=1
+        )
+        cash_data = cash_response.json()
+        gcash_data = gcash_response.json()
+        self.assertTrue(cash_data['success'])
+        self.assertTrue(gcash_data['success'])
+        cash_order = Order.objects.get(pk=cash_data['order_id'])
+        gcash_order = Order.objects.get(pk=gcash_data['order_id'])
+        self.assertEqual(cash_order.notes, 'Cash order note')
+        self.assertEqual(gcash_order.notes, 'GCash order note')
+
+    def test_pos_order_notes_visible_in_kitchen_view(self):
+        """POS order notes appear in the kitchen orders view."""
+        from apps.accounts.models import CustomUser as User
+        kitchen_user = User.objects.create_user(
+            username='kitchen_staff_notes', password=PASSWORD, role='kitchen_staff',
+        )
+        response = self._post_pos_with_notes('No ice please', quantity=1)
+        data = response.json()
+        self.assertTrue(data['success'])
+        order = Order.objects.get(pk=data['order_id'])
+        # Advance to preparing so it appears in the kitchen queue
+        order.status = 'preparing'
+        order.save(update_fields=['status'])
+        self.client.force_login(kitchen_user)
+        kitchen_response = self.client.get(reverse('kitchen:orders'))
+        self.assertEqual(kitchen_response.status_code, 200)
+        self.assertContains(kitchen_response, 'No ice please')
+
+    def test_pos_order_notes_trimmed_whitespace(self):
+        """Notes with leading/trailing whitespace: JS trims before sending;
+        the server stores what it receives (already trimmed)."""
+        response = self._post_pos_with_notes('  hello  ')
+        data = response.json()
+        self.assertTrue(data['success'])
+        order = Order.objects.get(pk=data['order_id'])
+        # Test documents server storage behaviour: notes='  hello  ' is sent
+        # (no extra trimming in the view), stored as-is.
+        self.assertEqual(order.notes, '  hello  ')
+
+    def test_pos_order_very_long_notes_truncated_or_rejected(self):
+        """TextField has no max_length so very long notes are stored.
+        The JS textarea uses maxlength='1000' for practical client-side enforcement."""
+        long_notes = 'A' * 10001
+        response = self._post_pos_with_notes(long_notes, quantity=1)
+        data = response.json()
+        self.assertTrue(data['success'])
+        order = Order.objects.get(pk=data['order_id'])
+        # Server stores the full text (no max_length on the model field).
+        self.assertEqual(len(order.notes), 10001)
+
+    def test_existing_pos_behavior_unchanged(self):
+        """Existing POS flow without notes still works correctly."""
+        response = self._post_pos(quantity=2)
+        data = response.json()
+        self.assertTrue(data['success'])
+        order = Order.objects.get(pk=data['order_id'])
+        # No notes key sent: default empty string.
+        self.assertEqual(order.notes, '')
+        # Stock deducted correctly.
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock_quantity, 8)
+        # Order items created.
+        self.assertEqual(order.items.count(), 1)
+
 
 class DuplicateOrderProtectionTests(TestCase):
     """Repeated submissions (double-click, slow network, rapid taps) must
