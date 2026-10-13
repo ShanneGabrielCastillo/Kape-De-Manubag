@@ -5,15 +5,38 @@
 
 {% block extra_css %}
 <style>
+/* ── Masonry-style card layout ───────────────────────────────────────────
+   CSS columns give each card its natural height with no row-height gaps.
+   Cards flow top-to-bottom within each column, so the oldest orders read
+   left-column-first — a natural kitchen priority sequence.
+   New orders appear via page reload (location.reload in the SSE handler),
+   so column-order is always server-authoritative and never jumbled by
+   client-side injection.
+   ──────────────────────────────────────────────────────────────────────── */
 .kitchen-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1.5rem;
+  column-count: 3;
+  column-gap: 1.5rem;
+}
+@media (max-width: 900px) {
+  .kitchen-grid { column-count: 2; }
+}
+@media (max-width: 480px) {
+  .kitchen-grid { column-count: 1; }
 }
 .kitchen-card {
+  /* break-inside:avoid keeps the card in one column — no card split across. */
+  break-inside: avoid;
+  /* display:inline-block + width:100% is required for column layout to
+     respect break-inside:avoid in all browsers (including older WebKit). */
+  display: inline-block;
+  width: 100%;
+  /* margin-bottom replaces grid gap for vertical spacing between cards. */
+  margin-bottom: 1.5rem;
   border-left: 4px solid var(--caramel);
   padding: 1.25rem;
   animation: slideInCard 0.3s ease;
+  /* box-sizing so padding doesn't overflow the column width. */
+  box-sizing: border-box;
 }
 .kitchen-card .mark-ready-btn {
   min-height: 48px;
@@ -55,9 +78,6 @@
 @keyframes slideInCard {
   from { opacity: 0; transform: translateY(-10px); }
   to   { opacity: 1; transform: translateY(0); }
-}
-@media (max-width: 480px) {
-  .kitchen-grid { grid-template-columns: 1fr; }
 }
 </style>
 {% endblock %}
@@ -157,15 +177,25 @@
         setTimeout(function () { location.reload(); }, 800);
 
       } else if (data.new_status === 'ready') {
-        // Order marked ready — remove card if it exists (SSE from another client)
+        // Order marked ready — remove card if it still exists in the DOM.
+        // This handles the case where another kitchen client (e.g. a second
+        // tablet) marked the order ready, so there was no local button click
+        // and no local success toast.  When the *local* button click triggered
+        // this transition the fetch handler already removed the card and showed
+        // "marked Ready!" — so we only show a toast here when the card is still
+        // present (i.e. the action came from a different client).
         var card = document.querySelector('[data-order-id="' + data.order_id + '"]');
         if (card) {
           card.remove();
           updateCountBadge();
+          // Only toast when another client marked it ready (card was still here).
+          if (typeof showToast === 'function') {
+            showToast('✅ Order #' + data.order_number + ' marked Ready', 'info');
+          }
         }
-        if (typeof showToast === 'function') {
-          showToast('✅ Order #' + data.order_number + ' is Ready', 'success');
-        }
+        // No toast when card is already gone — the button handler already
+        // showed the local confirmation.  The "is Ready" notification belongs
+        // on the Cashier/Admin side, not here.
       }
     });
 
@@ -202,9 +232,19 @@
     .then(function (r) { return r.json(); })
     .then(function (data) {
       if (data.success) {
-        if (card) { card.remove(); }
-        updateCountBadge();
-        if (typeof showToast === 'function') {
+        // card was captured at click time and may already have been removed
+        // from the DOM by the SSE handler if the status_changed event arrived
+        // before this fetch response.  card.isConnected distinguishes a live
+        // node (still in the DOM) from a detached one (already removed).
+        var cardStillLive = card && card.isConnected;
+        if (cardStillLive) {
+          card.remove();
+          updateCountBadge();
+        }
+        // Show the local confirmation only when this fetch response is the
+        // first thing to process the transition.  If SSE already removed the
+        // card and showed its own toast, skip — one notification is enough.
+        if (cardStillLive && typeof showToast === 'function') {
           showToast('✅ Order #' + data.order_number + ' marked Ready!', 'success');
         }
       } else {

@@ -1,0 +1,7 @@
+{
+  "task_id": "task-gcash-modal",
+  "task_description": "Add an in-page GCash payment verification modal to the Order Management page. When a Cashier/Admin clicks 'Verify GCash', open a modal (instead of navigating away) showing the screenshot, order details, and Verify/Reject controls. After success, update the row in-place without a page reload.",
+  "status": "pending",
+  "feature_order": ["FEAT-001", "FEAT-002"],
+  "blocked_reason": null
+}

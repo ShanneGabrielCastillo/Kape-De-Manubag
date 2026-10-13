@@ -1,0 +1,7 @@
+{
+  "task_id": "task-pos-order-notes",
+  "task_description": "Add an optional Notes textarea to the POS checkout so cashiers can enter special instructions for walk-in customers. Notes are saved to Order.notes (existing TextField, blank=True). The backend view already reads notes from the POS JSON payload. Only the POS template and main.js need changes; kitchen and order-detail displays already render Order.notes.",
+  "status": "pending",
+  "feature_order": ["FEAT-001", "FEAT-002"],
+  "blocked_reason": null
+}

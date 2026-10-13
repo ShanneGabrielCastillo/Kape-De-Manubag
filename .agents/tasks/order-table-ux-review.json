@@ -1,0 +1,8 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "findings": [
+    "`detailUrl` TDZ crash in `new_order` handler — `row.dataset.detailUrl = detailUrl` (and five sibling assignments) appear ~19 lines before the corresponding `const` declarations. Every `new_order` SSE event throws `ReferenceError: Cannot access 'detailUrl' before initialization`, falls to the `catch` block, and reloads the page after 2 s. Move all six `const` URL declarations to immediately before the `row.dataset.*` block, or hoist them above the `row = document.createElement('tr')` line.",
+    "SSE-inserted rows have no `data-detail-url` until reload — as a consequence of the TDZ crash, any row inserted live lacks `data-detail-url`, so the delegated click handler's `e.target.closest('tr[data-detail-url]')` check silently drops clicks on it. Resolves automatically once the `const` declarations are moved."
+  ],
+  "reviewDoc": "c:\\Users\\Shecile\\kape_de_manubag_system\\.agents\\tasks\\order-table-ux-review.md"
+}

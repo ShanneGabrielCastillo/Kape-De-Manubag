@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Add notes textarea to POS template (templates/orders/pos.html) and wire it into the JavaScript POS object (static/js/main.js). The backend view create_pos_order in apps/orders/views.py already reads notes=data.get('notes', '') — only the frontend needs changes.",
+  "status": "pending",
+  "steps": [
+    "1. Edit templates/orders/pos.html — Add a notes textarea inside the .pos-checkout-controls div. Insert it AFTER the closing </div> of the payment method row (after line ~269) and BEFORE the closing </div> of .pos-checkout-controls (line ~270). Use this exact markup:\n\n      <div style=\"margin-top:8px\">\n        <textarea id=\"pos-notes\" class=\"form-control\" rows=\"2\" maxlength=\"1000\"\n          placeholder=\"Add special instructions or notes for this order...\"\n          style=\"font-size:0.82rem;padding:6px 10px;resize:vertical\"\n          aria-label=\"Order notes\"></textarea>\n      </div>\n\n   Also add a mobile CSS rule for the notes textarea near the existing #pos-customer-name rule (around line 133):\n      #pos-notes { min-height: 44px; font-size: 0.9rem; }\n\n   The .pos-layout--collapsed hidden controls block (around line 156-163) already hides .pos-checkout-controls wholesale, so the notes textarea is included automatically — no extra CSS rule needed.",
+
+    "2. Edit static/js/main.js — Four targeted changes inside the POS object:\n\n   a. In _draftPayload() (around line 838), add notes to the returned object:\n      notes: document.getElementById('pos-notes')?.value || '',\n\n   b. In initDraftPersistence() (around line 865), add 'pos-notes' to the IDs array:\n      ['pos-customer-name', 'pos-notes'].forEach(id => { ... })\n\n   c. In restoreDraft() (around line 923, after restoring orderTypeRadio and payMethodRadio), restore the notes field:\n      const notesEl = document.getElementById('pos-notes');\n      if (notesEl) notesEl.value = draft.notes || '';\n\n   d. In submitOrder() (around line 1259, inside the JSON.stringify body), add:\n      notes: (document.getElementById('pos-notes')?.value || '').trim(),\n\n   e. In submitOrder() success path (around line 1322, after clearing pos-customer-name), clear the notes field:\n      const posNotesEl = document.getElementById('pos-notes');\n      if (posNotesEl) posNotesEl.value = '';"
+  ],
+  "acceptance_criteria": [
+    "The POS checkout panel shows a labeled multiline textarea with id='pos-notes' below the payment method row.",
+    "The placeholder reads 'Add special instructions or notes for this order...'",
+    "The notes field has maxlength='1000' to enforce a practical client-side limit.",
+    "Placing a POS order with notes text results in the notes being saved to Order.notes in the database.",
+    "Placing a POS order without notes (textarea empty) succeeds without error; Order.notes is ''.",
+    "After a successful POS order, the notes field is cleared along with the customer name field.",
+    "Refreshing the POS page before submitting restores the notes text from the draft (sessionStorage).",
+    "python manage.py check exits 0.",
+    "python manage.py test apps.orders --verbosity=2 passes all existing tests."
+  ],
+  "verification": [
+    "python manage.py check",
+    "python manage.py test apps.orders --verbosity=2"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

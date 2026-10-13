@@ -549,11 +549,10 @@
     </div>
     <!-- Footer -->
     <div class="modal-footer" id="gcash-om-footer" style="flex-shrink:0">
-      <!-- Initial footer: Verify + Reject + Cancel -->
-      <div id="gcash-om-footer-main" style="display:none;width:100%;flex-direction:column;gap:8px">
-        <button id="gcash-om-close-btn" class="btn btn-outline btn-block">Cancel</button>
-        <button id="gcash-om-reject-start" class="btn btn-block" style="color:var(--red-accent,#dc2626);border:1px solid var(--red-accent,#dc2626)"><i data-lucide="x" class="btn-icon" aria-hidden="true"></i> Reject Payment</button>
-        <button id="gcash-om-verify-btn" class="btn btn-primary btn-block"><i data-lucide="badge-check" class="btn-icon" aria-hidden="true"></i> Verify Payment</button>
+      <!-- Initial footer: Reject + Verify side by side -->
+      <div id="gcash-om-footer-main" style="display:none;width:100%;flex-direction:row;gap:8px">
+        <button id="gcash-om-reject-start" class="btn btn-block" style="flex:1;color:var(--red-accent,#dc2626);border:1px solid var(--red-accent,#dc2626)"><i data-lucide="x" class="btn-icon" aria-hidden="true"></i> Reject</button>
+        <button id="gcash-om-verify-btn" class="btn btn-primary btn-block" style="flex:1"><i data-lucide="badge-check" class="btn-icon" aria-hidden="true"></i> Verify</button>
       </div>
       <!-- Rejection confirmation footer: Confirm Reject + Back -->
       <div id="gcash-om-footer-reject" style="display:none;width:100%;flex-direction:column;gap:8px">
@@ -1219,7 +1218,6 @@ RealtimeConnection.on('gcash_submitted', function(data) {
   const footerMain   = document.getElementById('gcash-om-footer-main');
   const footerReject = document.getElementById('gcash-om-footer-reject');
   const closeBtn     = document.getElementById('gcash-om-close');
-  const closeBtnFooter = document.getElementById('gcash-om-close-btn');
   const verifyBtn    = document.getElementById('gcash-om-verify-btn');
   const rejectStart  = document.getElementById('gcash-om-reject-start');
   const rejectBack   = document.getElementById('gcash-om-reject-back');
@@ -1292,8 +1290,22 @@ RealtimeConnection.on('gcash_submitted', function(data) {
     document.addEventListener('keydown', _onKey);
 
     // Fetch GCash details
-    fetch(detailApiUrl, { credentials: 'same-origin' })
+    fetch(detailApiUrl, {
+      credentials: 'same-origin',
+      headers: { 'Accept': 'application/json' },
+    })
       .then(function(resp) {
+        // Check content-type before parsing so an unexpected HTML response
+        // (e.g. a login redirect that was followed to a 200 HTML page) gives
+        // a clear message instead of "Unexpected token '<'".
+        var ct = resp.headers.get('content-type') || '';
+        if (!ct.includes('application/json')) {
+          throw new Error(
+            resp.status === 401 || resp.status === 403
+              ? 'Session expired or access denied. Please refresh the page.'
+              : 'Failed to load payment details (unexpected response). Please refresh and try again.'
+          );
+        }
         if (!resp.ok) {
           return resp.json().then(function(d) {
             throw new Error(d.error || 'Failed to load payment details (HTTP ' + resp.status + ')');
@@ -1360,10 +1372,6 @@ RealtimeConnection.on('gcash_submitted', function(data) {
     if (!_submitting) _closeModal();
   });
 
-  // Close button (footer Cancel)
-  if (closeBtnFooter) closeBtnFooter.addEventListener('click', function() {
-    if (!_submitting) _closeModal();
-  });
 
   // Verify Payment
   if (verifyBtn) verifyBtn.addEventListener('click', function() {

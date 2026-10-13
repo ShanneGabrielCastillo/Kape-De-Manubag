@@ -307,11 +307,11 @@
     <div class="stat-sub">{% if 'stats' in widget_errors %}Unavailable{% elif monthly_orders %}{{ monthly_orders }} order{{ monthly_orders|pluralize }} this month{% else %}No orders this month{% endif %}</div>
     <div class="stat-icon"><i data-lucide="calendar-range" aria-hidden="true"></i></div>
   </div>
-  <div class="stat-card dash-content" data-stat="total">
-    <div class="stat-label">Total Revenue</div>
-    <div class="stat-value">{% if 'stats' in widget_errors %}—{% else %}₱{{ total_sales|floatformat:2 }}{% endif %}</div>
-    <div class="stat-sub">{% if 'stats' in widget_errors %}Unavailable{% elif total_orders %}{{ total_orders }} total order{{ total_orders|pluralize }}{% else %}No orders recorded yet{% endif %}</div>
-    <div class="stat-icon"><i data-lucide="wallet" aria-hidden="true"></i></div>
+  <div class="stat-card dash-content" data-stat="yearly">
+    <div class="stat-label">Yearly Sales</div>
+    <div class="stat-value">{% if 'stats' in widget_errors %}—{% else %}₱{{ yearly_sales|floatformat:2 }}{% endif %}</div>
+    <div class="stat-sub">{% if 'stats' in widget_errors %}Unavailable{% elif yearly_orders %}{{ yearly_orders }} order{{ yearly_orders|pluralize }} this year{% else %}No orders this year{% endif %}</div>
+    <div class="stat-icon"><i data-lucide="calendar" aria-hidden="true"></i></div>
   </div>
 </div>
 
@@ -728,8 +728,8 @@
   function statSub(count, kind) {
     const n = count || 0;
     const plural = n === 1 ? '' : 's';
-    if (kind === 'total') {
-      return n ? `${n} total order${plural}` : 'No orders recorded ' + 'yet';
+    if (kind === 'yearly') {
+      return n ? `${n} order${plural} this year` : 'No orders ' + 'this year';
     }
     if (kind === 'daily') {
       return n ? `${n} order${plural} today` : 'No orders ' + 'yet today';
@@ -774,7 +774,7 @@
       { key: 'daily',   value: s.daily_sales,   count: s.daily_orders,   kind: 'daily' },
       { key: 'weekly',  value: s.weekly_sales,  count: s.weekly_orders,  kind: 'weekly' },
       { key: 'monthly', value: s.monthly_sales, count: s.monthly_orders, kind: 'monthly' },
-      { key: 'total',   value: s.total_sales,   count: s.total_orders,   kind: 'total' },
+      { key: 'yearly',  value: s.yearly_sales,  count: s.yearly_orders,  kind: 'yearly' },
     ];
     statDefs.forEach(function (def) {
       const card = document.querySelector(`[data-stat="${def.key}"]`);

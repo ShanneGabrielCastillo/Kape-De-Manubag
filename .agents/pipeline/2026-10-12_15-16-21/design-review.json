@@ -1,0 +1,33 @@
+{
+  "verdict": "APPROVED",
+  "findings": [
+    {
+      "id": 1,
+      "severity": "NIT",
+      "location": "02-design.md §Root Cause Analysis, opening paragraph",
+      "problem": "The opening sentence says 'Two helpers and two inline assertion sites are stale. There is no third category of failure.' The section then lists five labeled causes A–E, where E is 'no regression'. The count in the opening paragraph contradicts the labeled list.",
+      "fix": "Change opening sentence to: 'Four causes of failure are identified (A–D). Cause E confirms there is no application regression.' Or relabel E as a 'Finding: No Regression' paragraph outside the lettered list."
+    },
+    {
+      "id": 2,
+      "severity": "NIT",
+      "location": "02-design.md §Design Decisions §1",
+      "problem": "Requirements FR-2 says 'OrderRateLimitTests._place_order() must delegate to the corrected _post_checkout()'. The design satisfies this transitively (the wrapper already calls _post_checkout and Change 1's default propagates) but never states this explicitly. An implementer could mistakenly think FR-2 requires a direct code change to the wrapper.",
+      "fix": "In Design Decision §1, add: 'FR-2 is satisfied transitively: OrderRateLimitTests._place_order() already calls _post_checkout(self.client), so the updated default in Change 1 propagates automatically with no modification to the wrapper itself.'"
+    },
+    {
+      "id": 3,
+      "severity": "NIT",
+      "location": "02-design.md §Specific Changes §Change 3 inline comment",
+      "problem": "The Change 3 comment retains 'Seed a new cart item so cart is not empty, then replay old token', implying the cart must be non-empty for resp2. However, the verified checkout_view code shows the posted_token duplicate check runs before the empty-cart check, making cart state irrelevant for the replay. The comment is misleading.",
+      "fix": "Update the inline comment in the Change 3 AFTER block to: '# Replay (same token) — server returns original order via the early-exit posted_token duplicate check (runs BEFORE the empty-cart check, so cart state is irrelevant for the replay). Rate counter must not increment.'"
+    },
+    {
+      "id": 4,
+      "severity": "NIT",
+      "location": "02-design.md §Validation Plan item 2",
+      "problem": "Validation Plan item 1 gives exact expected counts for tests_security (23 passed). Item 2 gives only a qualitative requirement for CustomerReceiptTests and PaidAtTimestampTests. Requirements AC lists exact counts (19 and 12). The design is less precise than the requirements for this item.",
+      "fix": "Update item 2 to: '`python manage.py test apps.orders --verbosity=2` must report CustomerReceiptTests: 19 passed, PaidAtTimestampTests: 12 passed, zero failures or errors across all apps.orders test classes.'"
+    }
+  ]
+}

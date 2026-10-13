@@ -1,0 +1,41 @@
+{
+  "id": "FEAT-002",
+  "type": "test",
+  "description": "Add test cases for POS order notes in apps/orders/tests.py, inside the existing PosOrderAtomicityTests class. Depends on FEAT-001 (frontend wiring) but tests only the server-side behavior — the backend already handles notes, so most tests work independently of the template changes.",
+  "status": "pending",
+  "steps": [
+    "1. In apps/orders/tests.py, inside PosOrderAtomicityTests, add a helper method _post_pos_with_notes(notes, payment_method='cash', quantity=2) that posts to create_pos_order with the given notes value in the JSON body. Model it after the existing _post_pos_with_payment helper (around line 165).",
+
+    "2. Add test_pos_order_with_notes_saves_correctly — calls _post_pos_with_notes('Extra sugar please'), asserts data['success'] is True, fetches the created order, and asserts order.notes == 'Extra sugar please'.",
+
+    "3. Add test_pos_order_without_notes_succeeds — calls _post_pos() (existing helper, no notes key), asserts data['success'] is True and order.notes == ''.",
+
+    "4. Add test_pos_order_notes_saved_for_cash_payment — calls _post_pos_with_notes('No ice', payment_method='cash'), asserts order.notes == 'No ice' and order.payment_method == 'cash'.",
+
+    "5. Add test_pos_order_notes_saved_for_gcash_payment — calls _post_pos_with_notes('Extra shot', payment_method='gcash'), asserts order.notes == 'Extra shot' and order.payment_method == 'gcash'.",
+
+    "6. Add test_pos_order_notes_visible_in_kitchen_view — creates a POS order with notes='Allergy: nuts', directly updates its status to 'preparing' via order.status='preparing'; order.save(), creates a kitchen-staff user (role='kitchen_staff'), logs in as that user, GETs the kitchen orders page (reverse('kitchen:orders')), and asserts 'Allergy: nuts' is in the response content.",
+
+    "7. Add test_pos_order_empty_string_notes_succeeds — posts notes='' explicitly, asserts data['success'] is True and order.notes == ''.",
+
+    "8. Add test_pos_order_notes_stripped_by_js_not_server — posts notes='  hello  ' (with whitespace), asserts order.notes == '  hello  '. This documents that server-side stripping is not applied by create_pos_order (it does data.get('notes', '') verbatim); the JS .trim() in submitOrder handles trimming before sending. This is correct behavior.",
+
+    "9. Add test_existing_pos_totals_and_stock_unchanged — posts _post_pos_with_notes('Some note', quantity=3), confirms data['success'] is True, stock is deducted by 3 (product.stock_quantity == 7 from initial 10), and order total equals product.price * 3. Ensures notes do not affect pricing or inventory logic."
+  ],
+  "acceptance_criteria": [
+    "python manage.py test apps.orders.tests.PosOrderAtomicityTests --verbosity=2 passes all new test methods.",
+    "test_pos_order_with_notes_saves_correctly: order.notes matches the submitted notes string.",
+    "test_pos_order_without_notes_succeeds: order.notes is empty string, order is created successfully.",
+    "test_pos_order_notes_saved_for_cash_payment and test_pos_order_notes_saved_for_gcash_payment: notes persist for both payment methods.",
+    "test_pos_order_notes_visible_in_kitchen_view: the kitchen orders page renders the notes text.",
+    "test_existing_pos_totals_and_stock_unchanged: no regression in pricing or inventory deduction.",
+    "python manage.py test apps.kitchen --verbosity=2 passes all existing tests."
+  ],
+  "verification": [
+    "python manage.py test apps.orders.tests.PosOrderAtomicityTests --verbosity=2",
+    "python manage.py test apps.kitchen --verbosity=2",
+    "python manage.py test apps.orders --verbosity=2"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

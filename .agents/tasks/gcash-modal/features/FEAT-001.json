@@ -1,0 +1,24 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Add a new staff-only JSON endpoint GET /manage/<pk>/gcash-details/ that returns all GCash-related fields needed to populate the in-page modal. The order_list view defers gcash_reference, gcash_notes, gcash_submitted_at, gcash_verified_at, and gcash_proof — the modal JS must load these on-demand via this endpoint. The endpoint reuses the existing @login_required + @cashier_or_admin_required decorators, returns a JsonResponse, and validates that the order is a pending GCash order before returning screenshot data.",
+  "status": "completed",
+  "steps": [
+    "In apps/orders/views.py: add a new view function gcash_payment_detail(request, pk). Decorate with @login_required and @cashier_or_admin_required. Only allow GET. Fetch the order by pk using get_object_or_404. Select only the fields needed: order_number, customer_name, total, payment_method, gcash_status, gcash_reference, gcash_submitted_at, gcash_proof (for .url). Return JsonResponse with: order_number, customer_name, total (as float), gcash_status, gcash_reference, gcash_submitted_at (formatted as ISO or 'M d, Y g:i A'), gcash_proof_url (order.gcash_proof.url if order.gcash_proof else None). Do NOT return the order's tracking_token or payment state beyond what the UI already shows. If order.payment_method != 'gcash' or order.gcash_status != 'pending' or order.is_paid is True, return JsonResponse({'error': 'Not a pending GCash order'}, status=400) so the modal does not open stale data.",
+    "In apps/orders/urls.py: add path('manage/<int:pk>/gcash-details/', views.gcash_payment_detail, name='gcash_payment_detail') in the staff/cashier section, immediately before the receipt path.",
+    "In apps/orders/tests.py: add tests for gcash_payment_detail in the existing GCashPaymentTest class (or a new GCashPaymentDetailTest class): (a) authenticated cashier gets 200 with correct fields for a pending order, (b) authenticated cashier gets 400 for a non-pending or already-paid order, (c) unauthenticated request gets redirect to login, (d) kitchen staff (non-cashier) gets 403/redirect. Follow the existing test helper pattern (_gcash_order, self.client.force_login(self.cashier))."
+  ],
+  "acceptance_criteria": [
+    "GET /manage/<pk>/gcash-details/ returns 200 JSON with order_number, customer_name, total, gcash_status, gcash_reference, gcash_submitted_at, gcash_proof_url for an authenticated cashier on a pending-GCash order.",
+    "Returns 400 if the order is not a pending GCash order.",
+    "Returns redirect to login for unauthenticated requests.",
+    "All existing orders tests still pass.",
+    "python manage.py check reports no errors."
+  ],
+  "verification": [
+    "python manage.py check",
+    "python manage.py test apps.orders --verbosity=2"
+  ],
+  "blocked_reason": null,
+  "findings": "All 8 new GCashPaymentDetailTest tests pass. All 88 pre-existing tests in apps.orders.tests pass. The 20 failures in apps.orders.tests_security are pre-existing and unrelated to this change. The cashier_or_admin_required decorator redirects kitchen_staff to menu:index (302), not 403 — tests assert status 302 accordingly. gcash_submitted_at is formatted as 'Month D, YYYY H:MM AM/PM' using strftime with %-d/%-I (Linux-style no-padding directives) via timezone.localtime()."
+}

@@ -240,7 +240,10 @@
         <div style="display:flex;align-items:center;gap:12px">
           <span id="pos-total-preview" style="font-size:1rem;font-weight:700;color:var(--gold)">₱0.00</span>
           <button onclick="POS.clear()" class="pos-clear-btn" style="background:rgba(255,255,255,.15);border:none;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:0.75rem">Clear</button>
-          <i data-lucide="chevron-up" id="pos-drawer-toggle-icon" style="width:16px;height:16px"></i>
+          <span id="pos-drawer-toggle-icon" style="display:inline-flex;align-items:center;line-height:1">
+            <i data-lucide="chevron-up"   class="pos-chevron pos-chevron--up"   aria-hidden="true" style="width:16px;height:16px"></i>
+            <i data-lucide="chevron-down" class="pos-chevron pos-chevron--down" aria-hidden="true" style="width:16px;height:16px;display:none"></i>
+          </span>
         </div>
       </div>
     </div>
@@ -420,16 +423,31 @@ function handlePosAdd(id, name, price, el) {
     if (layout && window.innerWidth <= 767) {
       layout.classList.toggle('pos-layout--collapsed', !isExpanded);
     }
+    // The toggle icon is a <span> containing two pre-rendered Lucide SVGs:
+    // one chevron-up (collapsed indicator) and one chevron-down (expanded
+    // indicator). Lucide replaces the <i> elements with <svg> at page load;
+    // after that the SVGs are stable DOM nodes we can show/hide directly.
+    // We never touch data-lucide or call createIcons here — that avoids the
+    // detached-element bug where setAttribute on the original <i> does nothing
+    // after Lucide has already replaced it with an <svg>.
     if (icon) {
-      icon.setAttribute('data-lucide', isExpanded ? 'chevron-down' : 'chevron-up');
-      if (typeof lucide !== 'undefined') lucide.createIcons({ nodes: [icon] });
+      const up   = icon.querySelector('.pos-chevron--up');
+      const down = icon.querySelector('.pos-chevron--down');
+      if (up)   up.style.display   = isExpanded ? 'none'         : '';
+      if (down) down.style.display = isExpanded ? ''             : 'none';
     }
   }
 
   // Apply the correct initial state on page load (mobile: start collapsed).
+  // setExpanded() is deferred by one microtask so it runs after main.js's
+  // DOMContentLoaded handler calls lucide.createIcons() — by that point the
+  // <i> elements have been replaced with stable <svg> nodes that we can
+  // show/hide directly. Without the defer, querySelector('.pos-chevron--up')
+  // finds the original <i> before Lucide has touched it, and the inline
+  // display:none set there gets removed when Lucide clones the SVG in.
   if (window.innerWidth <= 767) {
     layout && layout.classList.add('pos-layout--collapsed');
-    // isExpanded stays false; icon already shows ▲ in the HTML
+    setTimeout(function() { setExpanded(false); }, 0);
   }
 
   // Toggle on header tap (mobile only)

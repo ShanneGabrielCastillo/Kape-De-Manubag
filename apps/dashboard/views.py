@@ -40,6 +40,7 @@ _ZERO_STATS = {
     'daily_sales': 0, 'daily_orders': 0,
     'weekly_sales': 0, 'weekly_orders': 0,
     'monthly_sales': 0, 'monthly_orders': 0,
+    'yearly_sales': 0, 'yearly_orders': 0,
 }
 
 
@@ -82,6 +83,7 @@ def _sales_stats():
     today = timezone.localdate()
     week_start = today - timedelta(days=today.isoweekday() % 7)  # Sunday-start (Sun=0…Sat=6)
     month_start = today.replace(day=1)
+    year_start = today.replace(month=1, day=1)
 
     sales = Order.objects.filter(is_paid=True, status='completed').aggregate(
         all_time=Sum('total'),
@@ -92,6 +94,8 @@ def _sales_stats():
         weekly_orders=Count('id', filter=Q(created_at__date__gte=week_start)),
         monthly=Sum('total', filter=Q(created_at__date__gte=month_start)),
         monthly_orders=Count('id', filter=Q(created_at__date__gte=month_start)),
+        yearly=Sum('total', filter=Q(created_at__date__gte=year_start)),
+        yearly_orders=Count('id', filter=Q(created_at__date__gte=year_start)),
     )
     return {
         'total_sales': sales['all_time'] or 0,
@@ -102,6 +106,8 @@ def _sales_stats():
         'weekly_orders': sales['weekly_orders'] or 0,
         'monthly_sales': sales['monthly'] or 0,
         'monthly_orders': sales['monthly_orders'] or 0,
+        'yearly_sales': sales['yearly'] or 0,
+        'yearly_orders': sales['yearly_orders'] or 0,
     }
 
 
@@ -342,6 +348,8 @@ def dashboard_summary(request):
         'weekly_orders': None if stats_failed else widgets['weekly_orders'],
         'monthly_sales': None if stats_failed else float(widgets['monthly_sales']),
         'monthly_orders': None if stats_failed else widgets['monthly_orders'],
+        'yearly_sales': None if stats_failed else float(widgets['yearly_sales']),
+        'yearly_orders': None if stats_failed else widgets['yearly_orders'],
         'total_sales': None if stats_failed else float(widgets['total_sales']),
         'total_orders': None if stats_failed else widgets['total_orders'],
         'pending_count': None if counts_failed else widgets['pending_count'],

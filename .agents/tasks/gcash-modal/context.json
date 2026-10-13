@@ -1,0 +1,27 @@
+{
+  "project_type": "Django 4.x monolith, server-rendered templates, vanilla JS, SSE-based realtime",
+  "language": "Python (Django), HTML/Jinja2 templates, vanilla JavaScript, CSS",
+  "build_system": "pip + Django. No frontend build step — static files are served directly. Static root: static/css/ and static/js/. Templates in templates/.",
+  "test_framework": "Django's built-in test runner (python manage.py test). Test file: apps/orders/tests.py",
+  "build_command": "python manage.py check --deploy (or python manage.py check for dev)",
+  "test_command": "python manage.py test apps.orders --verbosity=2",
+  "verification_instructions": "1. python manage.py check (no errors). 2. python manage.py test apps.orders --verbosity=2 (all existing tests pass). 3. Manual: open Order Management with a GCash order in 'pending' state, click Verify GCash, confirm modal opens with screenshot, verify row updates after confirm/reject.",
+  "snapshot_or_generated_files": null,
+  "environment_constraints": "Static files must not require a build step. All JS is inline in templates or in static/js/. CSRF token is available as getCookie('csrftoken') (defined in static/js/main.js). Cloudinary stores media files in production — order.gcash_proof.url is a full URL to the screenshot. The order_list view defers gcash_reference, gcash_notes, gcash_submitted_at, gcash_verified_at — a new JSON endpoint must load these fields separately.",
+  "contribution_requirements": "No separate design doc found. Reuse existing patterns: modal HTML pattern from order_detail.html, fetch + JSON pattern from order_detail.html JS, SSE row-update pattern from order_list.html gcash_submitted handler.",
+  "key_patterns": "1. Modal HTML: .modal-backdrop > .modal > .modal-header + .modal-body + .modal-footer. Style from static/css/main.css. 2. CSRF: getCookie('csrftoken') from static/js/main.js. 3. Toast: showToast(msg, type) from static/js/main.js. 4. Row update after SSE: update row.dataset.* then call window.initResponsiveTables() + window.reinitLucide(). 5. The status_changed SSE event fires automatically via post_save signal in apps/realtime/signals.py whenever an Order is saved — no manual broadcast needed for row status update. 6. verify_gcash_payment already fires payment_confirmed + order_accepted events via rt_publish. 7. escHtml() is defined inline in order_list.html for safe HTML injection.",
+  "relevant_files": [
+    "templates/orders/order_list.html",
+    "templates/orders/order_detail.html",
+    "apps/orders/views.py",
+    "apps/orders/urls.py",
+    "apps/orders/models.py",
+    "apps/realtime/signals.py",
+    "static/css/main.css",
+    "static/css/responsive.css",
+    "static/js/main.js",
+    "static/js/realtime.js",
+    "templates/partials/payment_modal.html"
+  ],
+  "directory_structure": "apps/orders/ — models, views, urls, forms, tests, services. apps/realtime/ — broker.py (pub/sub), signals.py (SSE triggers), views.py (SSE stream). templates/orders/ — order_list.html, order_detail.html, etc. templates/partials/ — payment_modal.html, info_row.html. static/css/ — main.css, responsive.css, mobile-design-system.css. static/js/ — main.js (showToast, getCookie, openPaymentModal), realtime.js (RealtimeConnection)."
+}
