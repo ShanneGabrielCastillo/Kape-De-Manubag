@@ -72,6 +72,13 @@
       text-align: right;
     }
 
+    /* Row-2 wrapper: badge + clock grouped on the right on desktop */
+    .board-header-row2 {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
     /* ── Grid ── */
     .board-grid {
       display: grid;
@@ -196,50 +203,107 @@
         grid-template-columns: 1fr;
         height: auto;
       }
+
+      /* ── Header: two-row stack ── */
+      .board-header {
+        padding: 10px 14px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+      }
+      .board-brand {
+        font-size: 1rem;
+      }
+      /* Row 2: badge + clock side by side */
+      .board-header-row2 {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .board-clock {
+        font-size: 0.85rem;
+        min-width: 0;
+        white-space: nowrap;   /* prevents "10:30\nAM" split */
+      }
+      #waiting-count-badge {
+        font-size: 0.72rem;
+        padding: 3px 8px;
+        white-space: nowrap;
+      }
+
+      /* ── Columns ── */
       .board-column {
         height: auto;
-        min-height: 40vh;
+        min-height: 0;
         padding: 16px;
         border-right: none !important;
       }
       .board-column.preparing {
         border-bottom: 2px solid rgba(255, 165, 0, 0.2);
       }
+
+      /* ── Column headers: title + badge ── */
       .column-header {
-        font-size: 0.85rem;
         padding-bottom: 12px;
         margin-bottom: 14px;
       }
+      .column-title {
+        font-size: 0.95rem;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .column-count {
+        font-size: 0.72rem;
+        padding: 3px 8px;
+        flex-shrink: 0;
+        white-space: nowrap;
+      }
+
+      /* ── Empty states: compact ── */
+      .empty-state {
+        padding: 16px 12px;
+        font-size: 0.8rem;
+      }
+      .empty-state .empty-icon {
+        margin-bottom: 6px;
+        opacity: 0.5;
+      }
+      .empty-state .empty-icon svg,
+      .empty-state .empty-icon i {
+        width: 32px;
+        height: 32px;
+        display: block;
+        margin: 0 auto;
+      }
+
+      /* ── Tiles: auto-fill grid ── */
       .order-tiles {
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
         gap: 8px;
       }
       .order-tile {
-        padding: 12px 8px;
+        padding: 10px 6px;
       }
       .tile-number {
-        font-size: 2rem;
+        font-size: 1.8rem;
       }
       .tile-name {
         font-size: 0.65rem;
       }
-      .board-header {
-        padding: 12px 16px;
-      }
-      .board-brand {
-        font-size: 1rem;
-      }
-      .board-clock {
-        font-size: 0.9rem;
-        min-width: auto;
-      }
-      #waiting-count-badge {
-        font-size: 0.72rem;
-        padding: 3px 8px;
-      }
+
+      /* ── Footer: stacked, no awkward splits ── */
       .board-ticker {
-        position: relative;
-        padding: 6px 16px;
+        padding: 6px 14px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+      }
+      .board-ticker span {
+        white-space: nowrap;
+        font-size: 0.72rem;
       }
     }
   </style>
@@ -253,8 +317,10 @@
       ☕ Kape De Manubag
       <span>Order Queue Display</span>
     </div>
-    <div id="waiting-count-badge" class="waiting-badge">⏳ Loading...</div>
-    <div class="board-clock" id="board-clock">--:-- --</div>
+    <div class="board-header-row2">
+      <div id="waiting-count-badge" class="waiting-badge">⏳ Loading...</div>
+      <div class="board-clock" id="board-clock">--:-- --</div>
+    </div>
   </div>
 
   <!-- Grid -->
@@ -293,7 +359,7 @@
           <div class="tile-type">{% if order.order_type == 'dine_in' %}Dine-In{% else %}Take-Out{% endif %}</div>
         </div>
         {% empty %}
-        <div class="empty-state"><div class="empty-icon"><i data-lucide="circle-check" class="action-icon" aria-hidden="true"></i></div><p>No orders ready yet</p></div>
+        <div class="empty-state"><div class="empty-icon"><i data-lucide="circle-check" class="action-icon" aria-hidden="true"></i></div><p>No orders ready for pickup</p></div>
         {% endfor %}
       </div>
     </div>

@@ -153,7 +153,7 @@
         document.getElementById('ready-count'),
         data.ready,
         'ready-tile',
-        { emptyIcon: '<i data-lucide="circle-check" class="action-icon" aria-hidden="true"></i>', emptyText: 'No orders ready yet', markNew: true }
+        { emptyIcon: '<i data-lucide="circle-check" class="action-icon" aria-hidden="true"></i>', emptyText: 'No orders ready for pickup', markNew: true }
       );
       knownReadyNums = new Set((data.ready || []).map(i => i.queue_number));
 
