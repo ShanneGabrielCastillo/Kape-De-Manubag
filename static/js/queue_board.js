@@ -48,16 +48,6 @@
     return div;
   }
 
-  // ── Format time ──
-  function formatTime(isoStr) {
-    if (!isoStr) return '';
-    const d = new Date(isoStr);
-    let h = d.getHours(), m = String(d.getMinutes()).padStart(2, '0');
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    h = h % 12 || 12;
-    return `${h}:${m} ${ampm}`;
-  }
-
   // ── Column sync (diff-based: only affected tiles are touched) ───────────
   // Instead of wiping and rebuilding a column on every poll (which flashes
   // the whole board and forces a reflow of every tile), each poll diffs the
@@ -162,13 +152,6 @@
       if (badge) {
         const text = data.waiting_count > 0 ? `⏳ ${data.waiting_count} waiting` : 'No orders waiting';
         if (badge.textContent !== text) badge.textContent = text;
-      }
-
-      // ── Last updated (only when it changed) ──
-      const lastUpdated = document.getElementById('last-updated-text');
-      if (lastUpdated) {
-        const text = 'Last updated: ' + formatTime(data.last_updated);
-        if (lastUpdated.textContent !== text) lastUpdated.textContent = text;
       }
 
     } catch (err) {

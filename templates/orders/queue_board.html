@@ -182,19 +182,6 @@
     }
     .empty-state .empty-icon { font-size: 2.5rem; margin-bottom: 10px; opacity: 0.4; }
 
-    /* ── Ticker ── */
-    .board-ticker {
-      background: var(--surface);
-      border-top: 1px solid rgba(255,255,255,0.06);
-      padding: 8px 28px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-size: 0.78rem;
-      color: var(--muted);
-      flex-shrink: 0;
-    }
-
     /* ── Mobile: single column stacked layout ── */
     @media (max-width: 600px) {
       body { overflow: auto; }
@@ -294,17 +281,6 @@
         font-size: 0.65rem;
       }
 
-      /* ── Footer: stacked, no awkward splits ── */
-      .board-ticker {
-        padding: 6px 14px;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 2px;
-      }
-      .board-ticker span {
-        white-space: nowrap;
-        font-size: 0.72rem;
-      }
     }
   </style>
 </head>
@@ -364,12 +340,6 @@
       </div>
     </div>
 
-  </div>
-
-  <!-- Ticker -->
-  <div class="board-ticker">
-    <span><i data-lucide="refresh-cw" class="status-icon" aria-hidden="true"></i> Auto-refreshes every 5 seconds</span>
-    <span id="last-updated-text">Loading...</span>
   </div>
 
 </div>
