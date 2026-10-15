@@ -70,13 +70,15 @@
       font-family: 'Playfair Display', serif;
       min-width: 110px;
       text-align: right;
+      white-space: nowrap;
     }
 
-    /* Row-2 wrapper: badge + clock grouped on the right on desktop */
-    .board-header-row2 {
+    /* Right group: badge + clock stacked, grouped on the right */
+    .board-header-right {
       display: flex;
-      align-items: center;
-      gap: 16px;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
     }
 
     /* ── Grid ── */
@@ -191,27 +193,30 @@
         height: auto;
       }
 
-      /* ── Header: two-row stack ── */
+      /* ── Header: two-group side-by-side row ── */
       .board-header {
         padding: 10px 14px;
-        flex-direction: column;
-        align-items: stretch;
-        gap: 6px;
+        flex-direction: row;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 8px;
       }
       .board-brand {
         font-size: 1rem;
+        flex: 1 1 0;
+        min-width: 0;
       }
-      /* Row 2: badge + clock side by side */
-      .board-header-row2 {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
+      /* Right group: badge stacked above clock, right-aligned */
+      .board-header-right {
+        flex: 0 0 auto;
+        align-items: flex-end;
+        gap: 4px;
       }
       .board-clock {
         font-size: 0.85rem;
         min-width: 0;
         white-space: nowrap;   /* prevents "10:30\nAM" split */
+        text-align: right;
       }
       #waiting-count-badge {
         font-size: 0.72rem;
@@ -293,7 +298,7 @@
       ☕ Kape De Manubag
       <span>Order Queue Display</span>
     </div>
-    <div class="board-header-row2">
+    <div class="board-header-right">
       <div id="waiting-count-badge" class="waiting-badge">⏳ Loading...</div>
       <div class="board-clock" id="board-clock">--:-- --</div>
     </div>
