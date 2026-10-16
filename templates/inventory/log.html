@@ -7,7 +7,7 @@
 </div>
 <div class="filter-bar">
   <form method="get" style="display:flex;gap:10px;flex-wrap:wrap">
-    <input type="text" name="q" value="{{ q }}" placeholder="Search product, reason or notes..." class="form-control">
+    <input id="log-search" type="text" name="q" value="{{ q }}" placeholder="Search product, reason or notes..." class="form-control">
     <button type="submit" class="btn btn-primary">Search</button>
     {% if q %}<a href="{% url 'inventory:log' %}" class="btn btn-outline">Clear</a>{% endif %}
   </form>
@@ -57,3 +57,29 @@
 </div>
 {% endif %}
 {% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  'use strict';
+  var input = document.getElementById('log-search');
+  if (!input) return;
+
+  // Remove the Search button — auto-submit replaces it for JS-capable browsers.
+  var btn = input.closest('form').querySelector('button[type="submit"]');
+  if (btn) btn.remove();
+
+  var timer = null;
+  input.addEventListener('input', function () {
+    clearTimeout(timer);
+    var val = this.value;
+    timer = setTimeout(function () {
+      var trimmed = val.trim();
+      window.location.href = trimmed
+        ? '?q=' + encodeURIComponent(trimmed)
+        : window.location.pathname;
+    }, 350);
+  });
+})();
+</script>
+{% endblock extra_js %}

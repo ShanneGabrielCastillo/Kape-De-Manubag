@@ -37,9 +37,15 @@
   </div>
 </div>
 
-{% if low_stock_count %}
-<div class="alert alert-warning" style="margin-bottom:20px">
-  <i data-lucide="triangle-alert" class="status-icon" aria-hidden="true"></i> <strong>{{ low_stock_count }} product{{ low_stock_count|pluralize }}</strong> with low stock (at or below their restock threshold).{% if critical_stock_count %} <strong>{{ critical_stock_count }} critical</strong>.{% endif %} Restock soon!
+{% if critical_stock_count or out_of_stock_count %}
+<div class="alert alert-warning" style="margin-bottom:20px;align-items:flex-start">
+  <i data-lucide="triangle-alert" class="status-icon" style="flex-shrink:0;margin-top:2px" aria-hidden="true"></i>
+  <div>
+    <strong style="display:block;margin-bottom:4px">Inventory needs attention</strong>
+    {% if critical_stock_count %}<div>{{ critical_stock_count }} critical low-stock item{{ critical_stock_count|pluralize }}</div>{% endif %}
+    {% if out_of_stock_count %}<div>{{ out_of_stock_count }} out of stock</div>{% endif %}
+    <div style="margin-top:4px;opacity:0.8;font-size:0.83rem">Review the affected products below.</div>
+  </div>
 </div>
 {% endif %}
 

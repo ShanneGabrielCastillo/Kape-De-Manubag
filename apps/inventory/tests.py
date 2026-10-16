@@ -71,6 +71,52 @@ class InventoryLogSearchTests(TestCase):
         response = self.client.get(reverse('inventory:log'), {'q': 'zzz-nope'})
         self.assertContains(response, 'No inventory logs match')
 
+    # ── New tests for automatic-search feature ────────────────────────────────
+
+    def test_inventory_log_filter_by_query(self):
+        """GET ?q=<term> returns only matching records."""
+        response = self.client.get(reverse('inventory:log'), {'q': 'coffee'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Iced Coffee')
+        self.assertNotContains(response, 'Milk Tea')
+
+    def test_inventory_log_filter_empty_query(self):
+        """GET ?q= (empty) strips to empty string and returns all records."""
+        response = self.client.get(reverse('inventory:log'), {'q': ''})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Iced Coffee')
+        self.assertContains(response, 'Milk Tea')
+
+    def test_inventory_log_filter_no_results(self):
+        """GET ?q=zzznomatch returns empty queryset; page renders with empty state."""
+        response = self.client.get(reverse('inventory:log'), {'q': 'zzznomatch'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No inventory logs match')
+        # Confirm no log rows are in context
+        self.assertEqual(len(response.context['logs']), 0)
+
+    def test_inventory_log_pagination_preserves_query(self):
+        """Pagination links include the active q= parameter."""
+        # Create 15 extra coffee logs to force multiple pages.
+        for i in range(15):
+            InventoryLog.objects.create(
+                product=self.coffee, action='restock', source='manual_adjustment',
+                reason='Restock', quantity_change=1, quantity_before=i,
+                quantity_after=i + 1, notes='batch', performed_by=self.admin,
+            )
+        response = self.client.get(reverse('inventory:log'), {'q': 'coffee', 'page': '1'})
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        # Pagination links must carry q=coffee so the query is preserved.
+        self.assertIn('q=coffee', content)
+
+    def test_inventory_log_unauthorized(self):
+        """Unauthenticated GET /inventory/log/ redirects to login."""
+        self.client.logout()
+        response = self.client.get(reverse('inventory:log'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login', response['Location'])
+
 
 class InventorySummaryCardTests(TestCase):
     """The inventory list summary cards must report accurate counts.
