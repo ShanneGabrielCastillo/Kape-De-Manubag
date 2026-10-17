@@ -1,0 +1,84 @@
+== python manage.py check --tag models ==
+System check identified no issues (0 silenced).
+(WARNING: SECRET_KEY not set — dev-only key, not an error)
+
+== python manage.py test apps.menu --verbosity=2 ==
+Found 48 test(s).
+...all migrations applied...
+System check identified no issues (0 silenced).
+
+test_category_list_uses_one_query ... ok
+test_customer_menu_uses_fixed_two_queries ... ok
+test_pos_uses_fixed_two_queries ... ok
+test_product_list_uses_fixed_three_queries ... ok
+test_edit_changes_type_from_drink_to_food ... ok
+test_edit_form_prepopulates_category_type ... ok
+test_edit_keeps_same_type ... ok
+test_existing_categories_not_silently_reclassified ... ok
+test_category_type_field_in_form_fields ... ok
+test_category_type_saved_to_model ... ok
+test_empty_category_type_is_invalid ... ok
+test_food_type_saved_to_model ... ok
+test_food_with_no_packaging_required ... ok
+test_invalid_category_type_value_rejected ... ok
+test_missing_category_type_is_invalid ... ok
+test_packaging_required_independent_of_type ... ok
+test_valid_drink_form ... ok
+test_valid_food_form ... ok
+test_valid_other_form ... ok
+test_changing_type_to_food_updates_filter ... ok
+test_is_packaging_required_unchanged_after_type_change ... ok
+test_new_drink_category_appears_in_drink_filter ... ok
+test_new_drink_category_not_in_food_filter ... ok
+test_category_form_page_renders ... ok
+test_create_category_with_drink_type ... ok
+test_create_category_with_food_type ... ok
+test_create_without_category_type_fails ... ok
+test_edit_updates_category_type ... ok
+test_product_list_all_categories ... ok
+test_product_list_clear_filters ... ok
+test_product_list_combined_search_and_category ... ok
+test_product_list_context_has_search_and_category ... ok
+test_product_list_empty_results ... ok
+test_product_list_empty_results_render ... ok
+test_product_list_filter_by_category ... ok
+test_product_list_invalid_page_number ... ok
+test_product_list_ordering_newest_first ... ok
+test_product_list_out_of_range_page ... ok
+test_product_list_pagination_first_page ... ok
+test_product_list_pagination_preserves_category ... ok
+test_product_list_pagination_preserves_query ... ok
+test_product_list_pagination_second_page ... ok
+test_product_list_renders_for_admin ... ok
+test_product_list_requires_login ... ok
+test_product_list_search_by_name ... ok
+test_product_list_search_case_insensitive ... ok
+test_product_list_search_spans_beyond_current_page ... ok
+test_product_list_unauthorized ... ok
+
+Ran 48 tests in 25.232s
+OK
+
+== python manage.py test apps.inventory --verbosity=2 ==
+Found 15 test(s).
+...all migrations applied...
+System check identified no issues (0 silenced).
+
+test_inventory_log_filter_by_query ... ok
+test_inventory_log_filter_empty_query ... ok
+test_inventory_log_filter_no_results ... ok
+test_inventory_log_pagination_preserves_query ... ok
+test_inventory_log_unauthorized ... ok
+test_log_page_shows_source_and_reason ... ok
+test_search_by_notes ... ok
+test_search_by_product_name ... ok
+test_search_by_reason ... ok
+test_search_with_no_matches_shows_clear_message ... ok
+test_summary_cards_render_labels_and_values ... ok
+test_summary_counts_are_accurate ... ok
+test_zero_products_shows_zero_summary ... ok
+test_missing_quantity_is_rejected_cleanly ... ok
+test_non_numeric_quantity_is_rejected_cleanly ... ok
+
+Ran 15 tests in 33.925s
+OK
