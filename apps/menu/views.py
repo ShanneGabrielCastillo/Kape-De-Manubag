@@ -4,6 +4,7 @@ from django.contrib import messages
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.db.models import Count
+from django.core.paginator import Paginator
 from .models import Category, Product
 from .forms import ProductForm, CategoryForm
 from .services import (
@@ -189,17 +190,21 @@ def product_list(request):
     category_filter = request.GET.get('category', '')
     if category_filter:
         products = products.filter(category__slug=category_filter)
-    search = request.GET.get('q', '')
+    search = request.GET.get('q', '').strip()
     if search:
         products = products.filter(name__icontains=search)
+    # Count active-order references BEFORE pagination slices the queryset.
+    products_in_active_orders = products.filter(active_order_count__gt=0).count()
+    paginator = Paginator(products, 10)
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)  # handles invalid/out-of-range gracefully
     return render(request, 'menu/product_list.html', {
-        'products': products,
+        'products': page_obj,       # template iterates this (Page is iterable)
+        'page_obj': page_obj,       # used by the pagination block
         'categories': categories,
         'category_filter': category_filter,
         'search': search,
-        'products_in_active_orders': products.filter(
-            active_order_count__gt=0,
-        ).count(),
+        'products_in_active_orders': products_in_active_orders,
     })
 
 

@@ -78,9 +78,10 @@ class CategoryQueryCountTests(TestCase):
         self.assertEqual(menu_table_query_count(ctx), 1)
 
     def test_product_list_uses_fixed_three_queries(self):
-        # products (+ category join), category dropdown, active-order count.
+        # products (+ category join), paginator COUNT, category dropdown,
+        # active-order count. Four queries fixed regardless of row count.
         self.client.force_login(self.admin)
         with CaptureQueriesContext(connection) as ctx:
             response = self.client.get(reverse('menu:product_list'))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(menu_table_query_count(ctx), 3)
+        self.assertEqual(menu_table_query_count(ctx), 4)

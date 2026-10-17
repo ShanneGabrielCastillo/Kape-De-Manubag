@@ -274,11 +274,11 @@
   <form method="get" id="product-filter-form">
     <div class="pfb-search">
       <i data-lucide="search" class="btn-icon pfb-search-icon" aria-hidden="true"></i>
-      <input type="text" name="q" value="{{ search }}" placeholder="Search products..." class="form-control pfb-search-input">
+      <input type="text" id="product-search" name="q" value="{{ search }}" placeholder="Search products..." class="form-control pfb-search-input">
     </div>
     <div class="pfb-select-wrap">
       <i data-lucide="tags" class="btn-icon pfb-select-icon" aria-hidden="true"></i>
-      <select name="category" class="form-control form-select pfb-select">
+      <select id="product-category" name="category" class="form-control form-select pfb-select">
         <option value="">All Categories</option>
         {% for cat in categories %}
         <option value="{{ cat.slug }}" {% if category_filter == cat.slug %}selected{% endif %}>{{ cat.name }}</option>
@@ -377,6 +377,24 @@
     </table>
   </div>
 </div>
+
+{% if page_obj.has_other_pages %}
+<div class="pagination">
+  {% if page_obj.has_previous %}
+  <a href="?page={{ page_obj.previous_page_number }}{% if search %}&q={{ search }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}" class="page-link">‹ Prev</a>
+  {% endif %}
+  {% for num in page_obj.paginator.page_range %}
+    {% if page_obj.number == num %}
+    <span class="page-link active">{{ num }}</span>
+    {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+    <a href="?page={{ num }}{% if search %}&q={{ search }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}" class="page-link">{{ num }}</a>
+    {% endif %}
+  {% endfor %}
+  {% if page_obj.has_next %}
+  <a href="?page={{ page_obj.next_page_number }}{% if search %}&q={{ search }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}" class="page-link">Next ›</a>
+  {% endif %}
+</div>
+{% endif %}
 {% endblock %}
 {% block extra_js %}
 <script>
@@ -620,6 +638,57 @@ document.addEventListener('click', function(e) {
       }
     }, 150);
   });
+})();
+</script>
+
+<script>
+/* ── Product list: auto-search + auto-category-filter (IIFE) ──────────── */
+(function () {
+  'use strict';
+  var searchInput    = document.getElementById('product-search');
+  var categorySelect = document.getElementById('product-category');
+  if (!searchInput && !categorySelect) return;
+
+  /* Remove the Filter submit button — auto-navigation replaces it for
+     JS-capable browsers. The form remains functional without JS. */
+  var form = document.getElementById('product-filter-form');
+  if (form) {
+    var submitBtn = form.querySelector('button[type="submit"]');
+    if (submitBtn) submitBtn.remove();
+  }
+
+  /* Build a URL for the product list with the current filter values.
+     Always omits `page` so pagination resets to 1 on every new filter. */
+  function buildUrl(q, category) {
+    var params = new URLSearchParams();
+    if (q && q.trim()) params.set('q', q.trim());
+    if (category) params.set('category', category);
+    var qs = params.toString();
+    return window.location.pathname + (qs ? '?' + qs : '');
+  }
+
+  /* Debounced text-input handler */
+  var debounceTimer = null;
+  if (searchInput) {
+    searchInput.addEventListener('input', function () {
+      clearTimeout(debounceTimer);
+      var q        = this.value;
+      var category = categorySelect ? categorySelect.value : '';
+      debounceTimer = setTimeout(function () {
+        window.location.href = buildUrl(q, category);
+      }, 350);
+    });
+  }
+
+  /* Immediate category-change handler */
+  if (categorySelect) {
+    categorySelect.addEventListener('change', function () {
+      clearTimeout(debounceTimer);   // cancel any pending text debounce
+      var q        = searchInput ? searchInput.value : '';
+      var category = this.value;
+      window.location.href = buildUrl(q, category);
+    });
+  }
 })();
 </script>
 {% endblock %}
