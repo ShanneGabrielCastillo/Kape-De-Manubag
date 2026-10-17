@@ -278,7 +278,7 @@
     </div>
     <div class="pfb-select-wrap">
       <i data-lucide="tags" class="btn-icon pfb-select-icon" aria-hidden="true"></i>
-      <select id="product-category" name="category" class="form-control form-select pfb-select">
+      <select id="category-filter" name="category" class="form-control form-select pfb-select">
         <option value="">All Categories</option>
         {% for cat in categories %}
         <option value="{{ cat.slug }}" {% if category_filter == cat.slug %}selected{% endif %}>{{ cat.name }}</option>
@@ -646,7 +646,7 @@ document.addEventListener('click', function(e) {
 (function () {
   'use strict';
   var searchInput    = document.getElementById('product-search');
-  var categorySelect = document.getElementById('product-category');
+  var categorySelect = document.getElementById('category-filter');
   if (!searchInput && !categorySelect) return;
 
   /* Remove the Filter submit button — auto-navigation replaces it for
