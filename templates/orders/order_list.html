@@ -343,9 +343,9 @@
 
 <!-- Status tabs -->
 <div class="status-filter-bar">
-  <a href="{% url 'orders:order_list' %}" class="btn btn-sm {% if not status_filter %}btn-primary{% else %}btn-outline{% endif %}">All Orders</a>
+  <a href="{% url 'orders:order_list' %}{% if search %}?q={{ search }}{% endif %}" class="btn btn-sm {% if not status_filter %}btn-primary{% else %}btn-outline{% endif %}">All Orders</a>
   {% for value, label in status_choices %}
-  <a href="?status={{ value }}" class="btn btn-sm {% if status_filter == value %}btn-primary{% else %}btn-outline{% endif %}">{{ label }}</a>
+  <a href="?status={{ value }}{% if search %}&q={{ search }}{% endif %}" class="btn btn-sm {% if status_filter == value %}btn-primary{% else %}btn-outline{% endif %}">{{ label }}</a>
   {% endfor %}
 </div>
 
@@ -355,11 +355,11 @@
     {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
     <div class="order-search-wrap">
       <i data-lucide="search" class="order-search-icon" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);pointer-events:none;z-index:1;width:1rem;height:1rem;color:#aaa" aria-hidden="true"></i>
-      <input type="text" name="q" value="{{ search }}" placeholder="Search order # or customer..." class="form-control order-search-input">
+      <input type="text" name="q" id="order-search" value="{{ search }}" placeholder="Search order # or customer..." class="form-control order-search-input">
     </div>
     <div class="order-filter-btns">
       <button type="submit" class="btn btn-primary"><i data-lucide="list-filter" class="btn-icon" aria-hidden="true"></i> Filter</button>
-      <a href="?{% if status_filter %}status={{ status_filter }}{% endif %}" class="btn btn-outline"><i data-lucide="rotate-ccw" class="btn-icon" aria-hidden="true"></i> Clear</a>
+      <a href="{% url 'orders:order_list' %}" class="btn btn-outline"><i data-lucide="rotate-ccw" class="btn-icon" aria-hidden="true"></i> Clear</a>
     </div>
   </form>
 </div>
@@ -1543,5 +1543,43 @@ function updateRowAfterGcashReject(orderId) {
   window.initResponsiveTables && window.initResponsiveTables();
   window.reinitLucide && window.reinitLucide();
 }
+</script>
+<script>
+// ── Phase 3: automatic text search (debounced) ─────────────────────────────
+// Self-contained IIFE scoped to the order-list search input only. Mirrors the
+// Phase 1/2 pattern. Returns early if the input is absent so the no-JS
+// <form method="get"> fallback keeps working. Removes the Filter button once
+// auto-search is wired up. Does NOT touch SSE/RealtimeConnection, the payment
+// modal, GCash verify, quickAdvance, receipt print, the status-tab links, the
+// Clear link, or the mobile card builder.
+(function () {
+  'use strict';
+  var input = document.getElementById('order-search');
+  if (!input) return;
+
+  // Auto-search replaces the Filter button for JS-capable browsers.
+  var btn = input.closest('form').querySelector('button[type="submit"]');
+  if (btn) btn.remove();
+
+  var timer = null;
+  input.addEventListener('input', function () {
+    clearTimeout(timer);
+    var val = this.value;
+    timer = setTimeout(function () {
+      var trimmed = val.trim();
+      var params = new URLSearchParams();
+      if (trimmed) params.set('q', trimmed);
+      // Preserve the currently selected status tab across a search change.
+      var current = new URLSearchParams(window.location.search);
+      var status = current.get('status');
+      if (status) params.set('status', status);
+      // Omit 'page' so a new search resets to page 1.
+      var qs = params.toString();
+      window.location.href = qs
+        ? window.location.pathname + '?' + qs
+        : window.location.pathname;
+    }, 350);
+  });
+})();
 </script>
 {% endblock %}

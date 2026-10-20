@@ -2474,3 +2474,128 @@ class PaidAtTimestampTests(TestCase):
         self.assertEqual(order.paid_at, snapshot_paid_at)
         self.assertEqual(order.is_paid, snapshot_is_paid)
         self.assertEqual(order.status, snapshot_status)
+
+
+class OrderListFilterTests(TestCase):
+    """Order Management list filtering: text search, status tabs, Clear reset,
+    pagination preservation, and access control. Covers Phase 3 auto-search +
+    Clear-reset. Does NOT exercise payment, status transitions, stock, or
+    realtime (those have their own test classes)."""
+
+    def setUp(self):
+        self.cashier = CustomUser.objects.create_user(
+            username='list_filter_cashier', password=PASSWORD, role='cashier',
+        )
+        self.client.force_login(self.cashier)
+        self.url = reverse('orders:order_list')
+
+    def _order(self, customer_name='Walk-in Customer', status='awaiting_payment',
+               table_number='', total=Decimal('100.00')):
+        return Order.objects.create(
+            customer_name=customer_name, status=status,
+            table_number=table_number, total=total,
+        )
+
+    def test_order_list_search_returns_matching_orders(self):
+        # Search by the auto-generated order number returns only that order.
+        a = self._order(customer_name='AlphaUnique')
+        b = self._order(customer_name='BetaUnique')
+        response = self.client.get(self.url, {'q': a.order_number})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'AlphaUnique')
+        self.assertNotContains(response, 'BetaUnique')
+
+    def test_order_list_search_by_customer_name(self):
+        # Search by customer name returns the matching order.
+        self._order(customer_name='Zelda Customer')
+        self._order(customer_name='Ganon Other')
+        response = self.client.get(self.url, {'q': 'Zelda'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Zelda Customer')
+        self.assertNotContains(response, 'Ganon Other')
+
+    def test_order_list_search_with_status_filter(self):
+        # q + status combine with AND: only orders matching both appear.
+        self._order(customer_name='AlphaPrep', status='preparing')
+        self._order(customer_name='AlphaReady', status='ready')
+        self._order(customer_name='BetaPrep', status='preparing')
+        response = self.client.get(self.url, {'q': 'Alpha', 'status': 'preparing'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'AlphaPrep')
+        self.assertNotContains(response, 'AlphaReady')  # wrong status
+        self.assertNotContains(response, 'BetaPrep')    # wrong name
+
+    def test_order_list_status_tab_all(self):
+        # No status filter: every order shown; All Orders tab is the active one.
+        self._order(customer_name='AllAwaiting', status='awaiting_payment')
+        self._order(customer_name='AllReady', status='ready')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'AllAwaiting')
+        self.assertContains(response, 'AllReady')
+        self.assertContains(response, 'btn btn-sm btn-primary">All Orders')
+
+    def test_order_list_status_tab_pending(self):
+        # awaiting_payment is the pending-payment state (no 'pending' status
+        # exists in STATUS_CHOICES). The tab filters to that status and is active.
+        self._order(customer_name='PendingCust', status='awaiting_payment')
+        self._order(customer_name='ReadyCust', status='ready')
+        response = self.client.get(self.url, {'status': 'awaiting_payment'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'PendingCust')
+        self.assertNotContains(response, 'ReadyCust')
+        self.assertContains(response, 'btn btn-sm btn-primary">Awaiting Payment')
+
+    def test_order_list_clear_resets_all(self):
+        # BUG-1 fix: with a filter active, the Clear link points to the bare
+        # order-list URL (no status / q / page), resetting everything.
+        self._order(customer_name='FooPrep', status='preparing')
+        response = self.client.get(self.url, {'status': 'preparing', 'q': 'Foo'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'value="Foo"')  # page is in a filtered state
+        bare = reverse('orders:order_list')
+        self.assertContains(response, f'href="{bare}"')  # Clear = bare URL
+
+    def test_order_list_pagination_preserves_query(self):
+        # 11 matching orders → 2 pages; the page-2 link keeps the search term.
+        for i in range(11):
+            self._order(customer_name=f'PagQ{i}')
+        response = self.client.get(self.url, {'q': 'PagQ'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'page=2&q=PagQ')
+
+    def test_order_list_pagination_preserves_status(self):
+        # 11 matching orders → 2 pages; the page-2 link keeps the status filter.
+        for i in range(11):
+            self._order(customer_name=f'PagS{i}', status='preparing')
+        response = self.client.get(self.url, {'status': 'preparing'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'page=2&status=preparing')
+
+    def test_order_list_empty_results(self):
+        # No matches render the empty state, not an error.
+        self._order(customer_name='RealOrder')
+        response = self.client.get(self.url, {'q': 'NoSuchOrderXYZ'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No orders found')
+        self.assertNotContains(response, 'RealOrder')
+
+    def test_order_list_out_of_range_page(self):
+        # get_page() falls back to the last page instead of 404.
+        self._order(customer_name='OnlyOne')
+        response = self.client.get(self.url, {'page': 9999})
+        self.assertEqual(response.status_code, 200)
+
+    def test_order_list_unauthorized(self):
+        # Unauthenticated → redirect to login (302).
+        self.client.logout()
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse('accounts:login'), response.url)
+
+    def test_order_list_cashier_can_access(self):
+        # A cashier reaches the page (200) with the search form rendered.
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Order Management')
+        self.assertContains(response, 'name="q"')
