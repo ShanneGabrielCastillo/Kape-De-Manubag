@@ -119,7 +119,29 @@ def inventory_log(request):
             Q(reason__icontains=q) |
             Q(notes__icontains=q)
         )
+
+    VALID_ACTIONS = [v for v, _ in InventoryLog.ACTION_CHOICES]
+    action_filter = request.GET.get('action', '').strip()
+    if action_filter not in VALID_ACTIONS:
+        action_filter = ''
+    if action_filter:
+        logs = logs.filter(action=action_filter)
+
+    VALID_SOURCES = [v for v, _ in InventoryLog.SOURCE_CHOICES]
+    source_filter = request.GET.get('source', '').strip()
+    if source_filter not in VALID_SOURCES:
+        source_filter = ''
+    if source_filter:
+        logs = logs.filter(source=source_filter)
+
     paginator = Paginator(logs, 10)
     page = request.GET.get('page', 1)
     logs_page = paginator.get_page(page)
-    return render(request, 'inventory/log.html', {'logs': logs_page, 'q': q})
+    return render(request, 'inventory/log.html', {
+        'logs': logs_page,
+        'q': q,
+        'action_filter': action_filter,
+        'source_filter': source_filter,
+        'action_choices': InventoryLog.ACTION_CHOICES,
+        'source_choices': InventoryLog.SOURCE_CHOICES,
+    })

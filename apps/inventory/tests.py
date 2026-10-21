@@ -427,3 +427,221 @@ class InventoryListFilterTests(TestCase):
             for p in Product.objects.all()
         }
         self.assertEqual(before, after)
+
+
+class InventoryLogActionSourceTests(TestCase):
+    """Phase 6C regression tests: action filter, source filter, combined."""
+
+    def setUp(self):
+        self.admin = CustomUser.objects.create_user(
+            username='inv_as_admin', password=PASSWORD, role='admin',
+        )
+        self.client.force_login(self.admin)
+        self.category = Category.objects.create(name='Drinks', slug='drinks-as')
+        self.coffee = Product.objects.create(
+            category=self.category, name='Iced Coffee', price='60.00',
+            stock_quantity=10,
+        )
+        self.tea = Product.objects.create(
+            category=self.category, name='Milk Tea', price='80.00',
+            stock_quantity=10,
+        )
+
+        # One log row per unique (action, source) combination used in tests.
+        self.log_restock = InventoryLog.objects.create(
+            product=self.coffee, action='restock', source='manual_adjustment',
+            reason='Restock', quantity_change=10, quantity_before=0,
+            quantity_after=10, performed_by=self.admin,
+        )
+        self.log_adjustment = InventoryLog.objects.create(
+            product=self.coffee, action='adjustment', source='inventory_update',
+            reason='Stock count fix', quantity_change=-1, quantity_before=10,
+            quantity_after=9, performed_by=self.admin,
+        )
+        self.log_sale = InventoryLog.objects.create(
+            product=self.tea, action='sale', source='customer_order',
+            reason='Order #KDM-001', quantity_change=-2, quantity_before=10,
+            quantity_after=8, performed_by=self.admin,
+        )
+        self.log_waste = InventoryLog.objects.create(
+            product=self.tea, action='waste', source='pos_order',
+            reason='Expired product', quantity_change=-1, quantity_before=8,
+            quantity_after=7, performed_by=self.admin,
+        )
+
+    # ── Single action filters ─────────────────────────────────────────────
+
+    def test_action_filter_restock(self):
+        response = self.client.get(reverse('inventory:log'), {'action': 'restock'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context['logs']), 1)
+        self.assertEqual(response.context['logs'][0].action, 'restock')
+
+    def test_action_filter_adjustment(self):
+        response = self.client.get(reverse('inventory:log'), {'action': 'adjustment'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context['logs']), 1)
+        self.assertEqual(response.context['logs'][0].action, 'adjustment')
+
+    def test_action_filter_sale(self):
+        response = self.client.get(reverse('inventory:log'), {'action': 'sale'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context['logs']), 1)
+        self.assertEqual(response.context['logs'][0].action, 'sale')
+
+    def test_action_filter_waste(self):
+        response = self.client.get(reverse('inventory:log'), {'action': 'waste'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context['logs']), 1)
+        self.assertEqual(response.context['logs'][0].action, 'waste')
+
+    # ── Single source filters ─────────────────────────────────────────────
+
+    def test_source_filter_manual_adjustment(self):
+        response = self.client.get(reverse('inventory:log'), {'source': 'manual_adjustment'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context['logs']), 1)
+        self.assertEqual(response.context['logs'][0].source, 'manual_adjustment')
+
+    def test_source_filter_customer_order(self):
+        response = self.client.get(reverse('inventory:log'), {'source': 'customer_order'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context['logs']), 1)
+        self.assertEqual(response.context['logs'][0].source, 'customer_order')
+
+    def test_source_filter_pos_order(self):
+        response = self.client.get(reverse('inventory:log'), {'source': 'pos_order'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context['logs']), 1)
+        self.assertEqual(response.context['logs'][0].source, 'pos_order')
+
+    def test_source_filter_inventory_update(self):
+        response = self.client.get(reverse('inventory:log'), {'source': 'inventory_update'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context['logs']), 1)
+        self.assertEqual(response.context['logs'][0].source, 'inventory_update')
+
+    # ── Combined filters ──────────────────────────────────────────────────
+
+    def test_action_and_source_combined(self):
+        """action=restock AND source=manual_adjustment → exactly one record."""
+        response = self.client.get(
+            reverse('inventory:log'),
+            {'action': 'restock', 'source': 'manual_adjustment'},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context['logs']), 1)
+        log = response.context['logs'][0]
+        self.assertEqual(log.action, 'restock')
+        self.assertEqual(log.source, 'manual_adjustment')
+
+    def test_text_search_with_action_filter(self):
+        """?q=coffee&action=restock returns only the coffee restock record."""
+        response = self.client.get(
+            reverse('inventory:log'),
+            {'q': 'coffee', 'action': 'restock'},
+        )
+        self.assertEqual(response.status_code, 200)
+        logs = list(response.context['logs'])
+        self.assertEqual(len(logs), 1)
+        self.assertEqual(logs[0].product.name, 'Iced Coffee')
+        self.assertEqual(logs[0].action, 'restock')
+
+    def test_all_three_filters_combined(self):
+        """All three filters combined produce the narrowest correct result set."""
+        response = self.client.get(
+            reverse('inventory:log'),
+            {'q': 'Expired', 'action': 'waste', 'source': 'pos_order'},
+        )
+        self.assertEqual(response.status_code, 200)
+        logs = list(response.context['logs'])
+        self.assertEqual(len(logs), 1)
+        self.assertEqual(logs[0].action, 'waste')
+        self.assertEqual(logs[0].source, 'pos_order')
+
+    # ── Invalid / empty values ────────────────────────────────────────────
+
+    def test_invalid_action_ignored(self):
+        """An unrecognised action value is ignored; all records return."""
+        response = self.client.get(
+            reverse('inventory:log'), {'action': 'invalid_garbage'},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context['logs']), 4)
+        self.assertEqual(response.context['action_filter'], '')
+
+    def test_invalid_source_ignored(self):
+        """An unrecognised source value is ignored; all records return."""
+        response = self.client.get(
+            reverse('inventory:log'), {'source': 'invalid_garbage'},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context['logs']), 4)
+        self.assertEqual(response.context['source_filter'], '')
+
+    def test_empty_action_returns_all(self):
+        """?action= (empty string) returns all records."""
+        response = self.client.get(reverse('inventory:log'), {'action': ''})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context['logs']), 4)
+
+    # ── Clear behaviour ───────────────────────────────────────────────────
+
+    def test_clear_resets_action_and_source(self):
+        """GET with no params returns all records (simulates Clear)."""
+        response = self.client.get(reverse('inventory:log'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context['logs']), 4)
+        self.assertEqual(response.context['action_filter'], '')
+        self.assertEqual(response.context['source_filter'], '')
+        self.assertEqual(response.context['q'], '')
+
+    # ── Pagination ────────────────────────────────────────────────────────
+
+    def test_pagination_preserves_action_filter(self):
+        """Pagination links carry the active action= param."""
+        # Create 12 more restock entries to force 2 pages (page size = 10).
+        for i in range(12):
+            InventoryLog.objects.create(
+                product=self.coffee, action='restock', source='manual_adjustment',
+                reason='Restock batch', quantity_change=1, quantity_before=i,
+                quantity_after=i + 1, performed_by=self.admin,
+            )
+        response = self.client.get(
+            reverse('inventory:log'), {'action': 'restock', 'page': '1'},
+        )
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn('action=restock', content)
+
+    def test_filter_resets_to_page_1(self):
+        """Applying a filter without a page param returns page 1."""
+        # Create 15 restock entries so there are multiple pages.
+        for i in range(15):
+            InventoryLog.objects.create(
+                product=self.coffee, action='restock', source='manual_adjustment',
+                reason='Restock batch', quantity_change=1, quantity_before=i,
+                quantity_after=i + 1, performed_by=self.admin,
+            )
+        # Request without explicit page param → must land on page 1.
+        response = self.client.get(
+            reverse('inventory:log'), {'action': 'restock'},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['logs'].number, 1)
+
+    # ── Read-only assertion ───────────────────────────────────────────────
+
+    def test_action_filter_does_not_create_records(self):
+        """Filtering must not create, modify, or delete any inventory records."""
+        before_count = InventoryLog.objects.count()
+        before_qtys  = {p.pk: p.stock_quantity for p in Product.objects.all()}
+
+        self.client.get(
+            reverse('inventory:log'),
+            {'action': 'restock', 'source': 'manual_adjustment', 'q': 'coffee'},
+        )
+
+        self.assertEqual(InventoryLog.objects.count(), before_count)
+        after_qtys = {p.pk: p.stock_quantity for p in Product.objects.all()}
+        self.assertEqual(before_qtys, after_qtys)

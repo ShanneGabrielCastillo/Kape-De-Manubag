@@ -6,10 +6,24 @@
   <a href="{% url 'inventory:list' %}" class="btn btn-outline">← Back to Inventory</a>
 </div>
 <div class="filter-bar">
-  <form method="get" style="display:flex;gap:10px;flex-wrap:wrap">
-    <input id="log-search" type="text" name="q" value="{{ q }}" placeholder="Search product, reason or notes..." class="form-control">
-    <button type="submit" class="btn btn-primary">Search</button>
-    {% if q %}<a href="{% url 'inventory:log' %}" class="btn btn-outline">Clear</a>{% endif %}
+  <form method="get" id="log-filter-form" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <input id="log-search" type="text" name="q" value="{{ q }}" placeholder="Search product, reason or notes..." class="form-control" style="min-width:200px;flex:1">
+    <select id="log-action-filter" name="action" class="form-control" style="min-width:140px">
+      <option value="">All Actions</option>
+      {% for val, label in action_choices %}
+        <option value="{{ val }}"{% if action_filter == val %} selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <select id="log-source-filter" name="source" class="form-control" style="min-width:160px">
+      <option value="">All Sources</option>
+      {% for val, label in source_choices %}
+        <option value="{{ val }}"{% if source_filter == val %} selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <button id="log-search-btn" type="submit" class="btn btn-primary">Search</button>
+    {% if q or action_filter or source_filter %}
+      <a href="{% url 'inventory:log' %}" class="btn btn-outline">Clear</a>
+    {% endif %}
   </form>
 </div>
 <div class="card">
@@ -32,7 +46,13 @@
           <td style="font-size:0.8rem;color:#aaa">{{ log.created_at|date:"M d, Y g:i A" }}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="9" style="text-align:center;color:#aaa;padding:32px">{% if q %}No inventory logs match "{{ q }}"{% else %}No inventory logs yet{% endif %}</td></tr>
+        <tr><td colspan="9" style="text-align:center;color:#aaa;padding:32px">
+          {% if q or action_filter or source_filter %}
+            No inventory logs match the current filters.
+          {% else %}
+            No inventory logs yet.
+          {% endif %}
+        </td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -42,17 +62,23 @@
 {% if logs.has_other_pages %}
 <div class="pagination">
   {% if logs.has_previous %}
-  <a href="?page={{ logs.previous_page_number }}{% if q %}&q={{ q }}{% endif %}" class="page-link">‹ Prev</a>
+  <a href="?page={{ logs.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if action_filter %}&action={{ action_filter }}{% endif %}{% if source_filter %}&source={{ source_filter }}{% endif %}"
+     data-page="{{ logs.previous_page_number }}"
+     class="page-link">‹ Prev</a>
   {% endif %}
   {% for num in logs.paginator.page_range %}
     {% if logs.number == num %}
     <span class="page-link active">{{ num }}</span>
     {% elif num > logs.number|add:'-3' and num < logs.number|add:'3' %}
-    <a href="?page={{ num }}{% if q %}&q={{ q }}{% endif %}" class="page-link">{{ num }}</a>
+    <a href="?page={{ num }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if action_filter %}&action={{ action_filter }}{% endif %}{% if source_filter %}&source={{ source_filter }}{% endif %}"
+       data-page="{{ num }}"
+       class="page-link">{{ num }}</a>
     {% endif %}
   {% endfor %}
   {% if logs.has_next %}
-  <a href="?page={{ logs.next_page_number }}{% if q %}&q={{ q }}{% endif %}" class="page-link">Next ›</a>
+  <a href="?page={{ logs.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if action_filter %}&action={{ action_filter }}{% endif %}{% if source_filter %}&source={{ source_filter }}{% endif %}"
+     data-page="{{ logs.next_page_number }}"
+     class="page-link">Next ›</a>
   {% endif %}
 </div>
 {% endif %}
@@ -62,24 +88,64 @@
 <script>
 (function () {
   'use strict';
-  var input = document.getElementById('log-search');
-  if (!input) return;
 
-  // Remove the Search button — auto-submit replaces it for JS-capable browsers.
-  var btn = input.closest('form').querySelector('button[type="submit"]');
-  if (btn) btn.remove();
+  var form   = document.getElementById('log-filter-form');
+  var input  = document.getElementById('log-search');
+  var action = document.getElementById('log-action-filter');
+  var source = document.getElementById('log-source-filter');
+  var btn    = document.getElementById('log-search-btn');
+
+  if (!form || !input || !action || !source) return;
+
+  // Hide submit button — auto-filter replaces it for JS-capable browsers.
+  // Using style.display so the DOM element still exists for fallback testing.
+  if (btn) btn.style.display = 'none';
 
   var timer = null;
+
+  /** Build a query string from current filter state, optionally overriding page. */
+  function buildParams(overrides) {
+    var p = new URLSearchParams();
+    var q = input.value.trim();
+    if (q)               p.set('q',      q);
+    if (action.value)    p.set('action', action.value);
+    if (source.value)    p.set('source', source.value);
+    if (overrides && overrides.page) p.set('page', overrides.page);
+    return p;
+  }
+
+  /** Navigate to the log page with current filters, resetting page to 1. */
+  function navigate() {
+    var params = buildParams();
+    var qs = params.toString();
+    window.location.href = window.location.pathname + (qs ? '?' + qs : '');
+  }
+
+  // Text input — 350 ms debounce.
   input.addEventListener('input', function () {
     clearTimeout(timer);
-    var val = this.value;
-    timer = setTimeout(function () {
-      var trimmed = val.trim();
-      window.location.href = trimmed
-        ? '?q=' + encodeURIComponent(trimmed)
-        : window.location.pathname;
-    }, 350);
+    timer = setTimeout(navigate, 350);
   });
+
+  // Dropdowns — immediate navigation, cancel pending debounce.
+  action.addEventListener('change', function () {
+    clearTimeout(timer);
+    navigate();
+  });
+  source.addEventListener('change', function () {
+    clearTimeout(timer);
+    navigate();
+  });
+
+  // Rewrite pagination href attributes to carry all active filters.
+  var pageLinks = document.querySelectorAll('a[data-page]');
+  pageLinks.forEach(function (link) {
+    var pageNum = link.getAttribute('data-page');
+    var params  = buildParams({ page: pageNum });
+    var qs      = params.toString();
+    link.href   = window.location.pathname + (qs ? '?' + qs : '');
+  });
+
 })();
 </script>
 {% endblock extra_js %}
