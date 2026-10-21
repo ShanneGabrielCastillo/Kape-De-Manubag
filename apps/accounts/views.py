@@ -7,6 +7,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.utils.encoding import force_bytes, force_str
@@ -121,8 +122,28 @@ def profile_view(request):
 @login_required
 @admin_required
 def staff_list(request):
-    staff = CustomUser.objects.filter(role__in=['admin', 'cashier', 'kitchen_staff']).order_by('-created_at')
-    return render(request, 'accounts/staff_list.html', {'staff': staff})
+    staff = CustomUser.objects.filter(
+        role__in=['admin', 'cashier', 'kitchen_staff']
+    ).order_by('-created_at')
+
+    q = request.GET.get('q', '').strip()
+    if q:
+        staff = staff.filter(
+            Q(username__icontains=q)
+            | Q(first_name__icontains=q)
+            | Q(last_name__icontains=q)
+            | Q(email__icontains=q)
+        )
+
+    role_filter = request.GET.get('role', '').strip()
+    if role_filter and role_filter in ['admin', 'cashier', 'kitchen_staff']:
+        staff = staff.filter(role=role_filter)
+
+    return render(request, 'accounts/staff_list.html', {
+        'staff': staff,
+        'search': q,
+        'role_filter': role_filter,
+    })
 
 
 @login_required

@@ -1138,3 +1138,142 @@ class SessionSecurityTests(TestCase):
         # (empty string means the Secure attribute was not set on the cookie).
         response = self._login()
         self.assertEqual(response.cookies['sessionid']['secure'], '')
+
+
+class StaffListSearchTests(TestCase):
+    """Regression tests for the Staff Accounts automatic search (Phase 6A)."""
+
+    def setUp(self):
+        self.admin = CustomUser.objects.create_user(
+            username='admin_user', password=PASSWORD,
+            first_name='Alice', last_name='Admin',
+            email='alice@example.com', role='admin',
+        )
+        self.cashier = CustomUser.objects.create_user(
+            username='cashier_user', password=PASSWORD,
+            first_name='Bob', last_name='Cash',
+            email='bob@example.com', role='cashier',
+        )
+        self.kitchen = CustomUser.objects.create_user(
+            username='kitchen_user', password=PASSWORD,
+            first_name='Carol', last_name='Kitchen',
+            email='carol@example.com', role='kitchen_staff',
+        )
+        self.customer = CustomUser.objects.create_user(
+            username='customer_user', password=PASSWORD,
+            role='customer',
+        )
+        self.url = reverse('accounts:staff_list')
+
+    def _get(self, params=None):
+        self.client.force_login(self.admin)
+        return self.client.get(self.url, params or {})
+
+    def test_staff_list_requires_login(self):
+        """Unauthenticated request redirects to login."""
+        response = self.client.get(self.url)
+        self.assertNotEqual(response.status_code, 200)
+
+    def test_staff_list_requires_admin(self):
+        """Non-admin (cashier) is denied."""
+        self.client.force_login(self.cashier)
+        response = self.client.get(self.url)
+        self.assertNotEqual(response.status_code, 200)
+
+    def test_staff_list_no_filters_returns_all_staff(self):
+        """No params returns all staff (admin + cashier + kitchen_staff, not customer)."""
+        response = self._get()
+        self.assertEqual(response.status_code, 200)
+        staff = response.context['staff']
+        usernames = [u.username for u in staff]
+        self.assertIn('admin_user', usernames)
+        self.assertIn('cashier_user', usernames)
+        self.assertIn('kitchen_user', usernames)
+        self.assertNotIn('customer_user', usernames)
+
+    def test_staff_list_search_by_username(self):
+        """?q=cashier_user returns only the matching user."""
+        response = self._get({'q': 'cashier_user'})
+        self.assertEqual(response.status_code, 200)
+        usernames = [u.username for u in response.context['staff']]
+        self.assertIn('cashier_user', usernames)
+        self.assertNotIn('admin_user', usernames)
+
+    def test_staff_list_search_by_first_name(self):
+        """?q=Carol matches by first_name."""
+        response = self._get({'q': 'Carol'})
+        self.assertEqual(response.status_code, 200)
+        usernames = [u.username for u in response.context['staff']]
+        self.assertIn('kitchen_user', usernames)
+        self.assertNotIn('admin_user', usernames)
+
+    def test_staff_list_search_by_email(self):
+        """?q=alice@example.com matches by email."""
+        response = self._get({'q': 'alice@example.com'})
+        self.assertEqual(response.status_code, 200)
+        usernames = [u.username for u in response.context['staff']]
+        self.assertIn('admin_user', usernames)
+        self.assertNotIn('cashier_user', usernames)
+
+    def test_staff_list_search_case_insensitive(self):
+        """Search is case-insensitive (icontains)."""
+        response = self._get({'q': 'ALICE'})
+        self.assertEqual(response.status_code, 200)
+        usernames = [u.username for u in response.context['staff']]
+        self.assertIn('admin_user', usernames)
+
+    def test_staff_list_search_no_results(self):
+        """?q=zzznomatch returns empty list with 200."""
+        response = self._get({'q': 'zzznomatch'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(list(response.context['staff'])), 0)
+
+    def test_staff_list_role_filter_admin(self):
+        """?role=admin returns only admin-role staff."""
+        response = self._get({'role': 'admin'})
+        self.assertEqual(response.status_code, 200)
+        for u in response.context['staff']:
+            self.assertEqual(u.role, 'admin')
+
+    def test_staff_list_role_filter_cashier(self):
+        """?role=cashier returns only cashier-role staff."""
+        response = self._get({'role': 'cashier'})
+        self.assertEqual(response.status_code, 200)
+        for u in response.context['staff']:
+            self.assertEqual(u.role, 'cashier')
+
+    def test_staff_list_combined_search_and_role(self):
+        """?q=Bob&role=cashier returns intersection."""
+        response = self._get({'q': 'Bob', 'role': 'cashier'})
+        self.assertEqual(response.status_code, 200)
+        usernames = [u.username for u in response.context['staff']]
+        self.assertIn('cashier_user', usernames)
+        self.assertNotIn('admin_user', usernames)
+
+    def test_staff_list_clear_resets_filters(self):
+        """Bare URL (no params) returns all staff."""
+        response = self._get()
+        self.assertEqual(response.status_code, 200)
+        self.assertGreaterEqual(len(list(response.context['staff'])), 3)
+
+    def test_staff_list_whitespace_search(self):
+        """?q=+%20 (whitespace only) is stripped and returns all staff."""
+        response = self._get({'q': '   '})
+        self.assertEqual(response.status_code, 200)
+        self.assertGreaterEqual(len(list(response.context['staff'])), 3)
+
+    def test_staff_list_invalid_role_ignored(self):
+        """?role=customer is rejected (not in allowlist) — all staff returned."""
+        response = self._get({'role': 'customer'})
+        self.assertEqual(response.status_code, 200)
+        # customer_user must NOT appear (view always restricts to staff roles)
+        usernames = [u.username for u in response.context['staff']]
+        self.assertNotIn('customer_user', usernames)
+        # but the three staff should still appear
+        self.assertGreaterEqual(len(usernames), 3)
+
+    def test_staff_list_search_does_not_modify_records(self):
+        """GET search must not modify any user records."""
+        count_before = CustomUser.objects.count()
+        self._get({'q': 'admin_user', 'role': 'admin'})
+        self.assertEqual(CustomUser.objects.count(), count_before)

@@ -5,6 +5,24 @@
   <div><h1 class="page-title">Staff Accounts</h1><p class="page-subtitle">Manage your team</p></div>
   <a href="{% url 'accounts:staff_create' %}" class="btn btn-primary">+ Add Staff</a>
 </div>
+<div class="filter-bar" style="margin-bottom:1rem;">
+  <form method="get" class="staff-filter-form" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+    <input type="text" name="q" id="staff-search"
+           value="{{ search }}"
+           placeholder="Search by name, username, or email…"
+           class="form-control" style="max-width:320px;">
+    <select name="role" id="staff-role" class="form-control" style="max-width:160px;">
+      <option value="">All Roles</option>
+      <option value="admin" {% if role_filter == 'admin' %}selected{% endif %}>Admin</option>
+      <option value="cashier" {% if role_filter == 'cashier' %}selected{% endif %}>Cashier</option>
+      <option value="kitchen_staff" {% if role_filter == 'kitchen_staff' %}selected{% endif %}>Kitchen Staff</option>
+    </select>
+    {% if search or role_filter %}
+    <a href="{% url 'accounts:staff_list' %}" class="btn btn-outline btn-sm">Clear</a>
+    {% endif %}
+    <button type="submit" class="btn btn-primary btn-sm" id="staff-search-btn">Search</button>
+  </form>
+</div>
 <div class="card">
   <div class="table-wrapper">
     <table class="table-staff" data-mobile-cards="true">
@@ -33,7 +51,15 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="6" style="text-align:center;color:#aaa;padding:32px">No staff accounts yet.</td></tr>
+        <tr>
+          <td colspan="6" style="text-align:center;color:#aaa;padding:32px;">
+            {% if search or role_filter %}
+            No staff accounts match the current search.
+            {% else %}
+            No staff accounts yet.
+            {% endif %}
+          </td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
@@ -57,5 +83,42 @@ async function toggleStaff(url, isActive) {
   if(d.success){showToast(`Staff ${d.status}`, 'success'); setTimeout(()=>location.reload(),1000);}
   else { showToast(d.error || 'Action failed', 'error'); }
 }
+</script>
+<script>
+(function () {
+  'use strict';
+  var searchInput = document.getElementById('staff-search');
+  var roleSelect  = document.getElementById('staff-role');
+  if (!searchInput) return;
+
+  // Hide the Search button — auto-submit replaces it for JS browsers
+  var btn = document.getElementById('staff-search-btn');
+  if (btn) btn.style.display = 'none';
+
+  function buildUrl() {
+    var params = new URLSearchParams();
+    var q = searchInput.value.trim();
+    if (q) params.set('q', q);
+    var role = roleSelect ? roleSelect.value : '';
+    if (role) params.set('role', role);
+    var qs = params.toString();
+    return window.location.pathname + (qs ? '?' + qs : '');
+  }
+
+  var timer = null;
+  searchInput.addEventListener('input', function () {
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      window.location.href = buildUrl();
+    }, 350);
+  });
+
+  if (roleSelect) {
+    roleSelect.addEventListener('change', function () {
+      clearTimeout(timer);
+      window.location.href = buildUrl();
+    });
+  }
+})();
 </script>
 {% endblock %}
