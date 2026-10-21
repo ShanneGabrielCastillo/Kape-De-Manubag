@@ -572,14 +572,16 @@ class ActivityLogViewTests(TestCase):
         logs = list(response.context['logs'])
         self.assertTrue(len(logs) >= 1)
 
-    def test_pagination_50_per_page(self):
+    def test_pagination_10_per_page(self):
+        # The view uses Paginator(qs, 10) — 10 entries per page.
+        # (Renamed from test_pagination_50_per_page which had incorrect assertions.)
         self.client.force_login(self.admin)
-        # Create 55 entries.
-        for i in range(55):
+        # Create 15 entries so page 2 has exactly 5.
+        for i in range(15):
             log_action(self.admin, 'settings.update', detail=f'entry {i}')
         response = self.client.get('/audit/')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.context['logs']), 50)
+        self.assertEqual(len(response.context['logs']), 10)
         response2 = self.client.get('/audit/', {'page': '2'})
         self.assertEqual(response2.status_code, 200)
         self.assertEqual(len(response2.context['logs']), 5)
@@ -725,3 +727,226 @@ class RegressionTests(TestCase):
         )
         self.product.refresh_from_db()
         self.assertEqual(self.product.stock_quantity, initial_stock - 3)
+
+
+# ── Activity Log Filter Tests ─────────────────────────────────────────────────
+
+
+class ActivityLogFilterTests(TestCase):
+    """
+    Regression tests for the automatic search and filter improvements added in
+    Phase 4.  Covers cases not already exercised by ActivityLogViewTests.
+    """
+
+    def setUp(self):
+        import datetime as dt
+        self.admin   = _create_user('flt_admin',   'admin')
+        self.cashier = _create_user('flt_cashier', 'cashier')
+        self.category_obj = Category.objects.create(name='Drinks', slug='drinks-flt')
+        # Two distinct AuditLog entries used across several tests.
+        log_action(self.admin,   'settings.update', detail='alpha_entry',
+                   object_type='SystemSetting', object_repr='System Settings')
+        log_action(self.cashier, 'category.create', self.category_obj,
+                   detail='bravo_entry')
+
+    # ── date-only combinations ────────────────────────────────────────────────
+
+    def test_date_from_only(self):
+        """date_from with no date_to returns entries on or after that date."""
+        self.client.force_login(self.admin)
+        from django.utils import timezone as tz
+        today = tz.localdate().isoformat()
+        response = self.client.get('/audit/', {'date_from': today})
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context.get('date_error'))
+        # Both entries were just created so they must appear.
+        self.assertGreaterEqual(len(response.context['logs']), 2)
+
+    def test_date_to_only(self):
+        """date_to with no date_from returns entries on or before that date."""
+        self.client.force_login(self.admin)
+        from django.utils import timezone as tz
+        today = tz.localdate().isoformat()
+        response = self.client.get('/audit/', {'date_to': today})
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context.get('date_error'))
+        self.assertGreaterEqual(len(response.context['logs']), 2)
+
+    # ── combined filters ──────────────────────────────────────────────────────
+
+    def test_multiple_filters_combined(self):
+        """q + category + user together narrow the result to the correct entry."""
+        self.client.force_login(self.admin)
+        # Only the cashier's entry matches category=categories AND user=cashier pk.
+        response = self.client.get('/audit/', {
+            'q': 'bravo_entry',
+            'category': 'categories',
+            'user': str(self.cashier.pk),
+        })
+        self.assertEqual(response.status_code, 200)
+        logs = list(response.context['logs'])
+        self.assertEqual(len(logs), 1)
+        self.assertEqual(logs[0].user, self.cashier)
+        self.assertEqual(logs[0].detail, 'bravo_entry')
+
+    # ── whitespace search ─────────────────────────────────────────────────────
+
+    def test_whitespace_only_search(self):
+        """A query consisting only of whitespace is treated as no search."""
+        self.client.force_login(self.admin)
+        response = self.client.get('/audit/', {'q': '   '})
+        self.assertEqual(response.status_code, 200)
+        # The view strips whitespace → empty → no search filter applied.
+        self.assertGreaterEqual(len(response.context['logs']), 2)
+
+    # ── invalid / inverted date ranges ───────────────────────────────────────
+
+    def test_invalid_date_value(self):
+        """A non-date string in date_from returns 200 and surfaces date_error."""
+        self.client.force_login(self.admin)
+        response = self.client.get('/audit/', {'date_from': 'not-a-date'})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context.get('date_error'))
+
+    def test_start_date_later_than_end_date(self):
+        """date_from > date_to returns 200 and surfaces date_error."""
+        self.client.force_login(self.admin)
+        response = self.client.get('/audit/', {
+            'date_from': '2099-12-31',
+            'date_to':   '2000-01-01',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context.get('date_error'))
+
+    # ── clear / empty filters ─────────────────────────────────────────────────
+
+    def test_empty_filters_return_all(self):
+        """No params → all AuditLog entries returned (up to page size)."""
+        self.client.force_login(self.admin)
+        response = self.client.get('/audit/')
+        self.assertEqual(response.status_code, 200)
+        self.assertGreaterEqual(len(response.context['logs']), 2)
+        self.assertFalse(response.context.get('date_error'))
+
+    def test_clear_link_resets_to_all(self):
+        """GET bare /audit/ after filters returns full result and no error."""
+        self.client.force_login(self.admin)
+        # First load with filters.
+        self.client.get('/audit/', {'q': 'alpha_entry', 'category': 'system'})
+        # Then the Clear link — bare URL.
+        response = self.client.get('/audit/')
+        self.assertEqual(response.status_code, 200)
+        self.assertGreaterEqual(len(response.context['logs']), 2)
+        self.assertFalse(response.context.get('date_error'))
+
+    # ── pagination filter preservation ───────────────────────────────────────
+
+    def _create_bulk_entries(self, action, count, user=None):
+        u = user or self.admin
+        for i in range(count):
+            log_action(u, action, detail=f'bulk entry {i}',
+                       object_type='SystemSetting', object_repr='System Settings')
+
+    def test_pagination_preserves_text_filter(self):
+        """Page 2 with q=<term> still returns only matching entries."""
+        self.client.force_login(self.admin)
+        AuditLog.objects.all().delete()
+        # Create 15 entries matching 'pag_text'.
+        for i in range(15):
+            log_action(self.admin, 'settings.update', detail=f'pag_text entry {i}',
+                       object_type='SystemSetting', object_repr='System Settings')
+        response = self.client.get('/audit/', {'q': 'pag_text', 'page': '2'})
+        self.assertEqual(response.status_code, 200)
+        logs = list(response.context['logs'])
+        self.assertTrue(all('pag_text' in e.detail for e in logs))
+
+    def test_pagination_preserves_category_filter(self):
+        """Page 2 with category=system still returns only system entries."""
+        self.client.force_login(self.admin)
+        AuditLog.objects.all().delete()
+        self._create_bulk_entries('settings.update', 15)
+        response = self.client.get('/audit/', {'category': 'system', 'page': '2'})
+        self.assertEqual(response.status_code, 200)
+        logs = list(response.context['logs'])
+        self.assertTrue(all(e.action == 'settings.update' for e in logs))
+
+    def test_pagination_preserves_user_filter(self):
+        """Page 2 with user=<pk> still returns only that user's entries."""
+        self.client.force_login(self.admin)
+        AuditLog.objects.all().delete()
+        self._create_bulk_entries('settings.update', 15)
+        response = self.client.get('/audit/', {
+            'user': str(self.admin.pk), 'page': '2',
+        })
+        self.assertEqual(response.status_code, 200)
+        logs = list(response.context['logs'])
+        self.assertTrue(all(e.user == self.admin for e in logs))
+
+    def test_pagination_preserves_date_filter(self):
+        """Page 2 with date_from/date_to still returns in-range entries."""
+        self.client.force_login(self.admin)
+        AuditLog.objects.all().delete()
+        self._create_bulk_entries('settings.update', 15)
+        from django.utils import timezone as tz
+        today = tz.localdate().isoformat()
+        response = self.client.get('/audit/', {
+            'date_from': today, 'date_to': today, 'page': '2',
+        })
+        self.assertEqual(response.status_code, 200)
+        # All entries were created today; page 2 should exist and have entries.
+        logs = list(response.context['logs'])
+        self.assertGreater(len(logs), 0)
+
+    def test_filter_resets_pagination(self):
+        """A filter URL without a page param defaults to page 1."""
+        self.client.force_login(self.admin)
+        AuditLog.objects.all().delete()
+        self._create_bulk_entries('settings.update', 15)
+        response = self.client.get('/audit/', {'category': 'system'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['logs'].number, 1)
+
+    def test_pagination_links_contain_filter_params(self):
+        """When paginated, the rendered HTML contains filter params in page links."""
+        self.client.force_login(self.admin)
+        AuditLog.objects.all().delete()
+        self._create_bulk_entries('settings.update', 15)
+        response = self.client.get('/audit/', {'category': 'system'})
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        # The pagination links should carry the category param.
+        self.assertIn('category=system', content)
+
+    # ── URL encoding ─────────────────────────────────────────────────────────
+
+    def test_url_encoding_space_in_search(self):
+        """A search term with a space is correctly decoded by the view."""
+        self.client.force_login(self.admin)
+        # Django test client encodes params automatically.
+        response = self.client.get('/audit/', {'q': 'alpha entry'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['q'], 'alpha entry')
+
+    def test_url_encoding_special_chars(self):
+        """Special chars in search do not crash the view."""
+        self.client.force_login(self.admin)
+        response = self.client.get('/audit/', {'q': 'order&cancel=1'})
+        self.assertEqual(response.status_code, 200)
+
+    # ── record immutability ───────────────────────────────────────────────────
+
+    def test_filter_does_not_create_audit_records(self):
+        """Applying filters must not change AuditLog.objects.count()."""
+        self.client.force_login(self.admin)
+        before = AuditLog.objects.count()
+        self.client.get('/audit/', {'q': 'alpha_entry', 'category': 'system'})
+        after = AuditLog.objects.count()
+        self.assertEqual(before, after)
+
+    # ── access control under filter params ───────────────────────────────────
+
+    def test_cashier_filter_request_still_denied(self):
+        """A cashier GET /audit/?q=x must be denied (302 or 403)."""
+        self.client.force_login(self.cashier)
+        response = self.client.get('/audit/', {'q': 'x'})
+        self.assertIn(response.status_code, [302, 403])

@@ -8,6 +8,8 @@ Access is enforced server-side by @admin_required. Cashiers who navigate
 directly to /audit/ are redirected to the dashboard — hiding the sidebar
 link is not sufficient on its own.
 """
+import datetime
+
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Q
@@ -116,10 +118,34 @@ def activity_log(request):
             qs = qs.filter(user_id=int(user_id))
         except (ValueError, TypeError):
             pass
+
+    # Parse date strings; discard unparseable values and surface an error.
+    parsed_date_from = None
+    parsed_date_to = None
+    date_error = None
+
     if date_from:
-        qs = qs.filter(created_at__date__gte=date_from)
+        try:
+            parsed_date_from = datetime.date.fromisoformat(date_from)
+        except ValueError:
+            date_error = 'Invalid start date format.'
+            date_from = ''
+
     if date_to:
-        qs = qs.filter(created_at__date__lte=date_to)
+        try:
+            parsed_date_to = datetime.date.fromisoformat(date_to)
+        except ValueError:
+            if date_error is None:
+                date_error = 'Invalid end date format.'
+            date_to = ''
+
+    if parsed_date_from and parsed_date_to and parsed_date_from > parsed_date_to:
+        date_error = 'Start date cannot be later than end date.'
+    else:
+        if parsed_date_from:
+            qs = qs.filter(created_at__date__gte=parsed_date_from)
+        if parsed_date_to:
+            qs = qs.filter(created_at__date__lte=parsed_date_to)
 
     paginator = Paginator(qs, 10)
     page_number = request.GET.get('page', 1)
@@ -148,4 +174,5 @@ def activity_log(request):
         'categories': list(ACTION_CATEGORIES.keys()),
         'staff_users': staff_users,
         'total_count': paginator.count,
+        'date_error': date_error or '',
     })

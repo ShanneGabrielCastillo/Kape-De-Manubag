@@ -20,8 +20,8 @@
 
     {# Row 1: Search — full width on all screen sizes #}
     <div class="audit-filter-full">
-      <label class="audit-filter-label">Search</label>
-      <input type="text" name="q" value="{{ q }}"
+      <label class="audit-filter-label" for="log-search">Search</label>
+      <input type="text" id="log-search" name="q" value="{{ q }}"
              placeholder="Username, action, record, details…"
              class="form-control">
     </div>
@@ -29,8 +29,8 @@
     {# Row 2: Category + User — side by side on mobile and desktop #}
     <div class="audit-filter-row">
       <div class="audit-filter-col">
-        <label class="audit-filter-label">Category</label>
-        <select name="category" class="form-control">
+        <label class="audit-filter-label" for="log-category">Category</label>
+        <select id="log-category" name="category" class="form-control">
           <option value="">All Categories</option>
           {% for cat in categories %}
           <option value="{{ cat }}" {% if category == cat %}selected{% endif %}>
@@ -40,8 +40,8 @@
         </select>
       </div>
       <div class="audit-filter-col">
-        <label class="audit-filter-label">User</label>
-        <select name="user" class="form-control">
+        <label class="audit-filter-label" for="log-user">User</label>
+        <select id="log-user" name="user" class="form-control">
           <option value="">All Users</option>
           {% for staff in staff_users %}
           <option value="{{ staff.pk }}" {% if user_id == staff.pk|stringformat:"s" %}selected{% endif %}>
@@ -55,14 +55,22 @@
     {# Row 3: From + To — side by side on mobile and desktop #}
     <div class="audit-filter-row">
       <div class="audit-filter-col">
-        <label class="audit-filter-label">From</label>
-        <input type="date" name="date_from" value="{{ date_from }}" class="form-control">
+        <label class="audit-filter-label" for="log-date-from">From</label>
+        <input type="date" id="log-date-from" name="date_from" value="{{ date_from }}" class="form-control">
       </div>
       <div class="audit-filter-col">
-        <label class="audit-filter-label">To</label>
-        <input type="date" name="date_to" value="{{ date_to }}" class="form-control">
+        <label class="audit-filter-label" for="log-date-to">To</label>
+        <input type="date" id="log-date-to" name="date_to" value="{{ date_to }}" class="form-control">
       </div>
     </div>
+
+    {# Server-rendered date range error (no-JS fallback) #}
+    {% if date_error %}
+    <div role="alert" style="color:var(--red-accent,#c0392b);font-size:0.8rem;grid-column:1/-1">{{ date_error }}</div>
+    {% endif %}
+
+    {# JS-driven date range error — hidden until needed by the IIFE #}
+    <div id="date-range-error" role="alert" style="display:none;color:var(--red-accent,#c0392b);font-size:0.8rem;grid-column:1/-1">Start date cannot be after end date.</div>
 
     {# Row 4: Buttons — right-aligned #}
     <div class="audit-filter-actions">
@@ -323,11 +331,13 @@
 </div>
 
 {# ── Pagination ── #}
+{# data-page attributes are read by the JS IIFE to rewrite hrefs with URLSearchParams.
+   The hand-built href strings are a no-JS fallback — they work for ASCII-only queries. #}
 {% if logs.has_other_pages %}
 <div class="pagination">
   {% if logs.has_previous %}
   <a href="?page={{ logs.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if user_id %}&user={{ user_id }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}"
-     class="page-link">‹ Prev</a>
+     class="page-link" data-page="{{ logs.previous_page_number }}">‹ Prev</a>
   {% endif %}
 
   {% for num in logs.paginator.page_range %}
@@ -335,15 +345,120 @@
     <span class="page-link active">{{ num }}</span>
     {% elif num > logs.number|add:"-3" and num < logs.number|add:"3" %}
     <a href="?page={{ num }}{% if q %}&q={{ q }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if user_id %}&user={{ user_id }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}"
-       class="page-link">{{ num }}</a>
+       class="page-link" data-page="{{ num }}">{{ num }}</a>
     {% endif %}
   {% endfor %}
 
   {% if logs.has_next %}
   <a href="?page={{ logs.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if user_id %}&user={{ user_id }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}"
-     class="page-link">Next ›</a>
+     class="page-link" data-page="{{ logs.next_page_number }}">Next ›</a>
   {% endif %}
 </div>
 {% endif %}
 
 {% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  'use strict';
+
+  var search   = document.getElementById('log-search');
+  var category = document.getElementById('log-category');
+  var user     = document.getElementById('log-user');
+  var dateFrom = document.getElementById('log-date-from');
+  var dateTo   = document.getElementById('log-date-to');
+  var dateErr  = document.getElementById('date-range-error');
+
+  // Guard: if the search input is missing the page likely changed structure.
+  if (!search) return;
+
+  // Remove the Filter button — auto-submit replaces it for JS-capable browsers.
+  // The Clear link is a plain <a> and is intentionally left untouched.
+  var form = search.closest('form');
+  var btn = form && form.querySelector('button[type="submit"]');
+  if (btn) btn.remove();
+
+  // Build a URL that encodes all current filter values.
+  // page is omitted by default (resets to page 1 on any filter change).
+  function buildUrl(pageNum) {
+    var params = new URLSearchParams();
+    var q = search.value.trim();
+    if (q) params.set('q', q);
+    var cat = category ? category.value : '';
+    if (cat) params.set('category', cat);
+    var usr = user ? user.value : '';
+    if (usr) params.set('user', usr);
+    var df = dateFrom ? dateFrom.value : '';
+    var dt = dateTo   ? dateTo.value   : '';
+    if (df) params.set('date_from', df);
+    if (dt) params.set('date_to',   dt);
+    if (pageNum) params.set('page', String(pageNum));
+    var qs = params.toString();
+    return window.location.pathname + (qs ? '?' + qs : '');
+  }
+
+  // Validate the date range.  Returns true when navigation is safe.
+  function validateDates() {
+    var df = dateFrom ? dateFrom.value : '';
+    var dt = dateTo   ? dateTo.value   : '';
+    if (df && dt && df > dt) {
+      if (dateErr) dateErr.style.display = 'block';
+      return false;
+    }
+    if (dateErr) dateErr.style.display = 'none';
+    return true;
+  }
+
+  function navigate() {
+    if (!validateDates()) return;
+    window.location.href = buildUrl();
+  }
+
+  var timer = null;
+
+  // Text search — debounced 350 ms.
+  search.addEventListener('input', function () {
+    clearTimeout(timer);
+    timer = setTimeout(navigate, 350);
+  });
+
+  // Category and user — immediate.
+  if (category) {
+    category.addEventListener('change', function () {
+      clearTimeout(timer);
+      navigate();
+    });
+  }
+  if (user) {
+    user.addEventListener('change', function () {
+      clearTimeout(timer);
+      navigate();
+    });
+  }
+
+  // Date inputs — navigate when both dates form a valid range,
+  // or when only one date is provided, or when both are cleared.
+  if (dateFrom) {
+    dateFrom.addEventListener('change', function () {
+      clearTimeout(timer);
+      navigate();
+    });
+  }
+  if (dateTo) {
+    dateTo.addEventListener('change', function () {
+      clearTimeout(timer);
+      navigate();
+    });
+  }
+
+  // Rewrite pagination hrefs using URLSearchParams so filter values are
+  // correctly URL-encoded (fixes the hand-built encoding bug for special chars).
+  document.querySelectorAll('a.page-link[data-page]').forEach(function (a) {
+    var pageNum = a.getAttribute('data-page');
+    if (pageNum) a.href = buildUrl(parseInt(pageNum, 10));
+  });
+
+})();
+</script>
+{% endblock extra_js %}
