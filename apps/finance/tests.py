@@ -840,7 +840,20 @@ class FinanceHistoryFilterTests(TestCase):
         self.client.get(self.url, {'q': '2024-11', 'month': '2024-11'})
         self.assertEqual(DailyFinance.objects.count(), count_before)
 
-    # 16. Filter chips appear when filters are active
+    # 16. Non-overlapping combined filter returns empty queryset
+    def test_history_combined_no_overlap_returns_empty(self):
+        """
+        AND logic: q that matches only December + month=2024-11 → empty result.
+        This is the direct regression test for BUG-2's AND logic.
+        """
+        # 'december' substring only appears in DEC_1 (2024-12-01),
+        # but month=2024-11 restricts to November — intersection is empty.
+        response = self.client.get(self.url, {'q': '2024-12', 'month': '2024-11'})
+        self.assertEqual(response.status_code, 200)
+        records = list(response.context['records'])
+        self.assertEqual(len(records), 0)
+
+    # 17. Filter chips appear when filters are active
     def test_history_chips_shown_when_filters_active(self):
         """When q or month is set, response HTML contains the chip markup."""
         response = self.client.get(self.url, {'q': '2024-11'})

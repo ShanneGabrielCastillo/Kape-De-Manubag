@@ -159,10 +159,12 @@
 
   if (!search) return;  // no-JS fallback untouched
 
-  // Remove Filter button — auto-submit replaces it for JS browsers
+  // Hide Filter button — auto-submit replaces it for JS browsers
+  // Use display:none (reversible) rather than remove() so the no-JS fallback
+  // survives bfcache hits and partial JS execution.
   var form = search.closest('form');
   var btn = form && form.querySelector('button[type="submit"]');
-  if (btn) btn.remove();
+  if (btn) btn.style.display = 'none';
 
   function buildUrl() {
     var params = new URLSearchParams();
