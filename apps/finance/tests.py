@@ -679,3 +679,176 @@ class FinanceOrdersAgreementTest(TestCase):
         make_order(TODAY, payment_method='gcash', total=Decimal('999.00'))
         rec = make_finance(TODAY, previous_coh=Decimal('0.00'))
         self.assertEqual(rec.cash_sales, Decimal('200.00'))
+
+
+# ── 7. Finance History Filter Tests (Phase 5) ─────────────────────────────────
+
+class FinanceHistoryFilterTests(TestCase):
+    """
+    Regression tests for Finance History automatic search and month filtering.
+    Covers text search, month picker, combined filters, clear, pagination,
+    edge cases, and read-only guarantees.
+    """
+
+    # Dates used across tests: two in November 2024, one in December 2024
+    NOV_1  = datetime.date(2024, 11, 1)
+    NOV_15 = datetime.date(2024, 11, 15)
+    DEC_1  = datetime.date(2024, 12, 1)
+
+    def setUp(self):
+        self.user = make_user(username='cashier_hist', role='cashier')
+        self.client = Client()
+        self.client.login(username='cashier_hist', password='testpass123')
+        self.url = reverse('finance:history')
+
+        # Create three minimal DailyFinance records across two months
+        self.nov1  = make_finance(self.NOV_1,  previous_coh=Decimal('100.00'))
+        self.nov15 = make_finance(self.NOV_15, previous_coh=Decimal('200.00'))
+        self.dec1  = make_finance(self.DEC_1,  previous_coh=Decimal('300.00'))
+
+    # 1. Login requirement
+    def test_history_requires_login(self):
+        """Unauthenticated GET must redirect (302)."""
+        self.client.logout()
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 302)
+
+    # 2. Role access
+    def test_history_cashier_can_access(self):
+        """Cashier role can load Finance History (200)."""
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+
+    # 3. Text search
+    def test_history_text_search(self):
+        """?q=2024-11 returns only November 2024 records."""
+        response = self.client.get(self.url, {'q': '2024-11'})
+        self.assertEqual(response.status_code, 200)
+        records = list(response.context['records'])
+        dates = [r.date for r in records]
+        self.assertIn(self.NOV_1,  dates)
+        self.assertIn(self.NOV_15, dates)
+        self.assertNotIn(self.DEC_1, dates)
+
+    # 4. Month filter
+    def test_history_month_filter(self):
+        """?month=2024-11 returns only November 2024 records."""
+        response = self.client.get(self.url, {'month': '2024-11'})
+        self.assertEqual(response.status_code, 200)
+        records = list(response.context['records'])
+        dates = [r.date for r in records]
+        self.assertIn(self.NOV_1,  dates)
+        self.assertIn(self.NOV_15, dates)
+        self.assertNotIn(self.DEC_1, dates)
+
+    # 5. Combined text + month
+    def test_history_combined_filters(self):
+        """?q=15&month=2024-11 returns only the Nov 15 record."""
+        response = self.client.get(self.url, {'q': '15', 'month': '2024-11'})
+        self.assertEqual(response.status_code, 200)
+        records = list(response.context['records'])
+        dates = [r.date for r in records]
+        self.assertIn(self.NOV_15, dates)
+        self.assertNotIn(self.NOV_1, dates)
+        self.assertNotIn(self.DEC_1, dates)
+
+    # 6. Switching month preserves search in URL/context
+    def test_history_switching_month_preserves_search_in_url(self):
+        """GET with q and month both set → 200 and correct records in context."""
+        response = self.client.get(self.url, {'q': '2024-11', 'month': '2024-11'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['search'], '2024-11')
+        self.assertEqual(response.context['month_filter'], '2024-11')
+
+    # 7. Typing preserves selected month in URL/context
+    def test_history_typing_preserves_month_in_url(self):
+        """GET with q and month → 200, both values reflected in context."""
+        response = self.client.get(self.url, {'q': '2024-12', 'month': '2024-12'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['search'], '2024-12')
+        self.assertEqual(response.context['month_filter'], '2024-12')
+        records = list(response.context['records'])
+        dates = [r.date for r in records]
+        self.assertIn(self.DEC_1, dates)
+
+    # 8. Clear returns all records
+    def test_history_clear_returns_all(self):
+        """Bare URL (no params) returns all DailyFinance records."""
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        records = list(response.context['records'])
+        dates = [r.date for r in records]
+        self.assertIn(self.NOV_1,  dates)
+        self.assertIn(self.NOV_15, dates)
+        self.assertIn(self.DEC_1,  dates)
+
+    # 9. Pagination preserves both filters
+    def test_history_pagination_preserves_both_filters(self):
+        """?q=2024-11&month=2024-11&page=1 → 200, correct context values."""
+        response = self.client.get(self.url, {'q': '2024-11', 'month': '2024-11', 'page': '1'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['search'], '2024-11')
+        self.assertEqual(response.context['month_filter'], '2024-11')
+
+    # 10. Filter change resets to page 1
+    def test_history_filter_resets_to_page_1(self):
+        """Response for a filter with no page param → page 1 in context."""
+        response = self.client.get(self.url, {'q': '2024-11'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['records'].number, 1)
+
+    # 11. Empty search returns all
+    def test_history_empty_search(self):
+        """?q= (empty string) strips to empty, returns all records."""
+        response = self.client.get(self.url, {'q': ''})
+        self.assertEqual(response.status_code, 200)
+        records = list(response.context['records'])
+        dates = [r.date for r in records]
+        self.assertIn(self.NOV_1,  dates)
+        self.assertIn(self.NOV_15, dates)
+        self.assertIn(self.DEC_1,  dates)
+
+    # 12. Whitespace-only search returns all
+    def test_history_whitespace_search(self):
+        """?q=%20 (URL-encoded space) is stripped to empty, returns all."""
+        response = self.client.get(self.url, {'q': '   '})
+        self.assertEqual(response.status_code, 200)
+        # The view strips the query; context 'search' should be empty string
+        self.assertEqual(response.context['search'], '')
+        records = list(response.context['records'])
+        dates = [r.date for r in records]
+        self.assertIn(self.NOV_1,  dates)
+        self.assertIn(self.NOV_15, dates)
+        self.assertIn(self.DEC_1,  dates)
+
+    # 13. Invalid month does not crash
+    def test_history_invalid_month(self):
+        """?month=notamonth returns 200 without crashing (silently ignored)."""
+        response = self.client.get(self.url, {'month': 'notamonth'})
+        self.assertEqual(response.status_code, 200)
+
+    # 14. Out-of-range page returns 200
+    def test_history_out_of_range_page(self):
+        """?page=9999 returns 200 — get_page() handles it gracefully."""
+        response = self.client.get(self.url, {'page': '9999'})
+        self.assertEqual(response.status_code, 200)
+
+    # 15. Filtering is read-only — no records modified
+    def test_history_filtering_is_read_only(self):
+        """DailyFinance.objects.count() is unchanged after a filtered GET."""
+        count_before = DailyFinance.objects.count()
+        self.client.get(self.url, {'q': '2024-11', 'month': '2024-11'})
+        self.assertEqual(DailyFinance.objects.count(), count_before)
+
+    # 16. Filter chips appear when filters are active
+    def test_history_chips_shown_when_filters_active(self):
+        """When q or month is set, response HTML contains the chip markup."""
+        response = self.client.get(self.url, {'q': '2024-11'})
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn('filter-chips', content)
+
+        response = self.client.get(self.url, {'month': '2024-11'})
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn('filter-chips', content)

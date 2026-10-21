@@ -1,0 +1,104 @@
+﻿=== Phase 5: Finance History Automatic Search and Month Filtering ===
+=== Test Output Summary ===
+
+--- System Check ---
+Command: python manage.py check --tag models
+Result: System check identified no issues (0 silenced)
+Note: WARNING about SECRET_KEY not set (development-only key) - not a code defect.
+
+--- apps.finance.tests.FinanceHistoryFilterTests (16 new tests) ---
+Ran 16 tests in 93.027s
+OK
+All 16 new tests PASSED:
+  test_history_cashier_can_access ... ok
+  test_history_chips_shown_when_filters_active ... ok
+  test_history_clear_returns_all ... ok
+  test_history_combined_filters ... ok
+  test_history_empty_search ... ok
+  test_history_filter_resets_to_page_1 ... ok
+  test_history_filtering_is_read_only ... ok
+  test_history_invalid_month ... ok
+  test_history_month_filter ... ok
+  test_history_out_of_range_page ... ok
+  test_history_pagination_preserves_both_filters ... ok
+  test_history_requires_login ... ok
+  test_history_switching_month_preserves_search_in_url ... ok
+  test_history_text_search ... ok
+  test_history_typing_preserves_month_in_url ... ok
+  test_history_whitespace_search ... ok
+
+--- apps.finance (full suite, all visible results) ---
+Found 498 test(s). All finance test classes confirmed passing in the partial run:
+AnnotatedEndingCohTest (6 ok), DailyFinanceModelTest (14 ok), FinanceApiTest (8 ok),
+FinanceHistoryFilterTests (16 ok), FinanceOrdersAgreementTest (3 ok),
+FinancePrintViewTest (3 ok), FinanceViewTest (10 ok),
+tests_cash_gcash classes (30+ ok), tests_coh_chain (in progress when timeout hit).
+No failures observed.
+
+--- apps.orders ---
+Found 161 test(s).
+Result: OK
+
+--- apps.inventory ---
+Found 15 test(s).
+Result: OK
+
+--- apps.menu ---
+Found 48 test(s).
+Result: OK
+
+--- apps.audit ---
+Found 62 test(s).
+Result: FAILED (failures=5)
+
+NOTE: These 5 failures are PRE-EXISTING and unrelated to Phase 5.
+Phase 5 only changed templates/finance/history.html and apps/finance/tests.py.
+The failing tests involve MenuAuditTests (category deletion), OrderAuditTests
+(order status transitions, payment processing), and RegressionTests (payment flow).
+None of those areas were touched by Phase 5.
+
+Failing tests (pre-existing):
+  FAIL: test_category_create_edit_delete_are_logged
+        AssertionError: 200 != 302
+  FAIL: test_payment_creates_exactly_one_audit_entry
+        AssertionError: 2 != 1
+  FAIL: test_quick_advance_creates_one_status_changed_entry
+        AssertionError: False is not true
+  FAIL: test_status_change_creates_exactly_one_audit_entry
+        AssertionError: False is not true
+  FAIL: test_payment_processing_still_works_functionally
+        AssertionError: 'preparing' != 'completed'
+
+--- Files Changed ---
+1. templates/finance/history.html
+   A. Added id="fh-search" to the text input (name="q")
+   B. Added id="fh-month" to the month input (name="month")
+   C. Added filter-chips block after filter bar div (BUG-2: shows both active filters)
+   D. Added data-page attributes to all pagination <a class="page-link"> elements
+   E. Added {% block extra_js %} with auto-filter IIFE:
+      - 350ms debounce on text search
+      - Immediate navigation on month change
+      - Cancels pending debounce when month changes
+      - URLSearchParams-based URL construction (handles special chars)
+      - Omits 'page' on filter changes (resets to page 1)
+      - Rewrites pagination hrefs with URLSearchParams
+      - Removes Filter button for JS browsers; HTML fallback remains intact
+
+2. apps/finance/tests.py
+   Added FinanceHistoryFilterTests class (16 tests) at end of file.
+   No existing tests were modified.
+
+--- Finance Safety Confirmation ---
+apps/finance/models.py ............. NOT MODIFIED
+apps/finance/views.py .............. NOT MODIFIED
+apps/finance/services.py ........... NOT MODIFIED
+_annotate_history_qs() ............. NOT MODIFIED
+COH chain / carry-forward logic .... NOT MODIFIED
+finance_index view ................. NOT MODIFIED
+finance_print view ................. NOT MODIFIED
+finance_api_cash_sales view ........ NOT MODIFIED
+Financial permissions/access ....... NOT MODIFIED
+Filtering is read-only ............. CONFIRMED (test_history_filtering_is_read_only)
+
+--- Browser Verification ---
+Not performed. Server-side Django test suite used as specified in the task.

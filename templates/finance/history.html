@@ -11,14 +11,37 @@
 </div>
 
 {# Filter bar #}
-<div class="filter-bar" style="margin-bottom:20px">
-  <form method="get" style="display:flex;gap:10px;flex-wrap:wrap;width:100%">
-    <input type="text" name="q" value="{{ search }}" placeholder="Search by date (YYYY-MM-DD)…" class="form-control">
-    <input type="month" name="month" value="{{ month_filter }}" class="form-control" style="max-width:180px">
-    <button type="submit" class="btn btn-primary">Filter</button>
-    <a href="{% url 'finance:history' %}" class="btn btn-outline">Clear</a>
+<div class="filter-bar finance-history-filters">
+  <form method="get" class="fh-filter__form">
+    <div class="fh-filter__search">
+      <input type="text" name="q" id="fh-search" value="{{ search }}"
+             placeholder="Search by date (YYYY-MM-DD)…"
+             class="form-control">
+    </div>
+    <div class="fh-filter__month">
+      <input type="month" name="month" id="fh-month" value="{{ month_filter }}" class="form-control">
+    </div>
+    <div class="fh-filter__buttons">
+      <button type="submit" class="btn btn-primary fh-filter__btn">Filter</button>
+      <a href="{% url 'finance:history' %}" class="btn btn-outline fh-filter__btn">Clear</a>
+    </div>
   </form>
 </div>
+
+{% if search or month_filter %}
+<div class="filter-chips" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;font-size:0.8rem">
+  {% if search %}
+  <span style="background:var(--cream);border:1px solid var(--caramel);color:var(--brown-mid);padding:3px 10px;border-radius:20px">
+    <i data-lucide="search" class="status-icon" aria-hidden="true"></i> &ldquo;{{search}}&rdquo;
+  </span>
+  {% endif %}
+  {% if month_filter %}
+  <span style="background:var(--cream);border:1px solid var(--caramel);color:var(--brown-mid);padding:3px 10px;border-radius:20px">
+    <i data-lucide="calendar" class="status-icon" aria-hidden="true"></i> {{month_filter}}
+  </span>
+  {% endif %}
+</div>
+{% endif %}
 
 <div class="card">
   <div class="table-wrapper finance-history-table-wrapper">
@@ -72,27 +95,38 @@
   {# Mobile cards #}
   <div class="finance-history-card">
     {% for rec in records %}
-    <div style="padding:14px 16px;border-bottom:1px solid var(--cream)">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
-        <div>
-          <div style="font-weight:700;font-size:0.95rem">{{ rec.date }}</div>
-          <div style="font-size:0.75rem;color:#aaa;margin-top:2px">
-            Cash Sales ₱{{ rec.annotated_cash_sales|default:"0.00"|floatformat:2 }}
-            &nbsp;·&nbsp;
-            Expenses ₱{{ rec.expenses|floatformat:2 }}
-          </div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:1.1rem;
-            {% if rec.annotated_ending_coh < 0 %}color:var(--red-accent){% else %}color:var(--caramel){% endif %}">
-            ₱{{ rec.annotated_ending_coh|floatformat:2 }}
-          </div>
-          <div style="font-size:0.7rem;color:#aaa">Ending COH</div>
+    <div class="fh-card">
+      <!-- Header row: date left, Ending COH right -->
+      <div class="fh-card__header">
+        <div class="fh-card__date">{{ rec.date }}</div>
+        <div class="fh-card__coh{% if rec.annotated_ending_coh < 0 %} fh-card__coh--neg{% endif %}">
+          <div class="fh-card__coh-amount">₱{{ rec.annotated_ending_coh|floatformat:2 }}</div>
+          <div class="fh-card__coh-label">Ending COH</div>
         </div>
       </div>
-      <div style="display:flex;gap:8px">
-        <a href="{% url 'finance:index' %}?date={{ rec.date|date:'Y-m-d' }}" class="btn btn-sm btn-outline" style="flex:1;justify-content:center">Edit</a>
-        <a href="{% url 'finance:print' rec.pk %}" target="_blank" class="btn btn-sm btn-outline"><i data-lucide="printer" class="btn-icon" aria-hidden="true"></i></a>
+      <!-- Details row: cash sales + expenses -->
+      <div class="fh-card__details">
+        <span class="fh-card__detail-item fh-card__detail--sales">
+          Cash Sales <strong>₱{{ rec.annotated_cash_sales|default:"0.00"|floatformat:2 }}</strong>
+        </span>
+        <span class="fh-card__detail-sep" aria-hidden="true">·</span>
+        <span class="fh-card__detail-item">
+          Expenses <strong>₱{{ rec.expenses|floatformat:2 }}</strong>
+        </span>
+      </div>
+      <!-- Actions row: Edit wide, Print narrow -->
+      <div class="fh-card__actions">
+        <a href="{% url 'finance:index' %}?date={{ rec.date|date:'Y-m-d' }}"
+           class="btn btn-sm btn-outline fh-card__edit-btn"
+           aria-label="Edit record for {{ rec.date }}">Edit</a>
+        <a href="{% url 'finance:print' rec.pk %}"
+           target="_blank"
+           class="btn btn-sm btn-outline fh-card__print-btn"
+           aria-label="Print record for {{ rec.date }}"
+           title="Print {{ rec.date }}">
+          <i data-lucide="printer" class="btn-icon" aria-hidden="true"></i>
+          <span class="fh-print-label">Print</span>
+        </a>
       </div>
     </div>
     {% empty %}
@@ -103,14 +137,73 @@
 
 {% if records.has_other_pages %}
 <div class="pagination">
-  {% if records.has_previous %}<a href="?page={{ records.previous_page_number }}{% if month_filter %}&month={{ month_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}" class="page-link">‹ Prev</a>{% endif %}
+  {% if records.has_previous %}<a href="?page={{ records.previous_page_number }}{% if month_filter %}&month={{ month_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}" class="page-link" data-page="{{ records.previous_page_number }}">‹ Prev</a>{% endif %}
   {% for num in records.paginator.page_range %}
     {% if records.number == num %}<span class="page-link active">{{ num }}</span>
     {% elif num > records.number|add:'-3' and num < records.number|add:'3' %}
-    <a href="?page={{ num }}{% if month_filter %}&month={{ month_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}" class="page-link">{{ num }}</a>{% endif %}
+    <a href="?page={{ num }}{% if month_filter %}&month={{ month_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}" class="page-link" data-page="{{ num }}">{{ num }}</a>{% endif %}
   {% endfor %}
-  {% if records.has_next %}<a href="?page={{ records.next_page_number }}{% if month_filter %}&month={{ month_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}" class="page-link">Next ›</a>{% endif %}
+  {% if records.has_next %}<a href="?page={{ records.next_page_number }}{% if month_filter %}&month={{ month_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}" class="page-link" data-page="{{ records.next_page_number }}">Next ›</a>{% endif %}
 </div>
 {% endif %}
 
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  'use strict';
+
+  var search = document.getElementById('fh-search');
+  var month  = document.getElementById('fh-month');
+
+  if (!search) return;  // no-JS fallback untouched
+
+  // Remove Filter button — auto-submit replaces it for JS browsers
+  var form = search.closest('form');
+  var btn = form && form.querySelector('button[type="submit"]');
+  if (btn) btn.remove();
+
+  function buildUrl() {
+    var params = new URLSearchParams();
+    var q = search.value.trim();
+    if (q) params.set('q', q);
+    var m = month ? month.value : '';
+    if (m) params.set('month', m);
+    // omit 'page' — resets to page 1 on every filter change
+    var qs = params.toString();
+    return window.location.pathname + (qs ? '?' + qs : '');
+  }
+
+  // Rewrite pagination hrefs to use URLSearchParams (proper encoding)
+  document.querySelectorAll('a.page-link[data-page]').forEach(function (link) {
+    var pageNum = parseInt(link.getAttribute('data-page'), 10);
+    if (isNaN(pageNum)) return;
+    var params = new URLSearchParams();
+    var q = search.value.trim();
+    if (q) params.set('q', q);
+    var m = month ? month.value : '';
+    if (m) params.set('month', m);
+    params.set('page', pageNum);
+    link.href = window.location.pathname + '?' + params.toString();
+  });
+
+  // Text search: 350ms debounce
+  var timer = null;
+  search.addEventListener('input', function () {
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      window.location.href = buildUrl();
+    }, 350);
+  });
+
+  // Month picker: immediate on change, cancel pending debounce
+  if (month) {
+    month.addEventListener('change', function () {
+      clearTimeout(timer);
+      window.location.href = buildUrl();
+    });
+  }
+})();
+</script>
 {% endblock %}
