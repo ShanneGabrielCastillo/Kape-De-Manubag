@@ -218,3 +218,212 @@ class RestockInputRobustnessTests(TestCase):
         self.assertFalse(response.json()['success'])
         self.product.refresh_from_db()
         self.assertEqual(self.product.stock_quantity, 10)
+
+
+class InventoryListFilterTests(TestCase):
+    """Regression tests for the inventory list search / filter bar (Phase 6B)."""
+
+    def setUp(self):
+        self.admin = CustomUser.objects.create_user(
+            username='inv_filter_admin', password=PASSWORD, role='admin',
+        )
+        self.cashier = CustomUser.objects.create_user(
+            username='inv_filter_cashier', password=PASSWORD, role='cashier',
+        )
+        self.client.force_login(self.admin)
+
+        self.cat_drinks = Category.objects.create(name='Drinks', slug='drinks-flt')
+        self.cat_food = Category.objects.create(name='Food', slug='food-flt')
+
+        # ok stock (qty=50, threshold=10)
+        self.espresso = Product.objects.create(
+            category=self.cat_drinks, name='Espresso Shot', price='60.00',
+            stock_quantity=50,
+        )
+        # low stock (qty=8 <= threshold=10)
+        self.latte = Product.objects.create(
+            category=self.cat_drinks, name='Caffe Latte', price='75.00',
+            stock_quantity=8,
+        )
+        # critical stock (qty=3 <= CRITICAL_STOCK_THRESHOLD=5)
+        self.cake = Product.objects.create(
+            category=self.cat_food, name='Chocolate Cake', price='120.00',
+            stock_quantity=3,
+        )
+        # out of stock (qty=0)
+        self.cookie = Product.objects.create(
+            category=self.cat_food, name='Butter Cookie', price='40.00',
+            stock_quantity=0,
+        )
+
+    # ── Access control ────────────────────────────────────────────────────────
+
+    def test_inventory_list_requires_login(self):
+        """Unauthenticated GET /inventory/ redirects to login."""
+        self.client.logout()
+        response = self.client.get(reverse('inventory:list'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login', response['Location'])
+
+    def test_inventory_list_cashier_can_access(self):
+        """Cashier role can access the inventory list."""
+        self.client.force_login(self.cashier)
+        response = self.client.get(reverse('inventory:list'))
+        self.assertEqual(response.status_code, 200)
+
+    # ── No-filter baseline ────────────────────────────────────────────────────
+
+    def test_inventory_list_no_filters_returns_all(self):
+        """No query params → all products are returned."""
+        response = self.client.get(reverse('inventory:list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(list(response.context['products'])), 4)
+
+    # ── Text search ───────────────────────────────────────────────────────────
+
+    def test_inventory_list_search_by_name(self):
+        """?q=espresso returns only the matching product."""
+        response = self.client.get(reverse('inventory:list'), {'q': 'espresso'})
+        products = list(response.context['products'])
+        self.assertEqual(len(products), 1)
+        self.assertEqual(products[0].name, 'Espresso Shot')
+
+    def test_inventory_list_search_case_insensitive(self):
+        """Uppercase search term still matches."""
+        response = self.client.get(reverse('inventory:list'), {'q': 'ESPRESSO'})
+        products = list(response.context['products'])
+        self.assertEqual(len(products), 1)
+        self.assertEqual(products[0].name, 'Espresso Shot')
+
+    def test_inventory_list_search_no_results(self):
+        """Unrecognised search term returns empty queryset."""
+        response = self.client.get(reverse('inventory:list'), {'q': 'zzznomatch'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(list(response.context['products'])), 0)
+
+    def test_inventory_list_search_whitespace(self):
+        """Whitespace-only query is stripped and returns all products."""
+        response = self.client.get(reverse('inventory:list'), {'q': '   '})
+        self.assertEqual(len(list(response.context['products'])), 4)
+        # Stripped value passed to template is empty string
+        self.assertEqual(response.context['search'], '')
+
+    # ── Category filter ───────────────────────────────────────────────────────
+
+    def test_inventory_list_category_filter(self):
+        """?category=<id> returns only products in that category."""
+        response = self.client.get(
+            reverse('inventory:list'), {'category': str(self.cat_drinks.pk)},
+        )
+        products = list(response.context['products'])
+        self.assertEqual(len(products), 2)
+        names = {p.name for p in products}
+        self.assertIn('Espresso Shot', names)
+        self.assertIn('Caffe Latte', names)
+
+    # ── Stock-status filter ───────────────────────────────────────────────────
+
+    def test_inventory_list_stock_status_out_of_stock(self):
+        """?stock_status=out_of_stock returns only quantity=0 products."""
+        response = self.client.get(
+            reverse('inventory:list'), {'stock_status': 'out_of_stock'},
+        )
+        products = list(response.context['products'])
+        self.assertEqual(len(products), 1)
+        self.assertEqual(products[0].name, 'Butter Cookie')
+        self.assertEqual(products[0].stock_quantity, 0)
+
+    def test_inventory_list_stock_status_critical(self):
+        """?stock_status=critical returns quantity<=CRITICAL_STOCK_THRESHOLD(5)."""
+        response = self.client.get(
+            reverse('inventory:list'), {'stock_status': 'critical'},
+        )
+        products = list(response.context['products'])
+        # Butter Cookie (0) and Chocolate Cake (3) are both <= 5
+        self.assertEqual(len(products), 2)
+        quantities = {p.stock_quantity for p in products}
+        self.assertTrue(all(q <= 5 for q in quantities))
+
+    def test_inventory_list_stock_status_ok(self):
+        """?stock_status=ok returns quantity > low_stock_threshold."""
+        response = self.client.get(
+            reverse('inventory:list'), {'stock_status': 'ok'},
+        )
+        products = list(response.context['products'])
+        # Only Espresso Shot (50 > 10) qualifies
+        self.assertEqual(len(products), 1)
+        self.assertEqual(products[0].name, 'Espresso Shot')
+
+    # ── Combined filters ──────────────────────────────────────────────────────
+
+    def test_inventory_list_combined_filters(self):
+        """Text search + stock_status combined narrow results correctly."""
+        response = self.client.get(
+            reverse('inventory:list'), {'q': 'latte', 'stock_status': 'low'},
+        )
+        products = list(response.context['products'])
+        self.assertEqual(len(products), 1)
+        self.assertEqual(products[0].name, 'Caffe Latte')
+
+    # ── Invalid input ─────────────────────────────────────────────────────────
+
+    def test_inventory_list_invalid_stock_status_ignored(self):
+        """An unrecognised stock_status value is ignored; all products return."""
+        response = self.client.get(
+            reverse('inventory:list'), {'stock_status': 'invalid_garbage'},
+        )
+        self.assertEqual(len(list(response.context['products'])), 4)
+        self.assertEqual(response.context['stock_status_filter'], '')
+
+    def test_inventory_list_invalid_category_ignored(self):
+        """A non-integer category value is ignored; all products return."""
+        response = self.client.get(
+            reverse('inventory:list'), {'category': 'notanumber'},
+        )
+        self.assertEqual(len(list(response.context['products'])), 4)
+        self.assertEqual(response.context['category_filter'], '')
+
+    # ── Clear behaviour ───────────────────────────────────────────────────────
+
+    def test_inventory_list_clear_returns_all(self):
+        """GET with no params returns all products (simulates Clear action)."""
+        response = self.client.get(reverse('inventory:list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(list(response.context['products'])), 4)
+
+    # ── Summary cards unaffected by filters (CRITICAL) ───────────────────────
+
+    def test_inventory_list_summary_cards_unaffected_by_filters(self):
+        """Summary card counts always reflect the full catalog, not filtered rows."""
+        # Apply a filter that returns only 1 product
+        response = self.client.get(reverse('inventory:list'), {'q': 'espresso'})
+        self.assertEqual(response.status_code, 200)
+        ctx = response.context
+
+        # Only 1 product in filtered table
+        self.assertEqual(len(list(ctx['products'])), 1)
+
+        # But summary cards still show full-catalog figures
+        self.assertEqual(ctx['total_count'], 4)
+        # low_stock_count: latte(8<=10), cake(3<=10 via threshold), cookie(0<=10) = 3
+        self.assertEqual(ctx['low_stock_count'], 3)
+        # out_of_stock_count: only cookie
+        self.assertEqual(ctx['out_of_stock_count'], 1)
+
+    # ── Read-only assertion ───────────────────────────────────────────────────
+
+    def test_inventory_list_filtering_is_read_only(self):
+        """Filtering must not change any product quantities."""
+        before = {
+            p.pk: p.stock_quantity
+            for p in Product.objects.all()
+        }
+        self.client.get(reverse('inventory:list'), {
+            'q': 'espresso', 'category': str(self.cat_drinks.pk),
+            'stock_status': 'ok',
+        })
+        after = {
+            p.pk: p.stock_quantity
+            for p in Product.objects.all()
+        }
+        self.assertEqual(before, after)

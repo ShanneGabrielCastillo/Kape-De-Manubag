@@ -6,7 +6,7 @@ from django.db.models import Count, F, Q
 from django.http import JsonResponse
 from django.core.paginator import Paginator
 from .models import InventoryLog
-from apps.menu.models import CRITICAL_STOCK_THRESHOLD, Product
+from apps.menu.models import CRITICAL_STOCK_THRESHOLD, Category, Product
 from apps.accounts.decorators import cashier_or_admin_required
 from apps.audit.services import log_action
 
@@ -14,18 +14,46 @@ from apps.audit.services import log_action
 @login_required
 @cashier_or_admin_required
 def inventory_list(request):
-    products = Product.objects.select_related('category').order_by('stock_quantity')
-    # All four summary-card counts come from ONE conditional-aggregate query.
-    # "Low" uses the exact same definition as Product.objects.low_stock()
-    # (at or below each product's own restock threshold); "critical" is the
-    # shared threshold; out-of-stock is stock at exactly zero.
-    counts = products.aggregate(
+    base_qs = Product.objects.select_related('category').order_by('stock_quantity')
+
+    # Summary cards always reflect the FULL catalog (computed before filtering)
+    counts = base_qs.aggregate(
         total=Count('id'),
         active=Count('id', filter=Q(is_active=True)),
         low=Count('id', filter=Q(stock_quantity__lte=F('low_stock_threshold'))),
         critical=Count('id', filter=Q(stock_quantity__lte=CRITICAL_STOCK_THRESHOLD)),
         out_of_stock=Count('id', filter=Q(stock_quantity=0)),
     )
+
+    products = base_qs
+
+    q = request.GET.get('q', '').strip()
+    if q:
+        products = products.filter(name__icontains=q)
+
+    category_filter = request.GET.get('category', '').strip()
+    if category_filter:
+        try:
+            products = products.filter(category_id=int(category_filter))
+        except (ValueError, TypeError):
+            category_filter = ''
+
+    stock_status_filter = request.GET.get('stock_status', '').strip()
+    VALID_STOCK_STATUSES = ('out_of_stock', 'critical', 'low', 'ok')
+    if stock_status_filter in VALID_STOCK_STATUSES:
+        if stock_status_filter == 'out_of_stock':
+            products = products.filter(stock_quantity=0)
+        elif stock_status_filter == 'critical':
+            products = products.filter(stock_quantity__lte=CRITICAL_STOCK_THRESHOLD)
+        elif stock_status_filter == 'low':
+            products = products.filter(stock_quantity__lte=F('low_stock_threshold'))
+        elif stock_status_filter == 'ok':
+            products = products.filter(stock_quantity__gt=F('low_stock_threshold'))
+    else:
+        stock_status_filter = ''
+
+    categories = Category.objects.filter(is_active=True).order_by('name')
+
     return render(request, 'inventory/list.html', {
         'products': products,
         'total_count': counts['total'],
@@ -33,6 +61,10 @@ def inventory_list(request):
         'low_stock_count': counts['low'],
         'critical_stock_count': counts['critical'],
         'out_of_stock_count': counts['out_of_stock'],
+        'search': q,
+        'category_filter': category_filter,
+        'stock_status_filter': stock_status_filter,
+        'categories': categories,
     })
 
 

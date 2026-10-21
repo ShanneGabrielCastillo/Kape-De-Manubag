@@ -37,6 +37,33 @@
   </div>
 </div>
 
+<div class="filter-bar" style="margin-bottom:1rem">
+  <form method="get" class="inv-filter-form" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+    <input type="text" name="q" id="inv-search"
+           value="{{search}}" placeholder="Search by product name…"
+           class="form-control" style="max-width:280px">
+    <select name="category" id="inv-category" class="form-control" style="max-width:180px">
+      <option value="">All Categories</option>
+      {% for cat in categories %}
+      <option value="{{cat.pk}}" {% if category_filter == cat.pk|stringformat:"s" %}selected{% endif %}>
+        {{cat.name}}
+      </option>
+      {% endfor %}
+    </select>
+    <select name="stock_status" id="inv-stock-status" class="form-control" style="max-width:180px">
+      <option value="">All Stock Levels</option>
+      <option value="out_of_stock" {% if stock_status_filter == 'out_of_stock' %}selected{% endif %}>Out of Stock</option>
+      <option value="critical" {% if stock_status_filter == 'critical' %}selected{% endif %}>Critical (≤5)</option>
+      <option value="low" {% if stock_status_filter == 'low' %}selected{% endif %}>Low Stock</option>
+      <option value="ok" {% if stock_status_filter == 'ok' %}selected{% endif %}>OK</option>
+    </select>
+    {% if search or category_filter or stock_status_filter %}
+    <a href="{% url 'inventory:list' %}" class="btn btn-outline btn-sm">Clear</a>
+    {% endif %}
+    <button type="submit" id="inv-filter-btn" class="btn btn-primary btn-sm">Filter</button>
+  </form>
+</div>
+
 {% if critical_stock_count or out_of_stock_count %}
 <div class="alert alert-warning" style="margin-bottom:20px;align-items:flex-start">
   <i data-lucide="triangle-alert" class="status-icon" style="flex-shrink:0;margin-top:2px" aria-hidden="true"></i>
@@ -83,7 +110,15 @@
         </tr>
         {% endwith %}
         {% empty %}
-        <tr><td colspan="6" style="text-align:center;color:#aaa;padding:32px">No products found</td></tr>
+        <tr>
+          <td colspan="6" style="text-align:center;color:#aaa;padding:32px">
+            {% if search or category_filter or stock_status_filter %}
+            No products match the current filters.
+            {% else %}
+            No products found.
+            {% endif %}
+          </td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
@@ -152,5 +187,43 @@ async function submitRestock() {
     showToast(d.error || 'Error', 'error');
   }
 }
+</script>
+<script>
+(function () {
+  'use strict';
+  var searchInput  = document.getElementById('inv-search');
+  var catSelect    = document.getElementById('inv-category');
+  var statusSelect = document.getElementById('inv-stock-status');
+  if (!searchInput) return;
+
+  var btn = document.getElementById('inv-filter-btn');
+  if (btn) btn.style.display = 'none';
+
+  function buildUrl() {
+    var params = new URLSearchParams();
+    var q = searchInput.value.trim();
+    if (q) params.set('q', q);
+    var cat = catSelect ? catSelect.value : '';
+    if (cat) params.set('category', cat);
+    var status = statusSelect ? statusSelect.value : '';
+    if (status) params.set('stock_status', status);
+    var qs = params.toString();
+    return window.location.pathname + (qs ? '?' + qs : '');
+  }
+
+  var timer = null;
+  searchInput.addEventListener('input', function () {
+    clearTimeout(timer);
+    timer = setTimeout(function () { window.location.href = buildUrl(); }, 350);
+  });
+
+  function onDropdownChange() {
+    clearTimeout(timer);
+    window.location.href = buildUrl();
+  }
+
+  if (catSelect)    catSelect.addEventListener('change', onDropdownChange);
+  if (statusSelect) statusSelect.addEventListener('change', onDropdownChange);
+})();
 </script>
 {% endblock %}
