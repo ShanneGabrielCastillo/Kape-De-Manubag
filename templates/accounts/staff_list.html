@@ -23,6 +23,7 @@
     <button type="submit" class="btn btn-primary btn-sm" id="staff-search-btn">Search</button>
   </form>
 </div>
+<div id="results-region">
 <div class="card">
   <div class="table-wrapper">
     <table class="table-staff" data-mobile-cards="true">
@@ -65,6 +66,7 @@
     </table>
   </div>
 </div>
+</div><!-- #results-region -->
 {% endblock %}
 {% block extra_js %}
 <script>
@@ -87,14 +89,51 @@ async function toggleStaff(url, isActive) {
 <script>
 (function () {
   'use strict';
+
   var searchInput = document.getElementById('staff-search');
   var roleSelect  = document.getElementById('staff-role');
   if (!searchInput) return;
 
-  // Hide the Search button — auto-submit replaces it for JS browsers
+  // Hide the Search button — AJAX replaces it for JS browsers
   var btn = document.getElementById('staff-search-btn');
   if (btn) btn.style.display = 'none';
 
+  // ── Request safety ─────────────────────────────────────────────────────
+  var controller = null;  // current AbortController
+  var seq = 0;            // monotonic counter; guards stale responses
+
+  // ── History policy ─────────────────────────────────────────────────────
+  // replaceState while the debounce timer is running (coalesces keystrokes).
+  // pushState once the debounce fires (commits the search to history).
+  // Dropdown changes always pushState immediately.
+  // popstate handler never calls push/replaceState.
+  var isPopstate = false;
+
+  // ── Error banner ───────────────────────────────────────────────────────
+  function showFetchError(msg) {
+    var region = document.getElementById('results-region');
+    if (!region) return;
+    // Remove any existing banner first
+    var existing = region.querySelector('.ajax-error-banner');
+    if (existing) existing.remove();
+    var banner = document.createElement('div');
+    banner.className = 'ajax-error-banner';
+    banner.setAttribute('role', 'alert');
+    banner.setAttribute('aria-live', 'polite');
+    banner.style.cssText = 'background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;font-size:0.9rem;';
+    var text = document.createElement('span');
+    text.textContent = msg || 'Could not load results. Please try again.';
+    var close = document.createElement('button');
+    close.textContent = '×';
+    close.setAttribute('aria-label', 'Dismiss');
+    close.style.cssText = 'background:none;border:none;cursor:pointer;font-size:1.2rem;line-height:1;padding:0 0 0 12px;';
+    close.onclick = function () { banner.remove(); };
+    banner.appendChild(text);
+    banner.appendChild(close);
+    region.insertBefore(banner, region.firstChild);
+  }
+
+  // ── Build URL from current filter values ──────────────────────────────
   function buildUrl() {
     var params = new URLSearchParams();
     var q = searchInput.value.trim();
@@ -105,20 +144,88 @@ async function toggleStaff(url, isActive) {
     return window.location.pathname + (qs ? '?' + qs : '');
   }
 
+  // ── Fetch and replace results-region ─────────────────────────────────
+  async function fetchResults(url, historyMode) {
+    // historyMode: 'push' | 'replace' | 'none' (popstate)
+    if (controller) controller.abort();
+    controller = new AbortController();
+    var mySeq = ++seq;
+
+    try {
+      var resp = await fetch(url, { signal: controller.signal });
+      if (mySeq !== seq) return;  // superseded by a newer request
+
+      if (!resp.ok || !(resp.headers.get('content-type') || '').includes('text/html')) {
+        showFetchError();
+        return;
+      }
+
+      var html = await resp.text();
+      if (mySeq !== seq) return;
+
+      // Session-expiry guard: login page in the response body
+      if (html.includes('id="login-form"') || html.includes('name="username"')) {
+        showFetchError('Session expired. Please reload the page.');
+        return;
+      }
+
+      var doc = new DOMParser().parseFromString(html, 'text/html');
+      var newRegion = doc.getElementById('results-region');
+      if (!newRegion) { showFetchError(); return; }
+
+      document.getElementById('results-region').innerHTML = newRegion.innerHTML;
+
+      // Update URL only after a successful replacement
+      if (!isPopstate) {
+        if (historyMode === 'push') {
+          history.pushState({}, '', url);
+        } else if (historyMode === 'replace') {
+          history.replaceState({}, '', url);
+        }
+      }
+
+    } catch (e) {
+      if (e.name === 'AbortError') return;  // intentionally cancelled
+      showFetchError();
+    }
+  }
+
+  // ── Restore filter controls from URL params ───────────────────────────
+  function restoreFiltersFromUrl(url) {
+    var params = new URL(url, window.location.href).searchParams;
+    searchInput.value = params.get('q') || '';
+    if (roleSelect) roleSelect.value = params.get('role') || '';
+  }
+
+  // ── Text search (debounce 350 ms) ─────────────────────────────────────
   var timer = null;
   searchInput.addEventListener('input', function () {
     clearTimeout(timer);
+    var url = buildUrl();
+    // Coalesce keystrokes with replaceState during debounce
+    history.replaceState({}, '', url);
     timer = setTimeout(function () {
-      window.location.href = buildUrl();
+      fetchResults(url, 'push');
     }, 350);
   });
 
+  // ── Dropdown change — immediate push ─────────────────────────────────
   if (roleSelect) {
     roleSelect.addEventListener('change', function () {
       clearTimeout(timer);
-      window.location.href = buildUrl();
+      fetchResults(buildUrl(), 'push');
     });
   }
+
+  // ── Browser Back / Forward ────────────────────────────────────────────
+  window.addEventListener('popstate', function (e) {
+    isPopstate = true;
+    restoreFiltersFromUrl(window.location.href);
+    fetchResults(window.location.href, 'none').finally(function () {
+      isPopstate = false;
+    });
+  });
+
 })();
 </script>
 {% endblock %}

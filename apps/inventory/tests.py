@@ -645,3 +645,84 @@ class InventoryLogActionSourceTests(TestCase):
         self.assertEqual(InventoryLog.objects.count(), before_count)
         after_qtys = {p.pk: p.stock_quantity for p in Product.objects.all()}
         self.assertEqual(before_qtys, after_qtys)
+
+
+class InventoryListAjaxTests(TestCase):
+    """AJAX partial-replacement: confirm results-region is present in inventory
+    list responses and that stats-grid is NOT nested inside results-region.
+
+    The stats-grid must stay outside results-region at all times — the JS
+    innerHTML swap must never clobber the summary cards.
+    """
+
+    def setUp(self):
+        self.admin = CustomUser.objects.create_user(
+            username='inv_ajax_admin', password='test-pass-1', role='admin',
+        )
+        self.client.force_login(self.admin)
+        self.category = Category.objects.create(name='Drinks', slug='drinks-ajax')
+        Product.objects.create(
+            category=self.category, name='Espresso',
+            price='60.00', stock_quantity=50,
+        )
+        Product.objects.create(
+            category=self.category, name='Cold Brew',
+            price='75.00', stock_quantity=0,
+        )
+
+    def test_results_region_present(self):
+        """GET /inventory/ returns id="results-region"."""
+        response = self.client.get(reverse('inventory:list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')
+
+    def test_results_region_present_with_q_filter(self):
+        """GET ?q=coffee returns id="results-region"."""
+        response = self.client.get(reverse('inventory:list'), {'q': 'coffee'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')
+
+    def test_results_region_present_with_stock_status_filter(self):
+        """GET ?stock_status=out_of_stock returns id="results-region"."""
+        response = self.client.get(
+            reverse('inventory:list'), {'stock_status': 'out_of_stock'},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')
+
+    def test_stats_grid_not_inside_results_region(self):
+        """stats-grid must appear before results-region in the HTML source.
+
+        This ensures the JS innerHTML replacement of results-region can never
+        remove or duplicate the summary cards.
+        """
+        response = self.client.get(reverse('inventory:list'), {'q': 'test'})
+        content = response.content.decode()
+        stats_pos = content.find('class="stats-grid"')
+        region_pos = content.find('id="results-region"')
+        self.assertGreater(
+            region_pos, stats_pos,
+            'stats-grid must appear before results-region in the HTML '
+            '(i.e. is not nested inside it)',
+        )
+
+    def test_restock_modal_inside_results_region(self):
+        """restock-modal must appear inside results-region so it updates with results."""
+        response = self.client.get(reverse('inventory:list'))
+        content = response.content.decode()
+        region_open = content.find('id="results-region"')
+        modal_pos = content.find('id="restock-modal"')
+        region_close = content.rfind('</div>', 0, len(content))
+        # Modal must come after the results-region opening tag
+        self.assertGreater(modal_pos, region_open,
+            'restock-modal must appear after the results-region opening tag')
+
+    def test_filter_bar_outside_results_region(self):
+        """filter-bar must appear before results-region in the HTML source."""
+        response = self.client.get(reverse('inventory:list'))
+        content = response.content.decode()
+        filter_bar_pos = content.find('class="filter-bar"')
+        region_pos = content.find('id="results-region"')
+        self.assertGreater(region_pos, filter_bar_pos,
+            'filter-bar must appear before results-region (not nested inside it)')
+

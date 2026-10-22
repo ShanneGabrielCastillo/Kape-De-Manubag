@@ -1277,3 +1277,61 @@ class StaffListSearchTests(TestCase):
         count_before = CustomUser.objects.count()
         self._get({'q': 'admin_user', 'role': 'admin'})
         self.assertEqual(CustomUser.objects.count(), count_before)
+
+
+class StaffListAjaxTests(TestCase):
+    """AJAX partial-replacement: confirm results-region is present in responses.
+
+    These tests verify that GET /staff/ (and its filtered variants) always
+    returns a page containing id="results-region" so the JS fetch-replace
+    pattern has a valid target to inject into.
+    """
+
+    def setUp(self):
+        self.admin = CustomUser.objects.create_user(
+            username='ajax_staff_admin', password=PASSWORD, role='admin',
+        )
+        self.cashier = CustomUser.objects.create_user(
+            username='ajax_staff_cashier', password=PASSWORD,
+            first_name='Cashier', last_name='User', role='cashier',
+        )
+        self.client.force_login(self.admin)
+
+    def test_results_region_present_on_base_page(self):
+        """Unfiltered GET returns id="results-region"."""
+        response = self.client.get(reverse('accounts:staff_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')
+
+    def test_results_region_present_with_q_filter(self):
+        """GET ?q=foo returns id="results-region"."""
+        response = self.client.get(reverse('accounts:staff_list'), {'q': 'foo'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')
+
+    def test_results_region_present_with_role_filter(self):
+        """GET ?role=admin returns id="results-region"."""
+        response = self.client.get(reverse('accounts:staff_list'), {'role': 'admin'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')
+
+    def test_results_region_present_with_combined_filters(self):
+        """GET ?q=cash&role=cashier returns id="results-region"."""
+        response = self.client.get(
+            reverse('accounts:staff_list'), {'q': 'cash', 'role': 'cashier'},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')
+
+    def test_filter_bar_outside_results_region(self):
+        """The filter-bar form appears before results-region in the HTML source.
+
+        This guarantees the filter controls are never replaced by the JS
+        innerHTML swap, so focus is always preserved in the search input.
+        """
+        response = self.client.get(reverse('accounts:staff_list'))
+        content = response.content.decode()
+        filter_bar_pos = content.find('class="filter-bar"')
+        region_pos = content.find('id="results-region"')
+        self.assertGreater(region_pos, filter_bar_pos,
+            'filter-bar must appear before results-region (i.e. is not nested inside it)')
