@@ -26,6 +26,7 @@
     {% endif %}
   </form>
 </div>
+<div id="results-region">
 <div class="card">
   <div class="table-wrapper">
     <table class="table-inv-log" data-mobile-cards="true">
@@ -82,6 +83,7 @@
   {% endif %}
 </div>
 {% endif %}
+</div>{# /results-region #}
 {% endblock %}
 
 {% block extra_js %}
@@ -89,63 +91,104 @@
 (function () {
   'use strict';
 
-  var form   = document.getElementById('log-filter-form');
-  var input  = document.getElementById('log-search');
-  var action = document.getElementById('log-action-filter');
-  var source = document.getElementById('log-source-filter');
-  var btn    = document.getElementById('log-search-btn');
+  var searchInput = document.getElementById('log-search');
+  var actionFilter = document.getElementById('log-action-filter');
+  var sourceFilter = document.getElementById('log-source-filter');
+  var resultsRegion = document.getElementById('results-region');
+  if (!searchInput || !resultsRegion) return;
 
-  if (!form || !input || !action || !source) return;
+  var form = searchInput.closest('form');
+  var submitBtn = form && form.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.style.display = 'none';
 
-  // Hide submit button — auto-filter replaces it for JS-capable browsers.
-  // Using style.display so the DOM element still exists for fallback testing.
-  if (btn) btn.style.display = 'none';
+  var controller = null;
+  var seq = 0;
 
-  var timer = null;
+  function fetchResults(url, pushHistory) {
+    if (controller) controller.abort();
+    controller = new AbortController();
+    var mySeq = ++seq;
 
-  /** Build a query string from current filter state, optionally overriding page. */
-  function buildParams(overrides) {
-    var p = new URLSearchParams();
-    var q = input.value.trim();
-    if (q)               p.set('q',      q);
-    if (action.value)    p.set('action', action.value);
-    if (source.value)    p.set('source', source.value);
-    if (overrides && overrides.page) p.set('page', overrides.page);
-    return p;
+    fetch(url, { signal: controller.signal })
+      .then(function (resp) {
+        if (mySeq !== seq) return;
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return resp.text();
+      })
+      .then(function (html) {
+        if (!html || mySeq !== seq) return;
+        if (html.indexOf('id="login-form"') !== -1 || html.indexOf('name="username"') !== -1) {
+          showError('Session expired. Please reload.');
+          return;
+        }
+        var doc = (new DOMParser()).parseFromString(html, 'text/html');
+        var newRegion = doc.getElementById('results-region');
+        if (!newRegion) return;
+        resultsRegion.innerHTML = newRegion.innerHTML;
+        if (pushHistory) history.pushState({ url: url }, '', url);
+      })
+      .catch(function (err) {
+        if (err && err.name === 'AbortError') return;
+        showError('Could not load results. Please try again.');
+      });
   }
 
-  /** Navigate to the log page with current filters, resetting page to 1. */
-  function navigate() {
-    var params = buildParams();
+  function showError(msg) {
+    var existing = resultsRegion.querySelector('.fetch-error-banner');
+    if (existing) return;
+    var div = document.createElement('div');
+    div.className = 'fetch-error-banner';
+    div.setAttribute('role', 'alert');
+    div.style.cssText = 'padding:12px;margin-bottom:12px;background:#fff3cd;border:1px solid #ffc107;border-radius:6px;color:#856404;display:flex;justify-content:space-between;align-items:center';
+    div.innerHTML = '<span>' + msg + '</span><button onclick="this.parentNode.remove()" style="background:none;border:none;cursor:pointer;font-size:1.2rem" aria-label="Dismiss">&times;</button>';
+    resultsRegion.prepend(div);
+  }
+
+  function buildUrl() {
+    var params = new URLSearchParams();
+    var q = searchInput.value.trim();
+    if (q) params.set('q', q);
+    if (actionFilter && actionFilter.value) params.set('action', actionFilter.value);
+    if (sourceFilter && sourceFilter.value) params.set('source', sourceFilter.value);
     var qs = params.toString();
-    window.location.href = window.location.pathname + (qs ? '?' + qs : '');
+    return window.location.pathname + (qs ? '?' + qs : '');
   }
 
-  // Text input — 350 ms debounce.
-  input.addEventListener('input', function () {
-    clearTimeout(timer);
-    timer = setTimeout(navigate, 350);
+  var debounceTimer = null;
+  searchInput.addEventListener('input', function () {
+    clearTimeout(debounceTimer);
+    var url = buildUrl();
+    history.replaceState({ url: url }, '', url);
+    debounceTimer = setTimeout(function () {
+      fetchResults(url, true);
+    }, 350);
   });
 
-  // Dropdowns — immediate navigation, cancel pending debounce.
-  action.addEventListener('change', function () {
-    clearTimeout(timer);
-    navigate();
-  });
-  source.addEventListener('change', function () {
-    clearTimeout(timer);
-    navigate();
+  function onDropdownChange() {
+    clearTimeout(debounceTimer);
+    fetchResults(buildUrl(), true);
+  }
+  if (actionFilter) actionFilter.addEventListener('change', onDropdownChange);
+  if (sourceFilter) sourceFilter.addEventListener('change', onDropdownChange);
+
+  resultsRegion.addEventListener('click', function (e) {
+    var link = e.target.closest('a.page-link');
+    if (!link) return;
+    try {
+      if (new URL(link.href).origin !== window.location.origin) return;
+    } catch (_) { return; }
+    e.preventDefault();
+    fetchResults(link.href, true);
   });
 
-  // Rewrite pagination href attributes to carry all active filters.
-  var pageLinks = document.querySelectorAll('a[data-page]');
-  pageLinks.forEach(function (link) {
-    var pageNum = link.getAttribute('data-page');
-    var params  = buildParams({ page: pageNum });
-    var qs      = params.toString();
-    link.href   = window.location.pathname + (qs ? '?' + qs : '');
+  window.addEventListener('popstate', function (e) {
+    var url = (e.state && e.state.url) ? e.state.url : window.location.href;
+    var params = new URLSearchParams(url.split('?')[1] || '');
+    searchInput.value = params.get('q') || '';
+    if (actionFilter) actionFilter.value = params.get('action') || '';
+    if (sourceFilter) sourceFilter.value = params.get('source') || '';
+    fetchResults(url, false);
   });
-
 })();
 </script>
 {% endblock extra_js %}

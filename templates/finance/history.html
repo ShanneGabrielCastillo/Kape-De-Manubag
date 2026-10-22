@@ -29,6 +29,7 @@
 </div>
 
 {% if search or month_filter %}
+<div id="results-region">
 <div class="filter-chips" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;font-size:0.8rem">
   {% if search %}
   <span style="background:var(--cream);border:1px solid var(--caramel);color:var(--brown-mid);padding:3px 10px;border-radius:20px">
@@ -41,6 +42,8 @@
   </span>
   {% endif %}
 </div>
+{% else %}
+<div id="results-region">
 {% endif %}
 
 <div class="card">
@@ -146,7 +149,7 @@
   {% if records.has_next %}<a href="?page={{ records.next_page_number }}{% if month_filter %}&month={{ month_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}" class="page-link" data-page="{{ records.next_page_number }}">Next ›</a>{% endif %}
 </div>
 {% endif %}
-
+</div>{# /results-region #}
 {% endblock %}
 
 {% block extra_js %}
@@ -154,58 +157,102 @@
 (function () {
   'use strict';
 
-  var search = document.getElementById('fh-search');
-  var month  = document.getElementById('fh-month');
+  var searchInput = document.getElementById('fh-search');
+  var monthInput = document.getElementById('fh-month');
+  var resultsRegion = document.getElementById('results-region');
+  if (!searchInput || !resultsRegion) return;
 
-  if (!search) return;  // no-JS fallback untouched
+  var form = searchInput.closest('form');
+  var submitBtn = form && form.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.style.display = 'none';
 
-  // Hide Filter button — auto-submit replaces it for JS browsers
-  // Use display:none (reversible) rather than remove() so the no-JS fallback
-  // survives bfcache hits and partial JS execution.
-  var form = search.closest('form');
-  var btn = form && form.querySelector('button[type="submit"]');
-  if (btn) btn.style.display = 'none';
+  var controller = null;
+  var seq = 0;
+
+  function fetchResults(url, pushHistory) {
+    if (controller) controller.abort();
+    controller = new AbortController();
+    var mySeq = ++seq;
+
+    fetch(url, { signal: controller.signal })
+      .then(function (resp) {
+        if (mySeq !== seq) return;
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return resp.text();
+      })
+      .then(function (html) {
+        if (!html || mySeq !== seq) return;
+        if (html.indexOf('id="login-form"') !== -1 || html.indexOf('name="username"') !== -1) {
+          showError('Session expired. Please reload.');
+          return;
+        }
+        var doc = (new DOMParser()).parseFromString(html, 'text/html');
+        var newRegion = doc.getElementById('results-region');
+        if (!newRegion) return;
+        resultsRegion.innerHTML = newRegion.innerHTML;
+        if (typeof window.reinitLucide === 'function') window.reinitLucide();
+        if (pushHistory) history.pushState({ url: url }, '', url);
+      })
+      .catch(function (err) {
+        if (err && err.name === 'AbortError') return;
+        showError('Could not load results. Please try again.');
+      });
+  }
+
+  function showError(msg) {
+    var existing = resultsRegion.querySelector('.fetch-error-banner');
+    if (existing) return;
+    var div = document.createElement('div');
+    div.className = 'fetch-error-banner';
+    div.setAttribute('role', 'alert');
+    div.style.cssText = 'padding:12px;margin-bottom:12px;background:#fff3cd;border:1px solid #ffc107;border-radius:6px;color:#856404;display:flex;justify-content:space-between;align-items:center';
+    div.innerHTML = '<span>' + msg + '</span><button onclick="this.parentNode.remove()" style="background:none;border:none;cursor:pointer;font-size:1.2rem" aria-label="Dismiss">&times;</button>';
+    resultsRegion.prepend(div);
+  }
 
   function buildUrl() {
     var params = new URLSearchParams();
-    var q = search.value.trim();
+    var q = searchInput.value.trim();
     if (q) params.set('q', q);
-    var m = month ? month.value : '';
-    if (m) params.set('month', m);
-    // omit 'page' — resets to page 1 on every filter change
+    if (monthInput && monthInput.value) params.set('month', monthInput.value);
     var qs = params.toString();
     return window.location.pathname + (qs ? '?' + qs : '');
   }
 
-  // Rewrite pagination hrefs to use URLSearchParams (proper encoding)
-  document.querySelectorAll('a.page-link[data-page]').forEach(function (link) {
-    var pageNum = parseInt(link.getAttribute('data-page'), 10);
-    if (isNaN(pageNum)) return;
-    var params = new URLSearchParams();
-    var q = search.value.trim();
-    if (q) params.set('q', q);
-    var m = month ? month.value : '';
-    if (m) params.set('month', m);
-    params.set('page', pageNum);
-    link.href = window.location.pathname + '?' + params.toString();
-  });
-
-  // Text search: 350ms debounce
-  var timer = null;
-  search.addEventListener('input', function () {
-    clearTimeout(timer);
-    timer = setTimeout(function () {
-      window.location.href = buildUrl();
+  var debounceTimer = null;
+  searchInput.addEventListener('input', function () {
+    clearTimeout(debounceTimer);
+    var url = buildUrl();
+    history.replaceState({ url: url }, '', url);
+    debounceTimer = setTimeout(function () {
+      fetchResults(url, true);
     }, 350);
   });
 
-  // Month picker: immediate on change, cancel pending debounce
-  if (month) {
-    month.addEventListener('change', function () {
-      clearTimeout(timer);
-      window.location.href = buildUrl();
+  if (monthInput) {
+    monthInput.addEventListener('change', function () {
+      clearTimeout(debounceTimer);
+      fetchResults(buildUrl(), true);
     });
   }
+
+  resultsRegion.addEventListener('click', function (e) {
+    var link = e.target.closest('a.page-link');
+    if (!link) return;
+    try {
+      if (new URL(link.href).origin !== window.location.origin) return;
+    } catch (_) { return; }
+    e.preventDefault();
+    fetchResults(link.href, true);
+  });
+
+  window.addEventListener('popstate', function (e) {
+    var url = (e.state && e.state.url) ? e.state.url : window.location.href;
+    var params = new URLSearchParams(url.split('?')[1] || '');
+    searchInput.value = params.get('q') || '';
+    if (monthInput) monthInput.value = params.get('month') || '';
+    fetchResults(url, false);
+  });
 })();
 </script>
 {% endblock %}
