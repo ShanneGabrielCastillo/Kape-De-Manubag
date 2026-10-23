@@ -28,8 +28,8 @@
   </form>
 </div>
 
-{% if search or month_filter %}
 <div id="results-region">
+{% if search or month_filter %}
 <div class="filter-chips" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;font-size:0.8rem">
   {% if search %}
   <span style="background:var(--cream);border:1px solid var(--caramel);color:var(--brown-mid);padding:3px 10px;border-radius:20px">
@@ -42,8 +42,6 @@
   </span>
   {% endif %}
 </div>
-{% else %}
-<div id="results-region">
 {% endif %}
 
 <div class="card">
@@ -164,7 +162,7 @@
 
   var form = searchInput.closest('form');
   var submitBtn = form && form.querySelector('button[type="submit"]');
-  if (submitBtn) submitBtn.style.display = 'none';
+  if (submitBtn) submitBtn.remove();
 
   var controller = null;
   var seq = 0;

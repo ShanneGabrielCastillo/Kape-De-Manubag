@@ -96,7 +96,7 @@ async function toggleStaff(url, isActive) {
 
   // Hide the Search button — AJAX replaces it for JS browsers
   var btn = document.getElementById('staff-search-btn');
-  if (btn) btn.style.display = 'none';
+  if (btn) btn.remove();
 
   // ── Request safety ─────────────────────────────────────────────────────
   var controller = null;  // current AbortController
