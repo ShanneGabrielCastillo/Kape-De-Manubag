@@ -667,6 +667,10 @@ document.addEventListener('click', function(e) {
   var seq = 0;
 
   function fetchResults(url, pushHistory) {
+    // History guard: pushHistory boolean (false from popstate handler)
+    // prevents double-push. This page uses the pushHistory boolean pattern;
+    // Staff Accounts and Inventory List use an isPopstate flag. Both are
+    // equivalent — no double-push on popstate navigation.
     if (controller) controller.abort();
     controller = new AbortController();
     var mySeq = ++seq;
@@ -688,8 +692,9 @@ document.addEventListener('click', function(e) {
         if (!newRegion) return;
         resultsRegion.innerHTML = newRegion.innerHTML;
         // Post-injection callbacks (critical order):
+        // _productPageBuildCards() calls reinitLucide() internally — no
+        // second call needed here.
         if (typeof window._productPageBuildCards === 'function') window._productPageBuildCards();
-        if (typeof window.reinitLucide === 'function') window.reinitLucide();
         if (pushHistory) history.pushState({ url: url }, '', url);
       })
       .catch(function (err) {

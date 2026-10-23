@@ -394,6 +394,10 @@
   }
 
   function fetchResults(url, pushHistory) {
+    // History guard: pushHistory boolean argument (false from popstate handler)
+    // prevents double-push. This page and inventory/log use this pattern;
+    // Staff Accounts and Inventory List use an isPopstate flag instead.
+    // Both achieve the same result — no double-push on popstate navigation.
     if (!validateDates()) return;
     if (controller) controller.abort();
     controller = new AbortController();
@@ -401,8 +405,11 @@
 
     fetch(url, { signal: controller.signal })
       .then(function (resp) {
-        if (mySeq !== seq) return;
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        if (mySeq !== seq) return null;
+        if (!resp.ok || !(resp.headers.get('content-type') || '').includes('text/html')) {
+          showError('Could not load results. Please try again.');
+          return null;
+        }
         return resp.text();
       })
       .then(function (html) {
@@ -426,7 +433,7 @@
 
   function showError(msg) {
     var existing = resultsRegion.querySelector('.fetch-error-banner');
-    if (existing) return;
+    if (existing) existing.remove();
     var div = document.createElement('div');
     div.className = 'fetch-error-banner';
     div.setAttribute('role', 'alert');
