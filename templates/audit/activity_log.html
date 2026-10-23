@@ -157,6 +157,8 @@
 }
 </style>
 
+<div id="results-region">
+
 {# ── Active Filter Chips ── #}
 {% if q or category or user_id or date_from or date_to %}
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;font-size:0.8rem">
@@ -356,6 +358,8 @@
 </div>
 {% endif %}
 
+</div>{# end #results-region #}
+
 {% endblock %}
 
 {% block extra_js %}
@@ -363,102 +367,132 @@
 (function () {
   'use strict';
 
-  var search   = document.getElementById('log-search');
-  var category = document.getElementById('log-category');
-  var user     = document.getElementById('log-user');
+  var searchInput = document.getElementById('log-search');
+  var categoryFilter = document.getElementById('log-category');
+  var userFilter = document.getElementById('log-user');
   var dateFrom = document.getElementById('log-date-from');
-  var dateTo   = document.getElementById('log-date-to');
-  var dateErr  = document.getElementById('date-range-error');
+  var dateTo = document.getElementById('log-date-to');
+  var dateError = document.getElementById('date-range-error');
+  var resultsRegion = document.getElementById('results-region');
+  if (!searchInput || !resultsRegion) return;
 
-  // Guard: if the search input is missing the page likely changed structure.
-  if (!search) return;
+  var form = searchInput.closest('form');
+  var submitBtn = form && form.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.style.display = 'none';
 
-  // Remove the Filter button — auto-submit replaces it for JS-capable browsers.
-  // The Clear link is a plain <a> and is intentionally left untouched.
-  var form = search.closest('form');
-  var btn = form && form.querySelector('button[type="submit"]');
-  if (btn) btn.remove();
+  var controller = null;
+  var seq = 0;
 
-  // Build a URL that encodes all current filter values.
-  // page is omitted by default (resets to page 1 on any filter change).
-  function buildUrl(pageNum) {
+  function validateDates() {
+    if (!dateFrom || !dateTo) return true;
+    if (dateFrom.value && dateTo.value && dateFrom.value > dateTo.value) {
+      if (dateError) dateError.style.display = 'block';
+      return false;
+    }
+    if (dateError) dateError.style.display = 'none';
+    return true;
+  }
+
+  function fetchResults(url, pushHistory) {
+    if (!validateDates()) return;
+    if (controller) controller.abort();
+    controller = new AbortController();
+    var mySeq = ++seq;
+
+    fetch(url, { signal: controller.signal })
+      .then(function (resp) {
+        if (mySeq !== seq) return;
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return resp.text();
+      })
+      .then(function (html) {
+        if (!html || mySeq !== seq) return;
+        if (html.indexOf('id="login-form"') !== -1 || html.indexOf('name="username"') !== -1) {
+          showError('Session expired. Please reload.');
+          return;
+        }
+        var doc = (new DOMParser()).parseFromString(html, 'text/html');
+        var newRegion = doc.getElementById('results-region');
+        if (!newRegion) return;
+        resultsRegion.innerHTML = newRegion.innerHTML;
+        if (typeof window.reinitLucide === 'function') window.reinitLucide();
+        if (pushHistory) history.pushState({ url: url }, '', url);
+      })
+      .catch(function (err) {
+        if (err && err.name === 'AbortError') return;
+        showError('Could not load results. Please try again.');
+      });
+  }
+
+  function showError(msg) {
+    var existing = resultsRegion.querySelector('.fetch-error-banner');
+    if (existing) return;
+    var div = document.createElement('div');
+    div.className = 'fetch-error-banner';
+    div.setAttribute('role', 'alert');
+    div.style.cssText = 'padding:12px;margin-bottom:12px;background:#fff3cd;border:1px solid #ffc107;border-radius:6px;color:#856404;display:flex;justify-content:space-between;align-items:center';
+    div.innerHTML = '<span>' + msg + '</span><button onclick="this.parentNode.remove()" style="background:none;border:none;cursor:pointer;font-size:1.2rem" aria-label="Dismiss">&times;</button>';
+    resultsRegion.prepend(div);
+  }
+
+  function buildUrl() {
     var params = new URLSearchParams();
-    var q = search.value.trim();
+    var q = searchInput.value.trim();
     if (q) params.set('q', q);
-    var cat = category ? category.value : '';
-    if (cat) params.set('category', cat);
-    var usr = user ? user.value : '';
-    if (usr) params.set('user', usr);
-    var df = dateFrom ? dateFrom.value : '';
-    var dt = dateTo   ? dateTo.value   : '';
-    if (df) params.set('date_from', df);
-    if (dt) params.set('date_to',   dt);
-    if (pageNum) params.set('page', String(pageNum));
+    if (categoryFilter && categoryFilter.value) params.set('category', categoryFilter.value);
+    if (userFilter && userFilter.value) params.set('user', userFilter.value);
+    if (dateFrom && dateFrom.value) params.set('date_from', dateFrom.value);
+    if (dateTo && dateTo.value) params.set('date_to', dateTo.value);
     var qs = params.toString();
     return window.location.pathname + (qs ? '?' + qs : '');
   }
 
-  // Validate the date range.  Returns true when navigation is safe.
-  function validateDates() {
-    var df = dateFrom ? dateFrom.value : '';
-    var dt = dateTo   ? dateTo.value   : '';
-    if (df && dt && df > dt) {
-      if (dateErr) dateErr.style.display = 'block';
-      return false;
-    }
-    if (dateErr) dateErr.style.display = 'none';
-    return true;
-  }
+  var debounceTimer = null;
+  searchInput.addEventListener('input', function () {
+    clearTimeout(debounceTimer);
+    var url = buildUrl();
+    history.replaceState({ url: url }, '', url);
+    debounceTimer = setTimeout(function () {
+      fetchResults(url, true);
+    }, 350);
+  });
 
-  function navigate() {
+  function onDropdownChange() {
+    clearTimeout(debounceTimer);
+    fetchResults(buildUrl(), true);
+  }
+  if (categoryFilter) categoryFilter.addEventListener('change', onDropdownChange);
+  if (userFilter) userFilter.addEventListener('change', onDropdownChange);
+
+  function onDateChange() {
+    clearTimeout(debounceTimer);
     if (!validateDates()) return;
-    window.location.href = buildUrl();
+    fetchResults(buildUrl(), true);
   }
+  if (dateFrom) dateFrom.addEventListener('change', onDateChange);
+  if (dateTo) dateTo.addEventListener('change', onDateChange);
 
-  var timer = null;
-
-  // Text search — debounced 350 ms.
-  search.addEventListener('input', function () {
-    clearTimeout(timer);
-    timer = setTimeout(navigate, 350);
+  resultsRegion.addEventListener('click', function (e) {
+    var link = e.target.closest('a.page-link');
+    if (!link) return;
+    try {
+      if (new URL(link.href).origin !== window.location.origin) return;
+    } catch (_) { return; }
+    e.preventDefault();
+    fetchResults(link.href, true);
   });
 
-  // Category and user — immediate.
-  if (category) {
-    category.addEventListener('change', function () {
-      clearTimeout(timer);
-      navigate();
-    });
-  }
-  if (user) {
-    user.addEventListener('change', function () {
-      clearTimeout(timer);
-      navigate();
-    });
-  }
-
-  // Date inputs — navigate when both dates form a valid range,
-  // or when only one date is provided, or when both are cleared.
-  if (dateFrom) {
-    dateFrom.addEventListener('change', function () {
-      clearTimeout(timer);
-      navigate();
-    });
-  }
-  if (dateTo) {
-    dateTo.addEventListener('change', function () {
-      clearTimeout(timer);
-      navigate();
-    });
-  }
-
-  // Rewrite pagination hrefs using URLSearchParams so filter values are
-  // correctly URL-encoded (fixes the hand-built encoding bug for special chars).
-  document.querySelectorAll('a.page-link[data-page]').forEach(function (a) {
-    var pageNum = a.getAttribute('data-page');
-    if (pageNum) a.href = buildUrl(parseInt(pageNum, 10));
+  window.addEventListener('popstate', function (e) {
+    var url = (e.state && e.state.url) ? e.state.url : window.location.href;
+    var params = new URLSearchParams(url.split('?')[1] || '');
+    searchInput.value = params.get('q') || '';
+    if (categoryFilter) categoryFilter.value = params.get('category') || '';
+    if (userFilter) userFilter.value = params.get('user') || '';
+    if (dateFrom) dateFrom.value = params.get('date_from') || '';
+    if (dateTo) dateTo.value = params.get('date_to') || '';
+    if (dateError) dateError.style.display = 'none'; // clear date error on popstate
+    fetchResults(url, false);
   });
-
 })();
 </script>
 {% endblock extra_js %}

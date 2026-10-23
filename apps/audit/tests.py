@@ -15,6 +15,7 @@ from unittest import mock
 
 from django.db import DatabaseError
 from django.test import RequestFactory, TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import CustomUser
@@ -950,3 +951,32 @@ class ActivityLogFilterTests(TestCase):
         self.client.force_login(self.cashier)
         response = self.client.get('/audit/', {'q': 'x'})
         self.assertIn(response.status_code, [302, 403])
+
+
+# ── Activity Log AJAX Tests ───────────────────────────────────────────────────
+
+
+class ActivityLogAjaxTests(TestCase):
+    """Confirm id="results-region" is present in the Activity Log page responses."""
+
+    def setUp(self):
+        self.admin = _create_user('ajax_admin_al', 'admin')
+        self.client.force_login(self.admin)
+
+    def test_activity_log_results_region_present(self):
+        response = self.client.get(reverse('audit:activity_log'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')
+
+    def test_activity_log_search_inside_results_region(self):
+        response = self.client.get(reverse('audit:activity_log'), {'q': 'test'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')
+
+    def test_activity_log_date_filter_inside_results_region(self):
+        response = self.client.get(
+            reverse('audit:activity_log'),
+            {'date_from': '2024-01-01', 'date_to': '2024-12-31'},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')

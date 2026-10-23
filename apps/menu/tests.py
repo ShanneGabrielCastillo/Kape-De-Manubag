@@ -492,3 +492,34 @@ class ProductListFilterTests(TestCase):
         response = c.get(self.url)
         # admin_required redirects or returns 403
         self.assertIn(response.status_code, [302, 403])
+
+
+# ── Product List AJAX Tests ───────────────────────────────────────────────────
+
+
+class ProductListAjaxTests(TestCase):
+    """Confirm id="results-region" is present in the Product List page responses."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username='ajax_admin_pl',
+            password='pass123',
+            role='admin',
+        )
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def test_product_list_results_region_present(self):
+        response = self.client.get(reverse('menu:product_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')
+
+    def test_product_list_search_inside_results_region(self):
+        response = self.client.get(reverse('menu:product_list'), {'q': 'test'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')
+
+    def test_product_list_category_filter_inside_results_region(self):
+        response = self.client.get(reverse('menu:product_list'), {'category': 'drinks'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')

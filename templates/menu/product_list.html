@@ -261,15 +261,6 @@
   <a href="{% url 'menu:product_create' %}" class="btn btn-primary">+ Add Product</a>
 </div>
 
-{% if products_in_active_orders %}
-<div class="alert alert-warning">
-  <i data-lucide="triangle-alert" class="status-icon" aria-hidden="true"></i> <strong>{{ products_in_active_orders }}</strong> product{{ products_in_active_orders|pluralize }}
-  {{ products_in_active_orders|pluralize:"is,are" }} currently referenced by active orders
-  (pending, preparing, or ready). Deactivating or marking one unavailable hides it from the
-  menu and POS immediately — those orders keep their saved line items and remain fulfillable.
-</div>
-{% endif %}
-
 <div class="filter-bar product-filter-bar">
   <form method="get" id="product-filter-form">
     <div class="pfb-search">
@@ -292,6 +283,17 @@
     </div>
   </form>
 </div>
+
+<div id="results-region">
+
+{% if products_in_active_orders %}
+<div class="alert alert-warning">
+  <i data-lucide="triangle-alert" class="status-icon" aria-hidden="true"></i> <strong>{{ products_in_active_orders }}</strong> product{{ products_in_active_orders|pluralize }}
+  {{ products_in_active_orders|pluralize:"is,are" }} currently referenced by active orders
+  (pending, preparing, or ready). Deactivating or marking one unavailable hides it from the
+  menu and POS immediately — those orders keep their saved line items and remain fulfillable.
+</div>
+{% endif %}
 
 <div class="card">
   <div class="table-wrapper">
@@ -395,6 +397,9 @@
   {% endif %}
 </div>
 {% endif %}
+
+</div>{# end #results-region #}
+
 {% endblock %}
 {% block extra_js %}
 <script>
@@ -621,6 +626,9 @@ document.addEventListener('click', function(e) {
     buildProductCards();
   });
 
+  // Expose for the fetch IIFE to call after each results-region replacement
+  window._productPageBuildCards = buildProductCards;
+
   // Re-run on resize so the correct layout shows when the window is resized
   let resizeTimer;
   window.addEventListener('resize', function () {
@@ -645,50 +653,109 @@ document.addEventListener('click', function(e) {
 /* ── Product list: auto-search + auto-category-filter (IIFE) ──────────── */
 (function () {
   'use strict';
-  var searchInput    = document.getElementById('product-search');
-  var categorySelect = document.getElementById('category-filter');
-  if (!searchInput && !categorySelect) return;
 
-  /* Remove the Filter submit button — auto-navigation replaces it for
-     JS-capable browsers. The form remains functional without JS. */
-  var form = document.getElementById('product-filter-form');
-  if (form) {
-    var submitBtn = form.querySelector('button[type="submit"]');
-    if (submitBtn) submitBtn.remove();
+  var searchInput = document.getElementById('product-search');
+  var categoryFilter = document.getElementById('category-filter');
+  var resultsRegion = document.getElementById('results-region');
+  if (!searchInput || !resultsRegion) return;
+
+  var form = searchInput.closest('form');
+  var submitBtn = form && form.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.remove(); // preserve existing behavior: remove() not display:none
+
+  var controller = null;
+  var seq = 0;
+
+  function fetchResults(url, pushHistory) {
+    if (controller) controller.abort();
+    controller = new AbortController();
+    var mySeq = ++seq;
+
+    fetch(url, { signal: controller.signal })
+      .then(function (resp) {
+        if (mySeq !== seq) return;
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return resp.text();
+      })
+      .then(function (html) {
+        if (!html || mySeq !== seq) return;
+        if (html.indexOf('id="login-form"') !== -1 || html.indexOf('name="username"') !== -1) {
+          showError('Session expired. Please reload.');
+          return;
+        }
+        var doc = (new DOMParser()).parseFromString(html, 'text/html');
+        var newRegion = doc.getElementById('results-region');
+        if (!newRegion) return;
+        resultsRegion.innerHTML = newRegion.innerHTML;
+        // Post-injection callbacks (critical order):
+        if (typeof window._productPageBuildCards === 'function') window._productPageBuildCards();
+        if (typeof window.reinitLucide === 'function') window.reinitLucide();
+        if (pushHistory) history.pushState({ url: url }, '', url);
+      })
+      .catch(function (err) {
+        if (err && err.name === 'AbortError') return;
+        showError('Could not load results. Please try again.');
+      });
   }
 
-  /* Build a URL for the product list with the current filter values.
-     Always omits `page` so pagination resets to 1 on every new filter. */
-  function buildUrl(q, category) {
+  function showError(msg) {
+    var existing = resultsRegion.querySelector('.fetch-error-banner');
+    if (existing) return;
+    var div = document.createElement('div');
+    div.className = 'fetch-error-banner';
+    div.setAttribute('role', 'alert');
+    div.style.cssText = 'padding:12px;margin-bottom:12px;background:#fff3cd;border:1px solid #ffc107;border-radius:6px;color:#856404;display:flex;justify-content:space-between;align-items:center';
+    div.innerHTML = '<span>' + msg + '</span><button onclick="this.parentNode.remove()" style="background:none;border:none;cursor:pointer;font-size:1.2rem" aria-label="Dismiss">&times;</button>';
+    resultsRegion.prepend(div);
+  }
+
+  function buildUrl() {
     var params = new URLSearchParams();
-    if (q && q.trim()) params.set('q', q.trim());
-    if (category) params.set('category', category);
+    var q = searchInput.value.trim();
+    if (q) params.set('q', q);
+    if (categoryFilter && categoryFilter.value) params.set('category', categoryFilter.value);
     var qs = params.toString();
     return window.location.pathname + (qs ? '?' + qs : '');
   }
 
-  /* Debounced text-input handler */
   var debounceTimer = null;
-  if (searchInput) {
-    searchInput.addEventListener('input', function () {
+  searchInput.addEventListener('input', function () {
+    clearTimeout(debounceTimer);
+    var url = buildUrl();
+    history.replaceState({ url: url }, '', url);
+    debounceTimer = setTimeout(function () {
+      fetchResults(url, true);
+    }, 350);
+  });
+
+  if (categoryFilter) {
+    categoryFilter.addEventListener('change', function () {
       clearTimeout(debounceTimer);
-      var q        = this.value;
-      var category = categorySelect ? categorySelect.value : '';
-      debounceTimer = setTimeout(function () {
-        window.location.href = buildUrl(q, category);
-      }, 350);
+      fetchResults(buildUrl(), true);
     });
   }
 
-  /* Immediate category-change handler */
-  if (categorySelect) {
-    categorySelect.addEventListener('change', function () {
-      clearTimeout(debounceTimer);   // cancel any pending text debounce
-      var q        = searchInput ? searchInput.value : '';
-      var category = this.value;
-      window.location.href = buildUrl(q, category);
-    });
-  }
+  resultsRegion.addEventListener('click', function (e) {
+    var link = e.target.closest('a.page-link');
+    if (!link) return;
+    try {
+      if (new URL(link.href).origin !== window.location.origin) return;
+    } catch (_) { return; }
+    e.preventDefault();
+    fetchResults(link.href, true);
+  });
+
+  // Delegated handlers on document for .toggle-active-btn / .toggle-product-btn
+  // are defined in the first <script> block and survive innerHTML replacement.
+  // Do NOT re-register them here.
+
+  window.addEventListener('popstate', function (e) {
+    var url = (e.state && e.state.url) ? e.state.url : window.location.href;
+    var params = new URLSearchParams(url.split('?')[1] || '');
+    searchInput.value = params.get('q') || '';
+    if (categoryFilter) categoryFilter.value = params.get('category') || '';
+    fetchResults(url, false);
+  });
 })();
 </script>
 {% endblock %}
