@@ -200,7 +200,7 @@ async function submitRestock() {
   if (!searchInput) return;
 
   var btn = document.getElementById('inv-filter-btn');
-  if (btn) btn.style.display = 'none';
+  if (btn) btn.remove();
 
   // ── Request safety ─────────────────────────────────────────────────────
   var controller = null;  // current AbortController

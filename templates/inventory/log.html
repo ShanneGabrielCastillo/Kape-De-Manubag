@@ -104,7 +104,7 @@
   var controller = null;
   var seq = 0;
 
-  function fetchResults(url, pushHistory) {
+  function fetchResults(url, historyMode) {
     if (controller) controller.abort();
     controller = new AbortController();
     var mySeq = ++seq;
@@ -125,7 +125,8 @@
         var newRegion = doc.getElementById('results-region');
         if (!newRegion) return;
         resultsRegion.innerHTML = newRegion.innerHTML;
-        if (pushHistory) history.pushState({ url: url }, '', url);
+        if (historyMode === 'push') history.pushState({ url: url }, '', url);
+        else if (historyMode === 'replace') history.replaceState({ url: url }, '', url);
       })
       .catch(function (err) {
         if (err && err.name === 'AbortError') return;
@@ -160,13 +161,13 @@
     var url = buildUrl();
     history.replaceState({ url: url }, '', url);
     debounceTimer = setTimeout(function () {
-      fetchResults(url, true);
+      fetchResults(url, 'push');
     }, 350);
   });
 
   function onDropdownChange() {
     clearTimeout(debounceTimer);
-    fetchResults(buildUrl(), true);
+    fetchResults(buildUrl(), 'push');
   }
   if (actionFilter) actionFilter.addEventListener('change', onDropdownChange);
   if (sourceFilter) sourceFilter.addEventListener('change', onDropdownChange);
@@ -178,7 +179,7 @@
       if (new URL(link.href).origin !== window.location.origin) return;
     } catch (_) { return; }
     e.preventDefault();
-    fetchResults(link.href, true);
+    fetchResults(link.href, 'push');
   });
 
   window.addEventListener('popstate', function (e) {
@@ -187,7 +188,7 @@
     searchInput.value = params.get('q') || '';
     if (actionFilter) actionFilter.value = params.get('action') || '';
     if (sourceFilter) sourceFilter.value = params.get('source') || '';
-    fetchResults(url, false);
+    fetchResults(url, 'none');
   });
 })();
 </script>

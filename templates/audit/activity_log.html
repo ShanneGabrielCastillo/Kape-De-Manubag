@@ -378,7 +378,7 @@
 
   var form = searchInput.closest('form');
   var submitBtn = form && form.querySelector('button[type="submit"]');
-  if (submitBtn) submitBtn.style.display = 'none';
+  if (submitBtn) submitBtn.remove();
 
   var controller = null;
   var seq = 0;
