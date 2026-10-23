@@ -160,6 +160,10 @@
   var resultsRegion = document.getElementById('results-region');
   if (!searchInput || !resultsRegion) return;
 
+  // Seed the initial history entry with a state object so popstate always
+  // has e.state.url (fixes Back navigation from pre-filtered URLs).
+  history.replaceState({ url: window.location.href }, '', window.location.href);
+
   var form = searchInput.closest('form');
   var submitBtn = form && form.querySelector('button[type="submit"]');
   if (submitBtn) submitBtn.remove();
@@ -168,6 +172,10 @@
   var seq = 0;
 
   function fetchResults(url, pushHistory) {
+    // History is committed BEFORE fetch to prevent double-pushState when a
+    // pagination click fires after a debounced search has already pushed once.
+    if (pushHistory) history.pushState({ url: url }, '', url);
+
     if (controller) controller.abort();
     controller = new AbortController();
     var mySeq = ++seq;
@@ -189,7 +197,6 @@
         if (!newRegion) return;
         resultsRegion.innerHTML = newRegion.innerHTML;
         if (typeof window.reinitLucide === 'function') window.reinitLucide();
-        if (pushHistory) history.pushState({ url: url }, '', url);
       })
       .catch(function (err) {
         if (err && err.name === 'AbortError') return;
