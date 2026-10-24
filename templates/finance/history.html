@@ -168,6 +168,17 @@
   var submitBtn = form && form.querySelector('button[type="submit"]');
   if (submitBtn) submitBtn.remove();
 
+  // Prevent implicit form submission (Enter key) from causing a full-page
+  // navigation. Without this, pressing Enter in the search input submits the
+  // GET form normally, reloading the page and destroying input focus.
+  if (form) {
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      clearTimeout(debounceTimer);
+      fetchResults(buildUrl(), true);
+    });
+  }
+
   var controller = null;
   var seq = 0;
 

@@ -98,6 +98,17 @@ async function toggleStaff(url, isActive) {
   var btn = document.getElementById('staff-search-btn');
   if (btn) btn.remove();
 
+  // Prevent implicit form submission (Enter key) from causing a full-page
+  // navigation. Without this, pressing Enter in the search input submits the
+  // GET form normally, reloading the page and destroying input focus.
+  if (form) {
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      clearTimeout(timer);
+      fetchResults(buildUrl(), 'push');
+    });
+  }
+
   // ── Request safety ─────────────────────────────────────────────────────
   var controller = null;  // current AbortController
   var seq = 0;            // monotonic counter; guards stale responses
