@@ -364,6 +364,7 @@
   </form>
 </div>
 
+<div id="results-region">
 <div class="card">
   <div class="table-wrapper">
     <table class="table-orders" data-mobile-cards="true" data-card-builder="orders">
@@ -466,6 +467,7 @@
   {% if orders.has_next %}<a href="?page={{ orders.next_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if search %}&q={{ search }}{% endif %}" class="page-link">Next ›</a>{% endif %}
 </div>
 {% endif %}
+</div>{# /results-region #}
 
 <!-- Payment Modal -->
 {% include "partials/payment_modal.html" %}
@@ -690,9 +692,18 @@ RealtimeConnection.on('new_order', function(order) {
   const hasFilter = new URLSearchParams(window.location.search).toString();
 
   if (hasFilter) {
-    // Active filter: let the reload handle visibility — a new order may not
-    // match the current filter, so don't prepend it unconditionally.
-    setTimeout(() => location.reload(), 2000);
+    // Active filter: use the AJAX fetch path (same as the search IIFE) to
+    // refresh the results region without a full page reload. This keeps the
+    // search input focused if the user is actively typing when a new order
+    // arrives. Fall back to location.reload() if the AJAX module is not
+    // available (e.g. JS error elsewhere on the page).
+    if (typeof window._orderListFetchResults === 'function') {
+      setTimeout(function () {
+        window._orderListFetchResults(window.location.href, 'none');
+      }, 2000);
+    } else {
+      setTimeout(() => location.reload(), 2000);
+    }
     return;
   }
 
@@ -1545,41 +1556,140 @@ function updateRowAfterGcashReject(orderId) {
 }
 </script>
 <script>
-// ── Phase 3: automatic text search (debounced) ─────────────────────────────
-// Self-contained IIFE scoped to the order-list search input only. Mirrors the
-// Phase 1/2 pattern. Returns early if the input is absent so the no-JS
-// <form method="get"> fallback keeps working. Removes the Filter button once
-// auto-search is wired up. Does NOT touch SSE/RealtimeConnection, the payment
-// modal, GCash verify, quickAdvance, receipt print, the status-tab links, the
-// Clear link, or the mobile card builder.
+// ── Phase 3: automatic text search (debounced, AJAX partial-replacement) ──
+// Self-contained IIFE. Replaces window.location.href full-page navigation
+// with fetch() + DOMParser + innerHTML so the search input keeps focus.
+// Only #results-region (table + pagination) is swapped; the search form,
+// status tabs, modals, and SSE handlers stay mounted and untouched.
 (function () {
   'use strict';
-  var input = document.getElementById('order-search');
-  if (!input) return;
 
-  // Auto-search replaces the Filter button for JS-capable browsers.
-  var btn = input.closest('form').querySelector('button[type="submit"]');
-  if (btn) btn.remove();
+  var input         = document.getElementById('order-search');
+  var resultsRegion = document.getElementById('results-region');
+  if (!input || !resultsRegion) return;
 
-  var timer = null;
+  // Seed the initial history entry so popstate always has e.state.url.
+  history.replaceState({ url: window.location.href }, '', window.location.href);
+
+  // Remove the Filter submit button for JS-capable browsers.
+  var form = input.closest('form');
+  var submitBtn = form && form.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.remove();
+
+  // Prevent Enter-key implicit form submission from causing full-page reload.
+  if (form) {
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      clearTimeout(searchTimer);
+      fetchResults(buildUrl(), 'push');
+    });
+  }
+
+  var controller = null;  // current AbortController
+  var seq = 0;            // monotonic counter — guards stale responses
+
+  // Build URL from current filter values (preserves active status tab).
+  function buildUrl() {
+    var params = new URLSearchParams();
+    var q = input.value.trim();
+    if (q) params.set('q', q);
+    // Read status from the current URL (set by the status-tab <a> links).
+    var status = new URLSearchParams(window.location.search).get('status');
+    if (status) params.set('status', status);
+    // Never forward 'page' — a new search resets to page 1.
+    var qs = params.toString();
+    return window.location.pathname + (qs ? '?' + qs : '');
+  }
+
+  // Fetch the Django view and swap only #results-region.
+  function fetchResults(url, historyMode) {
+    // Commit URL to history BEFORE fetch to prevent double-push on
+    // pagination click after a debounced search.
+    if (historyMode === 'push')         history.pushState({ url: url }, '', url);
+    else if (historyMode === 'replace') history.replaceState({ url: url }, '', url);
+
+    if (controller) controller.abort();
+    controller = new AbortController();
+    var mySeq = ++seq;
+
+    fetch(url, { signal: controller.signal })
+      .then(function (resp) {
+        if (mySeq !== seq) return null;
+        if (!resp.ok || !(resp.headers.get('content-type') || '').includes('text/html')) {
+          showSearchError('Could not load results. Please try again.');
+          return null;
+        }
+        return resp.text();
+      })
+      .then(function (html) {
+        if (!html || mySeq !== seq) return;
+        if (html.indexOf('id="login-form"') !== -1 || html.indexOf('name="username"') !== -1) {
+          showSearchError('Session expired. Please reload the page.');
+          return;
+        }
+        var doc = (new DOMParser()).parseFromString(html, 'text/html');
+        var newRegion = doc.getElementById('results-region');
+        if (!newRegion) { showSearchError('Could not load results. Please try again.'); return; }
+        resultsRegion.innerHTML = newRegion.innerHTML;
+        // Rebuild mobile order cards and Lucide icons in injected markup.
+        if (typeof window.initResponsiveTables === 'function') window.initResponsiveTables();
+        if (typeof window.reinitLucide        === 'function') window.reinitLucide();
+      })
+      .catch(function (err) {
+        if (err && err.name === 'AbortError') return;
+        showSearchError('Could not load results. Please try again.');
+      });
+  }
+
+  // Non-blocking error banner — existing results stay visible.
+  function showSearchError(msg) {
+    var existing = resultsRegion.querySelector('.order-search-error');
+    if (existing) existing.remove();
+    var div = document.createElement('div');
+    div.className = 'order-search-error';
+    div.setAttribute('role', 'alert');
+    div.style.cssText = 'padding:12px 14px;margin-bottom:12px;background:#fff3cd;border:1px solid #ffc107;border-radius:6px;color:#856404;display:flex;justify-content:space-between;align-items:center;font-size:0.9rem';
+    div.innerHTML = '<span>' + msg + '</span><button onclick="this.parentNode.remove()" style="background:none;border:none;cursor:pointer;font-size:1.2rem;line-height:1;padding:0 0 0 12px" aria-label="Dismiss">&times;</button>';
+    resultsRegion.prepend(div);
+  }
+
+  // 350 ms debounce on text input.
+  var searchTimer = null;
   input.addEventListener('input', function () {
-    clearTimeout(timer);
-    var val = this.value;
-    timer = setTimeout(function () {
-      var trimmed = val.trim();
-      var params = new URLSearchParams();
-      if (trimmed) params.set('q', trimmed);
-      // Preserve the currently selected status tab across a search change.
-      var current = new URLSearchParams(window.location.search);
-      var status = current.get('status');
-      if (status) params.set('status', status);
-      // Omit 'page' so a new search resets to page 1.
-      var qs = params.toString();
-      window.location.href = qs
-        ? window.location.pathname + '?' + qs
-        : window.location.pathname;
+    clearTimeout(searchTimer);
+    var url = buildUrl();
+    // replaceState coalesces keystrokes during the debounce window so only
+    // one history entry is pushed when the timer resolves.
+    history.replaceState({ url: url }, '', url);
+    searchTimer = setTimeout(function () {
+      fetchResults(url, 'push');
     }, 350);
   });
-})();
+
+  // Intercept pagination links inside #results-region via event delegation.
+  resultsRegion.addEventListener('click', function (e) {
+    var link = e.target.closest('a.page-link');
+    if (!link) return;
+    try {
+      if (new URL(link.href).origin !== window.location.origin) return;
+    } catch (_) { return; }
+    e.preventDefault();
+    fetchResults(link.href, 'push');
+  });
+
+  // Restore search value and re-fetch on Back / Forward.
+  window.addEventListener('popstate', function (e) {
+    var url = (e.state && e.state.url) ? e.state.url : window.location.href;
+    var params = new URLSearchParams(url.split('?')[1] || '');
+    input.value = params.get('q') || '';
+    fetchResults(url, 'none');
+  });
+
+  // Expose fetchResults so the SSE new_order handler can use it instead of
+  // location.reload() when a search filter is active. This avoids the page
+  // flash while still ensuring filtered results are kept up to date.
+  window._orderListFetchResults = fetchResults;
+
+}());
 </script>
 {% endblock %}

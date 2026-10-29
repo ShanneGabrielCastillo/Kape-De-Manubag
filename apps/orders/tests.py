@@ -2599,3 +2599,108 @@ class OrderListFilterTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Order Management')
         self.assertContains(response, 'name="q"')
+
+
+class OrderListAjaxTests(TestCase):
+    """Verify the AJAX partial-replacement structure for order-list search.
+
+    The search IIFE relies on:
+      - id="results-region" wrapping only the table + pagination
+      - id="order-search" living OUTSIDE results-region (so innerHTML
+        replacement never destroys the focused input)
+      - The results-region containing the orders table on filtered views
+
+    These are server-side HTML structure tests; client-side focus behaviour
+    and fetch() logic must be verified manually in a browser.
+    """
+
+    def setUp(self):
+        self.cashier = CustomUser.objects.create_user(
+            username='ajax_cashier', password=PASSWORD, role='cashier',
+        )
+        self.client.force_login(self.cashier)
+        self.url = reverse('orders:order_list')
+        self.category = Category.objects.create(name='Drinks', slug='drinks')
+        self.product = Product.objects.create(
+            category=self.category, name='Iced Coffee', price='60.00',
+            stock_quantity=10,
+        )
+
+    def _order(self, customer_name='Test Customer', status='awaiting_payment'):
+        return Order.objects.create(customer_name=customer_name, status=status)
+
+    def test_results_region_present_on_unfiltered_page(self):
+        """#results-region must be rendered on the unfiltered order list."""
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')
+
+    def test_results_region_present_with_search_query(self):
+        """#results-region must be rendered when a ?q= filter is active."""
+        self._order(customer_name='AjaxSearch')
+        response = self.client.get(self.url, {'q': 'AjaxSearch'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')
+        self.assertContains(response, 'AjaxSearch')
+
+    def test_results_region_present_with_status_filter(self):
+        """#results-region must be rendered when a ?status= filter is active."""
+        self._order(customer_name='StatusTest', status='preparing')
+        response = self.client.get(self.url, {'status': 'preparing'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')
+        self.assertContains(response, 'StatusTest')
+
+    def test_results_region_present_with_combined_filters(self):
+        """#results-region must be rendered when both ?q= and ?status= are active."""
+        self._order(customer_name='Combined', status='preparing')
+        response = self.client.get(self.url, {'q': 'Combined', 'status': 'preparing'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')
+        self.assertContains(response, 'Combined')
+
+    def test_search_input_is_outside_results_region(self):
+        """The search input (#order-search) must appear BEFORE #results-region
+        in the HTML so innerHTML replacement never destroys the focused input."""
+        response = self.client.get(self.url)
+        html = response.content.decode()
+        search_pos = html.find('id="order-search"')
+        region_pos = html.find('id="results-region"')
+        self.assertGreater(search_pos, 0, 'id="order-search" not found')
+        self.assertGreater(region_pos, 0, 'id="results-region" not found')
+        self.assertLess(
+            search_pos, region_pos,
+            'id="order-search" must appear before id="results-region" in HTML'
+        )
+
+    def test_results_region_contains_orders_table(self):
+        """The orders table must be inside #results-region so AJAX can replace it."""
+        self._order(customer_name='InRegion')
+        response = self.client.get(self.url, {'q': 'InRegion'})
+        html = response.content.decode()
+        region_start = html.find('id="results-region"')
+        self.assertGreater(region_start, 0, 'id="results-region" not found')
+        # The table must appear after the results-region opening tag.
+        region_content = html[region_start:]
+        self.assertIn('InRegion', region_content)
+        self.assertIn('table-orders', region_content)
+
+    def test_empty_search_returns_results_region(self):
+        """An empty results state must still render #results-region."""
+        response = self.client.get(self.url, {'q': 'NoMatchXYZ999'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')
+        self.assertContains(response, 'No orders found')
+
+    def test_pagination_links_inside_results_region(self):
+        """Pagination links must appear inside #results-region so the AJAX
+        click-delegation handler can intercept them."""
+        for i in range(11):
+            self._order(customer_name=f'PagAjax{i}')
+        response = self.client.get(self.url, {'q': 'PagAjax'})
+        html = response.content.decode()
+        region_start = html.find('id="results-region"')
+        self.assertGreater(region_start, 0, 'id="results-region" not found')
+        # The page=2 link must appear after the results-region opening tag.
+        region_content = html[region_start:]
+        self.assertIn('page=2', region_content)
