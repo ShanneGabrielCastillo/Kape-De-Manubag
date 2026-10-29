@@ -151,6 +151,12 @@
         var newRegion = doc.getElementById('results-region');
         if (!newRegion) return;
         resultsRegion.innerHTML = newRegion.innerHTML;
+        // Rebuild responsive mobile cards for the newly injected table rows.
+        // initResponsiveTables is always available (loaded by responsive-tables.js
+        // before this inline script runs).
+        if (typeof window.initResponsiveTables === 'function') {
+          window.initResponsiveTables();
+        }
       })
       .catch(function (err) {
         if (err && err.name === 'AbortError') return;

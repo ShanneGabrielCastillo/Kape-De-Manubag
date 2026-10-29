@@ -295,6 +295,10 @@ async function submitRestock() {
       if (typeof window.reinitLucide === 'function') {
         window.reinitLucide();
       }
+      // Rebuild responsive mobile cards for the newly injected table rows.
+      if (typeof window.initResponsiveTables === 'function') {
+        window.initResponsiveTables();
+      }
 
       if (!isPopstate) {
         if (historyMode === 'push') {

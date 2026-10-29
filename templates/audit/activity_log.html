@@ -440,6 +440,10 @@
         if (!newRegion) return;
         resultsRegion.innerHTML = newRegion.innerHTML;
         if (typeof window.reinitLucide === 'function') window.reinitLucide();
+        // Rebuild responsive mobile cards for the newly injected table rows.
+        if (typeof window.initResponsiveTables === 'function') {
+          window.initResponsiveTables();
+        }
       })
       .catch(function (err) {
         if (err && err.name === 'AbortError') return;

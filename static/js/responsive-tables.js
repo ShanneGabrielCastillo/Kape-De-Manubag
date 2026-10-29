@@ -204,25 +204,48 @@
   // Expose for external calls (post-AJAX updates, realtime inserts)
   window.initResponsiveTables = initResponsiveTables;
 
-  // Watch for DOM mutations in table wrappers so AJAX-updated tables re-render
-  document.addEventListener('DOMContentLoaded', function () {
-    const observer = new MutationObserver(function (mutations) {
-      let needsRebuild = false;
-      mutations.forEach(function (m) {
-        if (m.target.tagName === 'TBODY' ||
-            m.target.closest && m.target.closest('.table-wrapper')) {
-          needsRebuild = true;
-        }
-      });
-      if (needsRebuild) initResponsiveTables();
-    });
+  // Watch for DOM mutations in table wrappers so AJAX-updated tables re-render.
+  // The observer is attached at DOMContentLoaded and re-attached after every
+  // initResponsiveTables() call so new tbody elements (inserted via AJAX
+  // innerHTML replacement) are also observed going forward.
+  var _tableObserver = null;
 
+  function _attachTableObserver() {
+    if (!_tableObserver) {
+      _tableObserver = new MutationObserver(function (mutations) {
+        var needsRebuild = false;
+        mutations.forEach(function (m) {
+          if (m.target.tagName === 'TBODY' ||
+              (m.target.closest && m.target.closest('.table-wrapper'))) {
+            needsRebuild = true;
+          }
+        });
+        if (needsRebuild) initResponsiveTables();
+      });
+    }
+    // Disconnect all prior observations before re-scanning so detached
+    // tbody elements are dropped and replaced with the current live ones.
+    _tableObserver.disconnect();
     document.querySelectorAll('.table-wrapper').forEach(function (wrapper) {
-      const tbody = wrapper.querySelector('tbody');
+      var tbody = wrapper.querySelector('tbody');
       if (tbody) {
-        observer.observe(tbody, { childList: true, subtree: false });
+        _tableObserver.observe(tbody, { childList: true, subtree: false });
       }
     });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    _attachTableObserver();
   });
+
+  // Patch initResponsiveTables so calling it from AJAX IIFEs also
+  // re-attaches the observer to the freshly injected tbody elements.
+  var _origInit = initResponsiveTables;
+  window.initResponsiveTables = function () {
+    var count = _origInit();
+    // Re-attach observer to pick up newly injected tbody elements.
+    _attachTableObserver();
+    return count;
+  };
 
 })();

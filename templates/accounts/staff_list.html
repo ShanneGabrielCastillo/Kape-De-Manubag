@@ -98,6 +98,11 @@ async function toggleStaff(url, isActive) {
   var btn = document.getElementById('staff-search-btn');
   if (btn) btn.remove();
 
+  // Declare form BEFORE using it — was missing, causing ReferenceError in
+  // strict mode which crashed the entire IIFE and fell back to native GET
+  // form submission (full-page reload + focus loss on every debounce fire).
+  var form = searchInput.closest('form');
+
   // Prevent implicit form submission (Enter key) from causing a full-page
   // navigation. Without this, pressing Enter in the search input submits the
   // GET form normally, reloading the page and destroying input focus.
@@ -189,6 +194,11 @@ async function toggleStaff(url, isActive) {
       if (!newRegion) { showFetchError(); return; }
 
       document.getElementById('results-region').innerHTML = newRegion.innerHTML;
+
+      // Rebuild responsive mobile cards for the newly injected table rows.
+      if (typeof window.initResponsiveTables === 'function') {
+        window.initResponsiveTables();
+      }
 
       // Update URL only after a successful replacement
       if (!isPopstate) {
