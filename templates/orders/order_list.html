@@ -1612,9 +1612,19 @@ function updateRowAfterGcashReject(orderId) {
     controller = new AbortController();
     var mySeq = ++seq;
 
-    fetch(url, { signal: controller.signal })
+    fetch(url, { signal: controller.signal, credentials: 'same-origin' })
       .then(function (resp) {
         if (mySeq !== seq) return null;
+        // Detect session-expiry redirect: fetch() follows the 302 to the
+        // login page automatically; the final URL reveals the redirect.
+        // This is far more reliable than scanning the response body for
+        // authentication-related strings, which can produce false positives
+        // if a customer's name or any page content happens to match.
+        var finalPath = resp.url ? (new URL(resp.url, window.location.href)).pathname : '';
+        if (finalPath === '/accounts/login/' || finalPath.indexOf('/accounts/login') === 0) {
+          showSearchError('Session expired. Please <a href="/accounts/login/" style="color:inherit;font-weight:700;text-decoration:underline">sign in again</a>.');
+          return null;
+        }
         if (!resp.ok || !(resp.headers.get('content-type') || '').includes('text/html')) {
           showSearchError('Could not load results. Please try again.');
           return null;
@@ -1623,10 +1633,6 @@ function updateRowAfterGcashReject(orderId) {
       })
       .then(function (html) {
         if (!html || mySeq !== seq) return;
-        if (html.indexOf('id="login-form"') !== -1 || html.indexOf('name="username"') !== -1) {
-          showSearchError('Session expired. Please reload the page.');
-          return;
-        }
         var doc = (new DOMParser()).parseFromString(html, 'text/html');
         var newRegion = doc.getElementById('results-region');
         if (!newRegion) { showSearchError('Could not load results. Please try again.'); return; }

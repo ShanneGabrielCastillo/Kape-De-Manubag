@@ -132,9 +132,14 @@
     controller = new AbortController();
     var mySeq = ++seq;
 
-    fetch(url, { signal: controller.signal })
+    fetch(url, { signal: controller.signal, credentials: 'same-origin' })
       .then(function (resp) {
         if (mySeq !== seq) return null;
+        var finalPath = resp.url ? (new URL(resp.url, window.location.href)).pathname : '';
+        if (finalPath === '/accounts/login/' || finalPath.indexOf('/accounts/login') === 0) {
+          showError('Session expired. Please reload.');
+          return null;
+        }
         if (!resp.ok || !(resp.headers.get('content-type') || '').includes('text/html')) {
           showError('Could not load results. Please try again.');
           return null;
@@ -143,10 +148,6 @@
       })
       .then(function (html) {
         if (!html || mySeq !== seq) return;
-        if (html.indexOf('id="login-form"') !== -1 || html.indexOf('name="username"') !== -1) {
-          showError('Session expired. Please reload.');
-          return;
-        }
         var doc = (new DOMParser()).parseFromString(html, 'text/html');
         var newRegion = doc.getElementById('results-region');
         if (!newRegion) return;

@@ -2704,3 +2704,22 @@ class OrderListAjaxTests(TestCase):
         # The page=2 link must appear after the results-region opening tag.
         region_content = html[region_start:]
         self.assertIn('page=2', region_content)
+
+    def test_order_list_response_does_not_contain_login_form_id(self):
+        """The order list response for an authenticated user must never
+        contain id=\"login-form\". This ensures the URL-based session-expiry
+        check (and any future body-scan guard) correctly distinguishes the
+        order list page from the login page."""
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('id="login-form"', response.content.decode())
+
+    def test_authenticated_search_does_not_redirect_to_login(self):
+        """An authenticated search request must return 200, not redirect to
+        /accounts/login/. This verifies the session is valid and the view
+        does not inadvertently redirect the fetch() call to the login page."""
+        self._order(customer_name='SearchNoRedirect')
+        response = self.client.get(self.url, {'q': 'SearchNoRedirect'})
+        self.assertEqual(response.status_code, 200)
+        # The response URL should not be the login page.
+        self.assertNotEqual(response.wsgi_request.path, '/accounts/login/')

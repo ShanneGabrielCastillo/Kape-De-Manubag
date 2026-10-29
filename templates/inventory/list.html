@@ -267,8 +267,14 @@ async function submitRestock() {
     var mySeq = ++seq;
 
     try {
-      var resp = await fetch(url, { signal: controller.signal });
+      var resp = await fetch(url, { signal: controller.signal, credentials: 'same-origin' });
       if (mySeq !== seq) return;
+
+      var finalPath = resp.url ? (new URL(resp.url, window.location.href)).pathname : '';
+      if (finalPath === '/accounts/login/' || finalPath.indexOf('/accounts/login') === 0) {
+        showFetchError('Session expired. Please reload the page.');
+        return;
+      }
 
       if (!resp.ok || !(resp.headers.get('content-type') || '').includes('text/html')) {
         showFetchError();
@@ -277,12 +283,6 @@ async function submitRestock() {
 
       var html = await resp.text();
       if (mySeq !== seq) return;
-
-      // Session-expiry guard
-      if (html.includes('id="login-form"') || html.includes('name="username"')) {
-        showFetchError('Session expired. Please reload the page.');
-        return;
-      }
 
       var doc = new DOMParser().parseFromString(html, 'text/html');
       var newRegion = doc.getElementById('results-region');
