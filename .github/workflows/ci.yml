@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  # ── Job 1: SQLite — fast, runs on every push ─────────────────────────────
+  test-sqlite:
+    name: Tests (SQLite)
+    runs-on: ubuntu-latest
+
+    env:
+      DEBUG: "1"
+      SECRET_KEY: "ci-sqlite-test-key-not-for-production"
+      # No DATABASE_URL → Django falls back to SQLite (see settings.py)
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Django system check
+        run: python manage.py check
+
+      - name: Run migrations (SQLite)
+        run: python manage.py migrate --noinput
+
+      - name: Run full test suite (SQLite)
+        run: |
+          python manage.py test \
+            apps.inventory \
+            apps.orders \
+            apps.menu \
+            apps.accounts \
+            apps.finance \
+            apps.reports \
+            --verbosity=2
+
+  # ── Job 2: PostgreSQL — Phase 2A concurrency prerequisite ────────────────
+  test-postgresql:
+    name: Tests (PostgreSQL — Phase 2A concurrency)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: kdm_test
+          POSTGRES_USER: kdm_ci
+          POSTGRES_PASSWORD: kdm_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kdm_ci -d kdm_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DEBUG: "1"
+      SECRET_KEY: "ci-postgresql-test-key-not-for-production"
+      DATABASE_URL: "postgresql://kdm_ci:kdm_ci_password@localhost:5432/kdm_test"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Django system check (PostgreSQL)
+        run: python manage.py check
+
+      - name: Run migrations (PostgreSQL)
+        run: python manage.py migrate --noinput
+
+      - name: Run Phase 2A SQLite-compatible tests on PostgreSQL
+        # These tests verify constraints, service logic, and rollback behavior.
+        # Running them against PostgreSQL confirms the migration and constraints
+        # apply correctly to the real production database engine.
+        run: python manage.py test apps.inventory.tests_phase2a --verbosity=2
+
+      - name: Run Phase 2A PostgreSQL concurrency tests
+        # These tests use real concurrent connections (TransactionTestCase +
+        # threading) and verify SELECT FOR UPDATE lock ordering and atomicity.
+        # They are automatically skipped on SQLite (see tests_phase2a_pg.py).
+        run: python manage.py test apps.inventory.tests_phase2a_pg --verbosity=2
+
+      - name: Run full inventory test suite (PostgreSQL)
+        run: python manage.py test apps.inventory --verbosity=2
+
+      - name: Run orders tests (PostgreSQL)
+        run: |
+          python manage.py test \
+            apps.orders \
+            apps.menu \
+            apps.accounts \
+            apps.finance \
+            apps.reports \
+            --verbosity=1
