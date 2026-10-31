@@ -195,10 +195,16 @@ def _run_lock_in_thread(item_pks, barrier, results, idx, hold_event, release_eve
 
     Sequence:
       1. Wait at barrier — both threads attempt lock acquisition simultaneously.
-      2. Acquire locks (SELECT FOR UPDATE in ascending pk order).
-      3. Set hold_event — tells the test that locks are held.
-      4. Wait on release_event — holds the transaction open.
-      5. Commit (by exiting atomic()) — releases locks.
+      2. SET LOCAL lock_timeout = '15s' on this connection only.  Bounds the
+         SELECT FOR UPDATE so it raises OperationalError instead of waiting
+         forever if locks are unexpectedly held beyond 15 seconds.
+      3. Acquire locks (SELECT FOR UPDATE in ascending pk order).
+      4. Set hold_event — tells the test that locks are held.
+      5. Wait on release_event — holds the transaction open.  A 30-second
+         timeout acts as a safety net: if the test body crashes before setting
+         the release event, this worker eventually exits and closes its
+         connection rather than blocking indefinitely.
+      6. Commit (by exiting atomic()) — releases locks.
     """
     from django.db import transaction as db_transaction
     from django.db import connection as thread_conn
@@ -206,9 +212,24 @@ def _run_lock_in_thread(item_pks, barrier, results, idx, hold_event, release_eve
     try:
         barrier.wait()
         with db_transaction.atomic():
+            # Bound the SELECT FOR UPDATE to 15 seconds on this connection only.
+            # SET LOCAL resets automatically when the transaction commits or
+            # rolls back, so it cannot affect any other connection or test.
+            # Without this, PostgreSQL's default lock_timeout = 0 means the
+            # SELECT FOR UPDATE can block indefinitely if locks are held longer
+            # than expected (e.g. under CI load), leaving the worker alive past
+            # _JOIN_TIMEOUT and causing TransactionTestCase teardown to hang.
+            with thread_conn.cursor() as cursor:
+                cursor.execute("SET LOCAL lock_timeout = '15s'")
             locked = lock_inventory_items(item_pks)
-            hold_event.set()       # signal: locks acquired, holding them now
-            release_event.wait()   # wait for permission to release
+            hold_event.set()                    # signal: locks acquired, holding them now
+            released = release_event.wait(timeout=30)   # bounded wait — safety net
+            if not released:
+                # The test did not release us within the timeout.  Exit the
+                # transaction (which releases DB locks) and record the failure.
+                results[idx] = ('unexpected', 'ReleaseTimeout',
+                                f'Thread {idx} release_event never set within 30s')
+                return
             results[idx] = ('ok', sorted(locked.keys()))
     except Exception as exc:
         results[idx] = ('unexpected', type(exc).__name__, str(exc))
@@ -283,17 +304,105 @@ class LockOrderingConcurrencyTests(TransactionTestCase):
         t_a.start()
         t_b.start()
 
-        # Let whichever thread acquires the lock first hold it briefly,
-        # then release. The other thread will have been blocking.
-        # We do not know which finishes first — we just wait for both.
-        t_a.join(timeout=15)
-        t_b.join(timeout=15)
+        # ── Coordinated release protocol ──────────────────────────────────────
+        # Because both threads request the same two rows, lock_items() issues
+        # one ordered SELECT FOR UPDATE. Exactly one thread acquires both locks
+        # first; the other blocks at the PostgreSQL level until the first
+        # commits. The sequence is therefore:
+        #
+        #   1. "winner" thread: acquires both locks, sets hold_winner.
+        #   2. "waiter" thread: blocked in SELECT FOR UPDATE at the DB level.
+        #   3. Test sees hold_winner fired, sets release_winner.
+        #   4. Winner commits, releasing the DB locks.
+        #   5. Waiter acquires the now-free locks, sets hold_waiter.
+        #   6. Test sees hold_waiter fired, sets release_waiter.
+        #   7. Waiter commits. Both threads exit.
+        #
+        # Every wait is bounded. The try/finally guarantee ensures release
+        # events are always set even on a test failure or timeout, so worker
+        # threads can never leave open PostgreSQL transactions behind.
+        _HOLD_TIMEOUT    = 12   # seconds to wait for a thread to hold its locks
+        # The worker uses release_event.wait(timeout=30) as a safety net, so
+        # a worker can remain alive for up to 30 seconds after the release
+        # event is set plus the time needed to commit and close its connection.
+        # The join timeout must exceed the worker's release timeout to ensure
+        # the test cannot exit while a worker is still live.  35 s = 30 s
+        # (worker release backstop) + 5 s (commit + connection close margin).
+        _JOIN_TIMEOUT    = 35   # seconds — must exceed worker release_event.wait(timeout=30)
 
-        # If either thread is still alive, the locking deadlocked.
-        self.assertFalse(t_a.is_alive(), 'Thread A appears to have deadlocked.')
-        self.assertFalse(t_b.is_alive(), 'Thread B appears to have deadlocked.')
+        try:
+            # Step 3: wait for the winner (whichever thread got the locks first).
+            # We do not know which one wins, so we wait for either hold event.
+            # The winning thread sets its own event; the waiting thread is still
+            # blocked at the DB level and has not set anything yet.
+            first_held = threading.Event()
 
-        # Both should have succeeded (no deadlock errors).
+            def _watch_first():
+                while not (hold_a.is_set() or hold_b.is_set()):
+                    import time
+                    time.sleep(0.01)
+                first_held.set()
+
+            watcher = threading.Thread(target=_watch_first, daemon=True)
+            watcher.start()
+            first_held_ok = first_held.wait(timeout=_HOLD_TIMEOUT)
+            self.assertTrue(
+                first_held_ok,
+                'Neither thread acquired the locks within the timeout. '
+                'Possible deadlock or barrier failure.',
+            )
+
+            # Step 3-4: release the winning thread so it commits.
+            # Releasing both events here is safe: the waiter has not set its
+            # hold event yet, so its release_event fires into a blocked thread
+            # that will eventually unblock and pick up the signal.
+            release_a.set()
+            release_b.set()
+
+            # Step 5-6: wait for the second (waiter) thread to acquire its locks.
+            # After the winner commits, the waiter is unblocked by PostgreSQL
+            # and sets its hold event.  The test waits briefly, then the release
+            # was already set above — the waiter exits its hold immediately.
+            second_hold_a_ok = hold_a.wait(timeout=_HOLD_TIMEOUT)
+            second_hold_b_ok = hold_b.wait(timeout=_HOLD_TIMEOUT)
+            self.assertTrue(
+                second_hold_a_ok,
+                'Thread A never signalled that it held the locks.',
+            )
+            self.assertTrue(
+                second_hold_b_ok,
+                'Thread B never signalled that it held the locks.',
+            )
+
+        finally:
+            # Guarantee: always unblock any still-waiting worker so it can
+            # commit and close its connection. Without this, a failed assertion
+            # above would leave both threads blocking forever on release_event,
+            # keeping their PostgreSQL transactions (and row locks) open and
+            # preventing TransactionTestCase teardown (TRUNCATE) from running.
+            release_a.set()
+            release_b.set()
+            t_a.join(timeout=_JOIN_TIMEOUT)
+            t_b.join(timeout=_JOIN_TIMEOUT)
+            # Post-join liveness check inside finally so it always runs,
+            # even when the try block raised an AssertionError.
+            # _JOIN_TIMEOUT (35s) > worker release_event.wait(timeout=30s),
+            # so a thread that is still alive here genuinely did not finish.
+            if t_a.is_alive():
+                self.fail(
+                    f'Thread A is still alive after {_JOIN_TIMEOUT}s join. '
+                    'It did not finish cleanly despite release_event being set. '
+                    'Possible connection or DB lock issue.'
+                )
+            if t_b.is_alive():
+                self.fail(
+                    f'Thread B is still alive after {_JOIN_TIMEOUT}s join. '
+                    'It did not finish cleanly despite release_event being set. '
+                    'Possible connection or DB lock issue.'
+                )
+
+        # ── Post-condition checks ─────────────────────────────────────────────
+        # Both workers must have succeeded with no unexpected errors.
         for i, result in enumerate(results):
             self.assertIsNotNone(result, f'Thread {i} produced no result.')
             self.assertEqual(
@@ -301,7 +410,8 @@ class LockOrderingConcurrencyTests(TransactionTestCase):
                 f'Thread {i} failed unexpectedly: {result}',
             )
 
-        # Each lock result should contain both pks.
+        # Each lock result must contain both pks, confirming that lock_inventory_items()
+        # correctly acquired all requested rows regardless of input order.
         for result in results:
             locked_pks = result[1]
             self.assertIn(item_a.pk, locked_pks)
