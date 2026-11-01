@@ -292,7 +292,7 @@ class CashPaymentPrecisionTest(TestCase):
         })
 
     def _pending_order(self, total):
-        return _order(total, status='pending', is_paid=False,
+        return _order(total, status='awaiting_payment', is_paid=False,
                       payment_method='')
 
     def test_exact_payment_stored_as_decimal(self):
@@ -367,6 +367,17 @@ class CashPaymentPrecisionTest(TestCase):
         order = self._pending_order(Decimal('123.10'))
         self._pay(order, '200.00')
         order.refresh_from_db()
+
+        # process_payment advances awaiting_payment → preparing.
+        # cash_sales requires status='completed', so advance the order
+        # through the remaining valid lifecycle transitions using the
+        # existing quick_status_advance endpoint (preparing → ready,
+        # then ready → completed).  This exercises the real transition
+        # service rather than bypassing it with a direct model update.
+        advance_url = reverse('orders:quick_status_advance',
+                              kwargs={'pk': order.pk})
+        self.client.post(advance_url)   # preparing → ready
+        self.client.post(advance_url)   # ready → completed
 
         # Finance cash_sales must see the stored order.total exactly
         cash_total, count = _get_cash_sales_for_date(TODAY)
