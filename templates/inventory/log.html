@@ -6,15 +6,15 @@
   <a href="{% url 'inventory:list' %}" class="btn btn-outline">← Back to Inventory</a>
 </div>
 <div class="filter-bar">
-  <form method="get" id="log-filter-form" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-    <input id="log-search" type="text" name="q" value="{{ q }}" placeholder="Search product, reason or notes..." class="form-control" style="min-width:200px;flex:1">
-    <select id="log-action-filter" name="action" class="form-control" style="min-width:140px">
+  <form method="get" id="log-filter-form" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;min-width:0">
+    <input id="log-search" type="text" name="q" value="{{ q }}" placeholder="Search product, reason or notes..." class="form-control">
+    <select id="log-action-filter" name="action" class="form-control">
       <option value="">All Actions</option>
       {% for val, label in action_choices %}
         <option value="{{ val }}"{% if action_filter == val %} selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
-    <select id="log-source-filter" name="source" class="form-control" style="min-width:160px">
+    <select id="log-source-filter" name="source" class="form-control">
       <option value="">All Sources</option>
       {% for val, label in source_choices %}
         <option value="{{ val }}"{% if source_filter == val %} selected{% endif %}>{{ label }}</option>

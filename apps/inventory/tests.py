@@ -726,3 +726,58 @@ class InventoryListAjaxTests(TestCase):
         self.assertGreater(region_pos, filter_bar_pos,
             'filter-bar must appear before results-region (not nested inside it)')
 
+
+class InventoryLogAjaxTests(TestCase):
+    """AJAX partial-replacement: confirm id='results-region' is present in
+    Inventory Log responses for plain, q=, action=, and source= requests."""
+
+    def setUp(self):
+        self.admin = CustomUser.objects.create_user(
+            username='invlog_ajax_admin', password='test-pass-1', role='admin',
+        )
+        self.client.force_login(self.admin)
+        self.category = Category.objects.create(name='Drinks', slug='drinks-log-ajax')
+        self.coffee = Product.objects.create(
+            category=self.category, name='Iced Coffee',
+            price='60.00', stock_quantity=10,
+        )
+        InventoryLog.objects.create(
+            product=self.coffee, action='restock', source='manual_adjustment',
+            reason='Restock', quantity_change=10, quantity_before=0,
+            quantity_after=10, performed_by=self.admin,
+        )
+
+    def test_results_region_present(self):
+        """GET /inventory/log/ returns id="results-region"."""
+        response = self.client.get(reverse('inventory:log'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')
+
+    def test_results_region_present_with_q_filter(self):
+        """GET /inventory/log/?q=coffee returns id="results-region"."""
+        response = self.client.get(reverse('inventory:log'), {'q': 'coffee'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')
+
+    def test_results_region_present_with_action_filter(self):
+        """GET /inventory/log/?action=restock returns id="results-region"."""
+        response = self.client.get(reverse('inventory:log'), {'action': 'restock'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')
+
+    def test_results_region_present_with_source_filter(self):
+        """GET /inventory/log/?source=manual_adjustment returns id="results-region"."""
+        response = self.client.get(
+            reverse('inventory:log'), {'source': 'manual_adjustment'},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')
+
+    def test_filter_bar_outside_results_region(self):
+        """filter-bar must appear before results-region in the HTML source."""
+        response = self.client.get(reverse('inventory:log'))
+        content = response.content.decode()
+        filter_bar_pos = content.find('id="log-filter-form"')
+        region_pos = content.find('id="results-region"')
+        self.assertGreater(region_pos, filter_bar_pos,
+            'log-filter-form must appear before results-region (not nested inside it)')

@@ -38,11 +38,11 @@
 </div>
 
 <div class="filter-bar" style="margin-bottom:1rem">
-  <form method="get" class="inv-filter-form" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+  <form method="get" class="inv-filter-form" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;min-width:0">
     <input type="text" name="q" id="inv-search"
            value="{{search}}" placeholder="Search by product name…"
-           class="form-control" style="max-width:280px">
-    <select name="category" id="inv-category" class="form-control" style="max-width:180px">
+           class="form-control">
+    <select name="category" id="inv-category" class="form-control">
       <option value="">All Categories</option>
       {% for cat in categories %}
       <option value="{{cat.pk}}" {% if category_filter == cat.pk|stringformat:"s" %}selected{% endif %}>
@@ -50,7 +50,7 @@
       </option>
       {% endfor %}
     </select>
-    <select name="stock_status" id="inv-stock-status" class="form-control" style="max-width:180px">
+    <select name="stock_status" id="inv-stock-status" class="form-control">
       <option value="">All Stock Levels</option>
       <option value="out_of_stock" {% if stock_status_filter == 'out_of_stock' %}selected{% endif %}>Out of Stock</option>
       <option value="critical" {% if stock_status_filter == 'critical' %}selected{% endif %}>Critical (≤5)</option>
