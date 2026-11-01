@@ -124,6 +124,13 @@
           {% if form.email.errors %}<small style="color:var(--red-accent)">{{ form.email.errors.0 }}</small>{% endif %}
         </div>
 
+        {# Phone #}
+        <div class="form-group">
+          <label class="form-label">Phone</label>
+          {{ form.phone }}
+          {% if form.phone.errors %}<small style="color:var(--red-accent)">{{ form.phone.errors.0 }}</small>{% endif %}
+        </div>
+
         {# Profile Image #}
         <div class="form-group">
           <label class="form-label">Profile Image</label>

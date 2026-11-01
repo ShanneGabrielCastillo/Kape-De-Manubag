@@ -63,11 +63,12 @@ class ProfileUpdateForm(forms.ModelForm):
 
     class Meta:
         model = CustomUser
-        fields = ['first_name', 'last_name', 'email', 'profile_image']
+        fields = ['first_name', 'last_name', 'email', 'phone', 'profile_image']
         widgets = {
             'first_name': forms.TextInput(attrs={'class': 'form-control'}),
             'last_name': forms.TextInput(attrs={'class': 'form-control'}),
             'email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'phone': forms.TextInput(attrs={'class': 'form-control'}),
         }
 
     def save(self, commit=True):
