@@ -16,6 +16,9 @@ jobs:
       DEBUG: "1"
       SECRET_KEY: "ci-sqlite-test-key-not-for-production"
       # No DATABASE_URL → Django falls back to SQLite (see settings.py)
+      # Use test_settings to bypass the manifest staticfiles storage,
+      # which requires a pre-built staticfiles.json that is not committed.
+      DJANGO_SETTINGS_MODULE: kape_de_manubag.test_settings
 
     steps:
       - uses: actions/checkout@v4
@@ -70,6 +73,9 @@ jobs:
       DEBUG: "1"
       SECRET_KEY: "ci-postgresql-test-key-not-for-production"
       DATABASE_URL: "postgresql://kdm_ci:kdm_ci_password@localhost:5432/kdm_test"
+      # Use test_settings to bypass the manifest staticfiles storage,
+      # which requires a pre-built staticfiles.json that is not committed.
+      DJANGO_SETTINGS_MODULE: kape_de_manubag.test_settings
 
     steps:
       - uses: actions/checkout@v4
