@@ -416,6 +416,19 @@ class IngredientMovementLog(models.Model):
         help_text="Snapshot of order.order_number at write time.",
     )
 
+    # ── Optional purchase link (Phase 3) ──────────────────────────────────────
+    # Links purchase movements to the specific StockPurchaseItem that caused
+    # them. SET_NULL so movement rows survive if a purchase record is corrected
+    # via adjustment (purchase rows themselves are never deleted per Rev 3 D.7,
+    # but the FK is nullable for safety and for all non-purchase movement types).
+    purchase_item = models.ForeignKey(
+        'inventory.StockPurchaseItem',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='movements',
+        help_text='The purchase line item that caused this movement, if any.',
+    )
+
     # ── Idempotency key ───────────────────────────────────────────────────────
     # Unique when set; null for movements that have no natural idempotency key
     # (e.g. initial stock counts). Prevents duplicate movements when a service
@@ -574,6 +587,7 @@ class IngredientMovementLog(models.Model):
         reason_code='',
         note='',
         order=None,
+        purchase_item=None,
         idempotency_key=None,
         performed_by=None,
     ):
@@ -610,6 +624,223 @@ class IngredientMovementLog(models.Model):
             note=note,
             order=order,
             order_number=order.order_number if order is not None else '',
+            purchase_item=purchase_item,
             idempotency_key=idempotency_key,
             performed_by=performed_by,
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Phase 3 — Purchase Foundation
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# These models are ADDITIVE. They do not alter any Phase 2A or legacy model.
+#
+# Quantity precision shorthand (mirroring Phase 2A):
+#   Q = DecimalField(max_digits=14, decimal_places=3)  — stock quantities
+#   F = DecimalField(max_digits=14, decimal_places=4)  — conversion factors
+#
+# Rounding rule (Rev 3 §D.7): the ONLY place rounding occurs is
+#   base_quantity = quantize(purchase_quantity × conversion_factor, 0.001, ROUND_HALF_UP)
+# This is enforced by the service layer (Phase 3-2), not by the model.
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def _factor_field(**kwargs):
+    """Return a DecimalField(14,4) with the project-standard conversion-factor precision."""
+    return models.DecimalField(max_digits=14, decimal_places=4, **kwargs)
+
+
+# ── UnitConversion ────────────────────────────────────────────────────────────
+
+class UnitConversion(models.Model):
+    """
+    Defines how a purchase unit (e.g. kg, L, box-of-12) relates to the
+    InventoryItem's base unit (g, ml, pcs).
+
+    One row per (item, purchase_unit) pair. The conversion_factor is the
+    multiplier that converts purchase_unit to base_unit:
+
+        base_quantity = purchase_quantity × conversion_factor
+
+    Example: 1 kg = 1000 g → conversion_factor = 1000.0000.
+
+    Rev 3 §D.3: editing a factor affects future purchases only, because each
+    StockPurchaseItem row snapshots its own factor at creation time.
+    """
+
+    inventory_item = models.ForeignKey(
+        InventoryItem,
+        on_delete=models.PROTECT,
+        related_name='unit_conversions',
+        help_text='The ingredient or packaging material this conversion applies to.',
+    )
+    purchase_unit = models.CharField(
+        max_length=40,
+        help_text=(
+            'Name of the purchase unit (e.g. "kg", "L", "box-of-12"). '
+            'Case-insensitive unique per item.'
+        ),
+    )
+    conversion_factor = _factor_field(
+        help_text=(
+            'Multiplier to convert one purchase_unit to the item\'s base unit. '
+            'Must be > 0. Example: 1 kg → 1000 g, so factor = 1000.0000.'
+        ),
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text='Inactive conversions are hidden from the purchase screen.',
+    )
+    notes = models.TextField(
+        blank=True, default='',
+        help_text='Optional staff note (e.g. supplier-specific pack sizes).',
+    )
+
+    class Meta:
+        ordering = ['inventory_item', 'purchase_unit']
+        constraints = [
+            # A conversion factor of zero or less is meaningless and would
+            # corrupt the base_quantity calculation.
+            models.CheckConstraint(
+                **_check(condition=Q(conversion_factor__gt=Decimal('0'))),
+                name='conv_factor_positive',
+            ),
+            # Only one factor per (item, purchase_unit) pair, case-insensitive.
+            # Mirrors item_name_unique_ci using Lower().
+            models.UniqueConstraint(
+                'inventory_item',
+                models.functions.Lower('purchase_unit'),
+                name='conv_unique_unit_per_item',
+                violation_error_message=(
+                    'A conversion for this purchase unit already exists for this item.'
+                ),
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f'{self.inventory_item.name}: '
+            f'1 {self.purchase_unit} = {self.conversion_factor} '
+            f'{self.inventory_item.base_unit}'
+        )
+
+
+# ── StockPurchase ─────────────────────────────────────────────────────────────
+
+class StockPurchase(models.Model):
+    """
+    Header record for one stock-purchase event (e.g. a supplier delivery).
+
+    Rev 3 §D.7: append-only. A mistaken purchase is corrected by recording
+    an adjustment movement, never by editing or deleting the purchase row.
+
+    The idempotency_key allows the purchase screen to safely retry a failed
+    submission without creating duplicate records.
+    """
+
+    purchase_date = models.DateField(
+        help_text='The date the stock was actually received.',
+    )
+    notes = models.TextField(
+        blank=True, default='',
+        help_text='Optional staff note (e.g. supplier, invoice number).',
+    )
+    performed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='stock_purchases',
+        help_text='Staff member who recorded this purchase.',
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='When this purchase record was created.',
+    )
+    idempotency_key = models.CharField(
+        max_length=120,
+        unique=True,
+        help_text=(
+            'Unique key to prevent duplicate purchase records on retried '
+            'form submissions.'
+        ),
+    )
+
+    class Meta:
+        ordering = ['-purchase_date', '-created_at']
+
+    def __str__(self):
+        return f'Purchase {self.pk} on {self.purchase_date}'
+
+
+# ── StockPurchaseItem ─────────────────────────────────────────────────────────
+
+class StockPurchaseItem(models.Model):
+    """
+    One line of a StockPurchase: how much of one InventoryItem was purchased,
+    in what purchase unit, at what conversion factor.
+
+    All three quantity fields (purchase_quantity, conversion_factor,
+    base_quantity) are snapshotted at creation. Editing the UnitConversion
+    record later has no effect on existing purchase lines.
+
+    Rev 3 §D.7 rounding rule (enforced by the service, not here):
+        base_quantity = quantize(purchase_quantity × conversion_factor, 0.001, ROUND_HALF_UP)
+    This is the ONLY place rounding occurs in the whole design.
+    """
+
+    purchase = models.ForeignKey(
+        StockPurchase,
+        on_delete=models.CASCADE,
+        related_name='items',
+        help_text='The parent purchase record.',
+    )
+    inventory_item = models.ForeignKey(
+        InventoryItem,
+        on_delete=models.PROTECT,
+        related_name='purchase_items',
+        help_text='The ingredient or packaging material that was purchased.',
+    )
+
+    # ── Snapshots (immutable after creation) ─────────────────────────────────
+    purchase_unit = models.CharField(
+        max_length=40,
+        help_text='Snapshot of the purchase unit at the time of this purchase.',
+    )
+    purchase_quantity = _qty_field(
+        help_text='Quantity purchased in the purchase_unit. Must be > 0.',
+    )
+    conversion_factor = _factor_field(
+        help_text='Snapshot of the conversion factor at the time of this purchase. Must be > 0.',
+    )
+    base_quantity = _qty_field(
+        help_text=(
+            'Computed base-unit quantity added to stock: '
+            'quantize(purchase_quantity × conversion_factor, 0.001, ROUND_HALF_UP). '
+            'Must be > 0. Set by the service before saving.'
+        ),
+    )
+
+    class Meta:
+        ordering = ['purchase', 'inventory_item']
+        constraints = [
+            models.CheckConstraint(
+                **_check(condition=Q(purchase_quantity__gt=Decimal('0.000'))),
+                name='spi_purchase_quantity_positive',
+            ),
+            models.CheckConstraint(
+                **_check(condition=Q(base_quantity__gt=Decimal('0.000'))),
+                name='spi_base_quantity_positive',
+            ),
+            models.CheckConstraint(
+                **_check(condition=Q(conversion_factor__gt=Decimal('0'))),
+                name='spi_factor_positive',
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f'{self.purchase}: {self.purchase_quantity} {self.purchase_unit} '
+            f'of {self.inventory_item.name} → {self.base_quantity} '
+            f'{self.inventory_item.base_unit}'
         )

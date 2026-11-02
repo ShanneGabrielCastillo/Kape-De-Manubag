@@ -21,7 +21,7 @@ No view, URL, form, or template code belongs in this file.
 
 from decimal import Decimal
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from apps.inventory.models import IngredientMovementLog, InventoryItem
 
@@ -392,3 +392,338 @@ def record_wastage(
     )
 
     return movement
+
+
+# ── Purchase service ──────────────────────────────────────────────────────────
+
+# Phase 3-2 imports — placed here (not at module top) to keep the import
+# section minimal for the existing services and avoid circular-import risk
+# from the new Phase 3-1 models during early startup.
+from decimal import ROUND_HALF_UP
+
+
+class FractionalPcsError(InventoryServiceError):
+    """
+    Raised when a purchase of a 'pcs' item yields a fractional base_quantity.
+
+    Rev 3 §D.2: 'pcs items accept whole numbers only'. A purchase of 2.5
+    boxes × 3 pcs/box = 7.500 pcs is fine (whole), but 2.5 boxes × 3.1
+    pcs/box = 7.750 pcs is not.
+    """
+    def __init__(self, item, base_quantity):
+        self.item         = item
+        self.base_quantity = base_quantity
+        super().__init__(
+            f'Purchase of "{item.name}" would add {base_quantity} pcs, '
+            'which is not a whole number. '
+            'Adjust the purchase quantity or conversion factor.'
+        )
+
+
+class PurchaseLineError(InventoryServiceError):
+    """
+    Raised for a validation failure on a specific purchase line (e.g. inactive
+    item, non-positive base_quantity after rounding).
+
+    Carries `line_index` (0-based) so the caller can point to the offending
+    line in the UI.
+    """
+    def __init__(self, message, line_index=None):
+        self.line_index = line_index
+        super().__init__(message)
+
+
+def _compute_base_quantity(purchase_quantity, conversion_factor):
+    """
+    Apply the single rounding rule from Rev 3 §D.7.
+
+        base_quantity = quantize(purchase_quantity × conversion_factor,
+                                 0.001, ROUND_HALF_UP)
+
+    Both inputs are converted to Decimal via str() to avoid any float
+    representation error before the multiplication.  The ROUND_HALF_UP
+    mode ensures 0.0005 rounds to 0.001 (not 0.000 as ROUND_HALF_EVEN
+    would give in some cases).
+
+    This is the ONLY place rounding occurs in the whole inventory design.
+    """
+    qty    = Decimal(str(purchase_quantity))
+    factor = Decimal(str(conversion_factor))
+    return (qty * factor).quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
+
+
+def record_purchase(
+    *,
+    purchase_date,
+    lines,
+    idempotency_key,
+    notes='',
+    performed_by=None,
+):
+    """
+    Record a stock-purchase event: create the purchase header, purchase lines,
+    update on-hand stock, and write movement logs.
+
+    Rev 3 §D.7, §H.1, §H.5.
+
+    This service opens its own ``transaction.atomic()`` block because a purchase
+    is a top-level write operation (unlike adjustment/wastage, which are called
+    from views that supply their own outer atomic context).  The entire purchase —
+    header, all lines, all stock updates, all movement rows — commits or rolls
+    back as one unit.
+
+    Idempotency
+    -----------
+    If ``idempotency_key`` already exists in ``StockPurchase``, the existing
+    record is returned immediately without touching inventory or writing
+    movement logs.  This allows the purchase form to safely retry after a
+    network timeout.
+
+    If the key is submitted with *different* line data, the already-committed
+    purchase is returned unchanged (the new payload is silently ignored).
+    Rev 3 §D.12 records this as the correct safe behavior: the first committed
+    write wins; retries must be payload-identical in practice.  The caller
+    should surface the returned purchase to the user for confirmation.
+
+    Parameters
+    ----------
+    purchase_date : datetime.date
+        The date the stock was received.
+    lines : list[dict]
+        Each element must contain:
+          ``inventory_item_id`` : int   — PK of the InventoryItem
+          ``purchase_unit``     : str   — purchase unit name (snapshot)
+          ``purchase_quantity`` : Decimal or str — quantity in purchase_unit
+          ``conversion_factor`` : Decimal or str — factor from UnitConversion
+        Optional per-line keys:
+          ``note``              : str   — staff note on this line
+          ``reason_code``       : str   — machine-readable code
+    idempotency_key : str
+        Unique key for this purchase document.  Duplicate keys return the
+        existing document.
+    notes : str, optional
+        Header-level notes (supplier name, invoice number, etc.).
+    performed_by : CustomUser, optional
+        Staff member recording the purchase.
+
+    Returns
+    -------
+    StockPurchase
+        The newly created (or pre-existing idempotent) purchase record.
+
+    Raises
+    ------
+    PurchaseLineError
+        A line references an inactive item, yields a non-positive
+        base_quantity, or contains an invalid purchase_quantity /
+        conversion_factor.
+    FractionalPcsError
+        A 'pcs' item yields a fractional base_quantity after rounding.
+    InventoryServiceError
+        Any other validation failure (e.g. empty lines list).
+    """
+    from apps.inventory.models import StockPurchase, StockPurchaseItem
+
+    if not lines:
+        raise InventoryServiceError('A purchase must have at least one line.')
+
+    # ── Idempotency check (outside the write transaction) ────────────────────
+    # Using get_or_create here would be a read-modify-write race; instead we
+    # attempt a plain fetch first.  If the key already exists we return early
+    # before acquiring any locks.  If it doesn't exist yet, we proceed into
+    # the atomic block where the unique constraint is the final guard.
+    existing = StockPurchase.objects.filter(
+        idempotency_key=idempotency_key
+    ).first()
+    if existing is not None:
+        return existing
+
+    # ── Pre-compute base_quantity for every line ──────────────────────────────
+    # Done before the transaction so validation errors surface cheaply.
+    prepared_lines = []
+    for idx, line in enumerate(lines):
+        try:
+            purchase_qty = Decimal(str(line['purchase_quantity']))
+            factor       = Decimal(str(line['conversion_factor']))
+        except Exception as exc:
+            raise PurchaseLineError(
+                f'Line {idx}: invalid purchase_quantity or conversion_factor — {exc}',
+                line_index=idx,
+            ) from exc
+
+        if purchase_qty <= Decimal('0'):
+            raise PurchaseLineError(
+                f'Line {idx}: purchase_quantity must be greater than zero '
+                f'(got {purchase_qty}).',
+                line_index=idx,
+            )
+        if factor <= Decimal('0'):
+            raise PurchaseLineError(
+                f'Line {idx}: conversion_factor must be greater than zero '
+                f'(got {factor}).',
+                line_index=idx,
+            )
+
+        base_qty = _compute_base_quantity(purchase_qty, factor)
+
+        if base_qty <= Decimal('0'):
+            raise PurchaseLineError(
+                f'Line {idx}: computed base_quantity is {base_qty}, '
+                'which is not positive. Check purchase_quantity and factor.',
+                line_index=idx,
+            )
+
+        prepared_lines.append({
+            'inventory_item_id': int(line['inventory_item_id']),
+            'purchase_unit':     str(line['purchase_unit']),
+            'purchase_quantity': purchase_qty,
+            'conversion_factor': factor,
+            'base_quantity':     base_qty,
+            'note':              line.get('note', ''),
+            'reason_code':       line.get('reason_code', ''),
+        })
+
+    # ── Atomic write block ────────────────────────────────────────────────────
+    with transaction.atomic():
+
+        # Re-check idempotency inside the transaction.  A concurrent request
+        # with the same key may have committed between our outer check and
+        # here.  The unique constraint on idempotency_key would also raise an
+        # IntegrityError if we tried to create a duplicate, but catching that
+        # inside an active atomic block would leave the transaction in a broken
+        # savepoint state.  Re-reading is the clean approach.
+        existing = StockPurchase.objects.filter(
+            idempotency_key=idempotency_key
+        ).first()
+        if existing is not None:
+            return existing
+
+        # ── Lock all affected InventoryItem rows in ascending PK order ────────
+        # Rev 3 §H.1 level 3: one ordered SELECT ... FOR UPDATE.
+        # Manual purchase operations take only level 3 locks (no Order or
+        # Product locks), so they never invert the hierarchy.
+        item_ids = [pl['inventory_item_id'] for pl in prepared_lines]
+        locked   = lock_inventory_items(item_ids)
+
+        # ── Validate items under lock ─────────────────────────────────────────
+        for idx, pl in enumerate(prepared_lines):
+            item = locked[pl['inventory_item_id']]
+            if not item.is_active:
+                raise PurchaseLineError(
+                    f'Line {idx}: inventory item "{item.name}" is inactive '
+                    'and cannot receive stock.',
+                    line_index=idx,
+                )
+            # pcs items must receive whole-number quantities (Rev 3 §D.2).
+            if item.base_unit == InventoryItem.BASE_UNIT_PCS:
+                if pl['base_quantity'] % Decimal('1') != Decimal('0'):
+                    raise FractionalPcsError(item, pl['base_quantity'])
+
+        # ── Create the purchase header with savepoint-based idempotency guard ───
+        #
+        # The outer and inner re-reads above handle the common sequential case
+        # (a user clicking Submit twice with a gap between clicks).
+        #
+        # For true concurrent requests arriving with the *same unused key*:
+        #   1. Both pass the outer read — the key does not exist yet.
+        #   2. Both enter this transaction.
+        #   3. Both pass the inner re-read under READ COMMITTED (neither has
+        #      committed yet, so neither sees the other's uncommitted row).
+        #   4. One of them calls objects.create() first and commits.
+        #   5. The second one's create() raises IntegrityError on the unique
+        #      constraint.
+        #
+        # If the IntegrityError escapes the transaction, Django marks the
+        # whole transaction as needing rollback and the caller gets an
+        # unhandled exception — leaving no partial state but giving no useful
+        # result either.
+        #
+        # The safe pattern on PostgreSQL is a SAVEPOINT: we try the create
+        # inside a nested atomic block (savepoint).  If it raises IntegrityError
+        # the savepoint is rolled back (only the failed create is undone; the
+        # outer transaction stays alive) and we re-read to obtain the
+        # committed row that won the race.
+        #
+        # On SQLite the savepoint is accepted and the rollback works
+        # identically (SQLite serialises all writes so the race cannot occur,
+        # but the code path is still exercised and safe).
+        try:
+            with transaction.atomic(savepoint=True):
+                purchase = StockPurchase.objects.create(
+                    purchase_date=purchase_date,
+                    notes=notes,
+                    performed_by=performed_by,
+                    idempotency_key=idempotency_key,
+                )
+        except IntegrityError:
+            # Another transaction committed the same key while we were inside
+            # this one.  Fetch the winner and return it immediately — no stock
+            # changes, no lines, no movement logs.
+            committed = StockPurchase.objects.filter(
+                idempotency_key=idempotency_key
+            ).first()
+            if committed is None:
+                # Should be unreachable: the constraint fired so the row must
+                # exist.  Raise so the caller can investigate.
+                raise InventoryServiceError(
+                    f'Concurrent purchase with key "{idempotency_key}" '
+                    'raised IntegrityError but the committed row was not found.'
+                )
+            return committed
+
+        # ── Process each line in ascending item PK order ──────────────────────
+        # Rev 3 §H.5: "FOR line IN lines ascending by item id"
+        sorted_lines = sorted(prepared_lines, key=lambda pl: pl['inventory_item_id'])
+
+        for pl in sorted_lines:
+            item         = locked[pl['inventory_item_id']]
+            base_qty     = pl['base_quantity']
+            on_hand_before  = item.on_hand_quantity
+            reserved_before = item.reserved_quantity
+            new_on_hand     = on_hand_before + base_qty
+
+            # ── Create the purchase line (snapshot) ───────────────────────────
+            purchase_item = StockPurchaseItem.objects.create(
+                purchase=purchase,
+                inventory_item=item,
+                purchase_unit=pl['purchase_unit'],
+                purchase_quantity=pl['purchase_quantity'],
+                conversion_factor=pl['conversion_factor'],
+                base_quantity=base_qty,
+            )
+
+            # ── Apply stock update: conditional UPDATE as backstop ────────────
+            # On PostgreSQL, SELECT FOR UPDATE above serialises access.
+            # The WHERE clause is an additional safety net (same as Phase 2A).
+            # Stock must only increase on a purchase; never decrease.
+            updated = InventoryItem.objects.filter(
+                pk=item.pk,
+                on_hand_quantity=on_hand_before,   # backstop: reject stale writes
+            ).update(on_hand_quantity=new_on_hand)
+
+            if not updated:
+                raise InventoryServiceError(
+                    f'Stock for "{item.name}" was modified by a concurrent '
+                    'request. Please try the purchase again.'
+                )
+
+            # Refresh the in-memory instance so the next iteration (if this
+            # item appears in multiple lines — disallowed by schema but
+            # defensive) reads the updated value.
+            item.refresh_from_db(fields=['on_hand_quantity'])
+
+            # ── Write the movement log ────────────────────────────────────────
+            IngredientMovementLog.record(
+                inventory_item=item,
+                movement_type=IngredientMovementLog.MOVEMENT_PURCHASE,
+                on_hand_delta=base_qty,
+                reserved_delta=Decimal('0'),
+                on_hand_before=on_hand_before,
+                reserved_before=reserved_before,
+                reason_code=pl['reason_code'],
+                note=pl['note'],
+                purchase_item=purchase_item,
+                performed_by=performed_by,
+            )
+
+    return purchase

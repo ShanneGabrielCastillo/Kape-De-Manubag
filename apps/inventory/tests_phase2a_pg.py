@@ -957,6 +957,236 @@ class TransactionRollbackConsistencyTests(TransactionTestCase):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# Phase 3-2 concurrency: purchase idempotency race
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _run_purchase_in_thread(item_pk, idempotency_key, barrier_start,
+                           barrier_pre_create, results, idx):
+    """
+    Worker that calls record_purchase() with one line and the given
+    idempotency key.
+
+    Two barriers are used to guarantee the race is genuinely exercised:
+
+    barrier_start      — both threads start the function at the same moment.
+    barrier_pre_create — both threads reach the StockPurchase.objects.create()
+                         call at the same moment, *after* both have passed all
+                         idempotency lookups and found no existing purchase.
+
+    The barrier_pre_create wrapper is installed by the *main test thread*
+    before the workers are started, so both workers share exactly one patch
+    and one wrapper without any per-thread patching.  See
+    PurchaseIdempotencyRaceTests for the installation site.
+    """
+    import datetime
+    from django.db import connection as thread_conn
+    from apps.inventory.services import (
+        InventoryServiceError,
+        FractionalPcsError,
+        PurchaseLineError,
+        record_purchase,
+    )
+
+    try:
+        barrier_start.wait(timeout=20)
+        purchase = record_purchase(
+            purchase_date=datetime.date(2026, 11, 1),
+            lines=[{
+                'inventory_item_id': item_pk,
+                'purchase_unit':     'kg',
+                'purchase_quantity': Decimal('5.000'),
+                'conversion_factor': Decimal('1000.0000'),
+            }],
+            idempotency_key=idempotency_key,
+        )
+        results[idx] = ('ok', purchase.pk)
+    except (InventoryServiceError, PurchaseLineError, FractionalPcsError) as exc:
+        results[idx] = ('error', type(exc).__name__, str(exc))
+    except Exception as exc:
+        results[idx] = ('unexpected', type(exc).__name__, str(exc))
+    finally:
+        thread_conn.close()
+
+
+class PurchaseIdempotencyRaceTests(TransactionTestCase):
+    """
+    Verify that two concurrent calls to record_purchase() with the same
+    previously unused idempotency key produce exactly one purchase document,
+    one StockPurchaseItem, one movement log, and one stock increment.
+
+    This test exercises the savepoint-based IntegrityError handler that was
+    added to record_purchase() to close the race window that the sequential
+    inner re-read cannot close.
+
+    Synchronization design
+    ----------------------
+    Two barriers coordinate the workers:
+
+    barrier_start      — synchronizes thread entry so both workers begin at
+                         the same wall-clock moment.
+
+    barrier_pre_create — synchronizes the two workers so both are guaranteed
+                         to be past their inner idempotency re-reads and at
+                         the StockPurchase.objects.create() call simultaneously.
+
+    barrier_pre_create is injected as a single shared patch installed by the
+    *main test thread* before the workers start, and removed by the main
+    thread after both workers complete.  This is the critical thread-safety
+    point:
+
+    Installing the patch in each worker thread independently would create a
+    race on the shared manager object — both workers call patch.object() on
+    StockPurchase.objects (a shared Python object), so one worker's
+    patch.object saves the already-patched method as its "original", and when
+    the first worker's with-block exits it restores the patched version, not
+    the real create().  The resulting state is unpredictable.
+
+    The single-patch approach eliminates this: one canonical wrapper is in
+    place for the entire duration of the test, and both workers call through
+    it without any per-thread patching or restoration.
+
+    Without barrier_pre_create, Worker A could complete create/commit before
+    Worker B enters its transaction, meaning the test would exercise the fast-
+    path read (finds the already-committed row) rather than the savepoint and
+    IntegrityError recovery path.  With barrier_pre_create, both workers are
+    guaranteed to attempt the INSERT at the same time, so the losing worker
+    always hits the unique-constraint violation and exercises the savepoint path.
+
+    PostgreSQL only: SQLite serialises all writes; the race cannot occur there.
+    """
+
+    @_require_postgresql
+    def test_concurrent_duplicate_key_creates_exactly_one_purchase(self):
+        from unittest.mock import patch
+        from apps.inventory.models import (
+            IngredientMovementLog,
+            InventoryItem,
+            StockPurchase,
+            StockPurchaseItem,
+        )
+
+        # ── Two distinct inventory items, one per worker ──────────────────────
+        # This is the critical design decision for lock safety.
+        #
+        # record_purchase() acquires SELECT FOR UPDATE on all InventoryItem
+        # rows referenced by the purchase lines, BEFORE calling
+        # StockPurchase.objects.create().  If both workers reference the same
+        # item, Worker A holds the FOR UPDATE lock and reaches the barrier;
+        # Worker B blocks on the lock and can never reach the barrier.
+        # Result: barrier_pre_create times out → BrokenBarrierError →
+        # the test hangs and then fails.
+        #
+        # By giving each worker its own distinct item, they each acquire their
+        # own FOR UPDATE lock without contention, and both proceed to the
+        # barrier independently.
+        #
+        # Using different items per worker is architecturally correct: the
+        # idempotency key is document-level (StockPurchase.idempotency_key),
+        # not per-item.  Two purchase requests for different items but with the
+        # same idempotency key is exactly the scenario this test is designed to
+        # probe — both workers try to create the same StockPurchase document,
+        # and exactly one should win.
+        item_a = InventoryItem.objects.create(
+            name='RacePurchaseItemA',
+            item_type='ingredient',
+            base_unit='g',
+            on_hand_quantity=Decimal('0.000'),
+        )
+        item_b = InventoryItem.objects.create(
+            name='RacePurchaseItemB',
+            item_type='ingredient',
+            base_unit='g',
+            on_hand_quantity=Decimal('0.000'),
+        )
+        key = 'race-purchase-pg-001'
+
+        results            = [None, None]
+        barrier_start      = threading.Barrier(2, timeout=20)
+        barrier_pre_create = threading.Barrier(2, timeout=20)
+
+        # ── Single shared patch installed by the main thread ──────────────────
+        # Both workers call record_purchase(), which calls
+        # StockPurchase.objects.create().  The wrapper holds both workers at
+        # barrier_pre_create so both attempt the INSERT simultaneously,
+        # guaranteeing the unique-constraint collision.
+        #
+        # The patch is installed BEFORE workers start and removed AFTER both
+        # finish, eliminating the per-thread patch race described in the
+        # previous review.
+        _real_create = StockPurchase.objects.create
+
+        def _rendezvous_then_create(**kwargs):
+            """Both workers wait here, after locking their own item rows,
+            before issuing the actual INSERT."""
+            barrier_pre_create.wait(timeout=20)
+            return _real_create(**kwargs)
+
+        with patch.object(StockPurchase.objects, 'create',
+                          side_effect=_rendezvous_then_create):
+
+            t0 = threading.Thread(
+                target=_run_purchase_in_thread,
+                args=(item_a.pk, key, barrier_start, barrier_pre_create,
+                      results, 0),
+                daemon=True,
+            )
+            t1 = threading.Thread(
+                target=_run_purchase_in_thread,
+                args=(item_b.pk, key, barrier_start, barrier_pre_create,
+                      results, 1),
+                daemon=True,
+            )
+
+            t0.start()
+            t1.start()
+            t0.join(timeout=30)
+            t1.join(timeout=30)
+
+        # Patch restored here, after both workers have finished.
+
+        # Both workers must have completed cleanly.
+        self.assertFalse(t0.is_alive(), 'Worker 0 timed out')
+        self.assertFalse(t1.is_alive(), 'Worker 1 timed out')
+
+        for idx, result in enumerate(results):
+            self.assertIsNotNone(result, f'Worker {idx} produced no result')
+            outcome = result[0]
+            self.assertIn(outcome, ('ok',),
+                f'Worker {idx} raised an unexpected error: {result}')
+
+        # Both workers must report the same purchase pk.
+        self.assertEqual(results[0][1], results[1][1],
+            'Both workers must return the same StockPurchase pk')
+
+        # Database invariants: exactly one purchase document and one movement
+        # log (the winning worker's).  The losing worker returns without
+        # creating any rows.
+        self.assertEqual(StockPurchase.objects.count(), 1)
+        self.assertEqual(StockPurchaseItem.objects.count(), 1)
+        self.assertEqual(IngredientMovementLog.objects.count(), 1)
+
+        # The winning worker's item received the stock increment.
+        # We know which worker won from the purchase pk:
+        winning_item_pk = StockPurchaseItem.objects.get().inventory_item_id
+        winning_item    = InventoryItem.objects.get(pk=winning_item_pk)
+        losing_item     = item_b if winning_item_pk == item_a.pk else item_a
+
+        winning_item.refresh_from_db()
+        losing_item.refresh_from_db()
+        self.assertEqual(winning_item.on_hand_quantity, Decimal('5000.000'),
+            'Winning item must have received 5 kg × 1000 g/kg = 5000 g')
+        self.assertEqual(losing_item.on_hand_quantity, Decimal('0.000'),
+            'Losing item must not have received any stock')
+
+        # The movement log must link to the single purchase item.
+        log = IngredientMovementLog.objects.get()
+        spi = StockPurchaseItem.objects.get()
+        self.assertEqual(log.purchase_item, spi)
+        self.assertEqual(log.movement_type, 'purchase')
+        self.assertEqual(log.on_hand_delta, Decimal('5000.000'))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # Future-phase placeholders
 # ═════════════════════════════════════════════════════════════════════════════
 
