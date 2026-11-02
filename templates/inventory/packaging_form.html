@@ -1,0 +1,116 @@
+{% extends "base_admin.html" %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ title }}</h1>
+    <p class="page-subtitle">Add a packaging material to the packaging inventory.</p>
+  </div>
+  <a href="{% url 'inventory:packaging_list' %}" class="btn btn-outline">
+    <i data-lucide="arrow-left" class="btn-icon" aria-hidden="true"></i>
+    Back to Packaging
+  </a>
+</div>
+
+{% if form.non_field_errors %}
+<div class="alert alert-danger" role="alert" style="margin-bottom:24px">
+  {% for error in form.non_field_errors %}<span>{{ error }}</span>{% endfor %}
+</div>
+{% endif %}
+
+<form method="post" novalidate aria-label="Add packaging item">
+  {% csrf_token %}
+
+  <div class="card" style="max-width:700px">
+    <div class="card-body">
+
+      <div class="form-group{% if form.name.errors %} has-error{% endif %}">
+        <label class="form-label" for="{{ form.name.id_for_label }}">
+          {{ form.name.label }} <span style="color:var(--red-accent)" aria-hidden="true">*</span>
+        </label>
+        {{ form.name }}
+        {% if form.name.errors %}
+          <p class="pf-field-error" role="alert">{{ form.name.errors.0 }}</p>
+        {% else %}
+          <p class="pf-help-text">{{ form.name.help_text }}</p>
+        {% endif %}
+      </div>
+
+      <div class="form-group{% if form.base_unit.errors %} has-error{% endif %}">
+        <label class="form-label" for="{{ form.base_unit.id_for_label }}">
+          {{ form.base_unit.label }} <span style="color:var(--red-accent)" aria-hidden="true">*</span>
+        </label>
+        {{ form.base_unit }}
+        {% if form.base_unit.errors %}
+          <p class="pf-field-error" role="alert">{{ form.base_unit.errors.0 }}</p>
+        {% else %}
+          <p class="pf-help-text">{{ form.base_unit.help_text }}</p>
+        {% endif %}
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+
+        <div class="form-group{% if form.on_hand_quantity.errors %} has-error{% endif %}">
+          <label class="form-label" for="{{ form.on_hand_quantity.id_for_label }}">{{ form.on_hand_quantity.label }}</label>
+          {{ form.on_hand_quantity }}
+          {% if form.on_hand_quantity.errors %}
+            <p class="pf-field-error" role="alert">{{ form.on_hand_quantity.errors.0 }}</p>
+          {% else %}
+            <p class="pf-help-text">{{ form.on_hand_quantity.help_text }}</p>
+          {% endif %}
+        </div>
+
+        <div class="form-group{% if form.low_stock_threshold.errors %} has-error{% endif %}">
+          <label class="form-label" for="{{ form.low_stock_threshold.id_for_label }}">{{ form.low_stock_threshold.label }}</label>
+          {{ form.low_stock_threshold }}
+          {% if form.low_stock_threshold.errors %}
+            <p class="pf-field-error" role="alert">{{ form.low_stock_threshold.errors.0 }}</p>
+          {% else %}
+            <p class="pf-help-text">{{ form.low_stock_threshold.help_text }}</p>
+          {% endif %}
+        </div>
+
+      </div>
+
+      <div class="form-group{% if form.description.errors %} has-error{% endif %}">
+        <label class="form-label" for="{{ form.description.id_for_label }}">{{ form.description.label }}</label>
+        {{ form.description }}
+        {% if form.description.errors %}
+          <p class="pf-field-error" role="alert">{{ form.description.errors.0 }}</p>
+        {% endif %}
+      </div>
+
+      <div class="form-group" style="display:flex;align-items:center;gap:.5rem">
+        {{ form.is_active }}
+        <label for="{{ form.is_active.id_for_label }}" style="margin:0;cursor:pointer">{{ form.is_active.label }}</label>
+      </div>
+      <p class="pf-help-text" style="margin-top:-8px">{{ form.is_active.help_text }}</p>
+
+      <div style="display:flex;gap:.75rem;margin-top:24px;flex-wrap:wrap">
+        <button type="submit" class="btn btn-primary">
+          <i data-lucide="save" class="btn-icon" aria-hidden="true"></i>
+          Save Item
+        </button>
+        <a href="{% url 'inventory:packaging_list' %}" class="btn btn-outline">Cancel</a>
+      </div>
+
+    </div>
+  </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var grids = document.querySelectorAll('[style*="grid-template-columns:1fr 1fr"]');
+  function adjust() {
+    var narrow = window.innerWidth < 480;
+    grids.forEach(function (g) { g.style.gridTemplateColumns = narrow ? '1fr' : '1fr 1fr'; });
+  }
+  adjust();
+  window.addEventListener('resize', adjust);
+})();
+</script>
+{% endblock extra_js %}

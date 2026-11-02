@@ -1,0 +1,103 @@
+{% extends "base_admin.html" %}
+{% block page_title %}Adjust Stock — {{ item.name }}{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Adjust Stock</h1>
+    <p class="page-subtitle">Correct the recorded on-hand quantity after a physical count.</p>
+  </div>
+  <a href="{% url 'inventory:packaging_list' %}" class="btn btn-outline">
+    <i data-lucide="arrow-left" class="btn-icon" aria-hidden="true"></i>
+    Back to Packaging
+  </a>
+</div>
+
+{# ── Current stock summary ────────────────────────────────────────────────── #}
+<div class="card" style="max-width:700px;margin-bottom:1.5rem">
+  <div class="card-body" style="padding:1rem 1.25rem">
+    <p style="font-weight:700;font-size:1.05rem;margin-bottom:.75rem">
+      {{ item.name }}
+      <span class="badge badge-muted" style="margin-left:.5rem">Packaging</span>
+    </p>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;font-size:0.9rem">
+      <div>
+        <div style="color:#aaa;font-size:0.78rem;margin-bottom:2px">On Hand</div>
+        <div style="font-weight:700;font-size:1.1rem">{{ item.on_hand_quantity|floatformat:"-3" }} <span style="color:#aaa;font-weight:400">{{ item.get_base_unit_display }}</span></div>
+      </div>
+      <div>
+        <div style="color:#aaa;font-size:0.78rem;margin-bottom:2px">Reserved</div>
+        <div style="font-weight:600">{{ item.reserved_quantity|floatformat:"-3" }} <span style="color:#aaa;font-weight:400">{{ item.get_base_unit_display }}</span></div>
+      </div>
+      <div>
+        <div style="color:#aaa;font-size:0.78rem;margin-bottom:2px">Available</div>
+        <div style="font-weight:700;color:{% if item.is_low_stock %}var(--red-accent){% else %}var(--green-success){% endif %}">{{ item.available_quantity|floatformat:"-3" }} <span style="color:#aaa;font-weight:400">{{ item.get_base_unit_display }}</span></div>
+      </div>
+    </div>
+    {% if item.reserved_quantity %}
+    <p style="margin-top:.75rem;font-size:0.82rem;color:#e67e22;background:#fff8f0;border:1px solid #f0c080;border-radius:6px;padding:.5rem .75rem">
+      <i data-lucide="triangle-alert" class="btn-icon" aria-hidden="true"></i>
+      {{ item.reserved_quantity|floatformat:"-3" }} {{ item.get_base_unit_display }} is currently reserved by open orders.
+      You cannot adjust on-hand below this amount.
+    </p>
+    {% endif %}
+  </div>
+</div>
+
+{% if form.non_field_errors %}
+<div class="alert alert-danger" role="alert" style="margin-bottom:1.5rem;max-width:700px">
+  {% for error in form.non_field_errors %}<span>{{ error }}</span>{% endfor %}
+</div>
+{% endif %}
+
+<form method="post" novalidate aria-label="Adjust packaging stock" style="max-width:700px">
+  {% csrf_token %}
+  {{ form.expected_on_hand }}
+
+  <div class="card">
+    <div class="card-body">
+
+      <div class="form-group{% if form.new_on_hand.errors %} has-error{% endif %}">
+        <label class="form-label" for="{{ form.new_on_hand.id_for_label }}">
+          {{ form.new_on_hand.label }} <span style="color:var(--red-accent)" aria-hidden="true">*</span>
+          <span style="font-weight:400;color:#aaa;font-size:0.85rem">({{ item.get_base_unit_display }})</span>
+        </label>
+        {{ form.new_on_hand }}
+        {% if form.new_on_hand.errors %}
+          <p class="pf-field-error" role="alert">{{ form.new_on_hand.errors.0 }}</p>
+        {% else %}
+          <p class="pf-help-text">{{ form.new_on_hand.help_text }}</p>
+        {% endif %}
+      </div>
+
+      <div class="form-group{% if form.reason_code.errors %} has-error{% endif %}">
+        <label class="form-label" for="{{ form.reason_code.id_for_label }}">
+          {{ form.reason_code.label }} <span style="color:var(--red-accent)" aria-hidden="true">*</span>
+        </label>
+        {{ form.reason_code }}
+        {% if form.reason_code.errors %}
+          <p class="pf-field-error" role="alert">{{ form.reason_code.errors.0 }}</p>
+        {% endif %}
+      </div>
+
+      <div class="form-group{% if form.note.errors %} has-error{% endif %}">
+        <label class="form-label" for="{{ form.note.id_for_label }}">{{ form.note.label }}</label>
+        {{ form.note }}
+        {% if form.note.errors %}
+          <p class="pf-field-error" role="alert">{{ form.note.errors.0 }}</p>
+        {% endif %}
+      </div>
+
+      <div style="display:flex;gap:.75rem;margin-top:1.5rem;flex-wrap:wrap">
+        <button type="submit" class="btn btn-primary">
+          <i data-lucide="save" class="btn-icon" aria-hidden="true"></i>
+          Save Adjustment
+        </button>
+        <a href="{% url 'inventory:packaging_list' %}" class="btn btn-outline">Cancel</a>
+      </div>
+
+    </div>
+  </div>
+</form>
+{% endblock %}

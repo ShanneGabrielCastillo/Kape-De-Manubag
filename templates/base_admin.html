@@ -90,7 +90,7 @@
       </a>
 
       <div class="nav-section-title">Stock &amp; Reports</div>
-      <a href="{% url 'inventory:list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'inventory' %}active{% endif %}"
+      <a href="{% url 'inventory:list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'inventory' and request.resolver_match.url_name in 'list,restock,log' %}active{% endif %}"
          aria-label="Inventory">
         <span class="nav-icon"><i data-lucide="boxes" class="nav-icon" aria-hidden="true"></i></span>
         <span class="nav-label">Inventory</span>
@@ -139,6 +139,24 @@
         <span class="nav-icon"><i data-lucide="wallet" class="nav-icon" aria-hidden="true"></i></span>
         <span class="nav-label">Finance</span>
         <span class="sidebar-tooltip" aria-hidden="true">Finance</span>
+      </a>
+
+      <div class="nav-section-title">Ingredients</div>
+      {# Ingredient Inventory: accessible to admin and cashier (cashier_or_admin_required) #}
+      <a href="{% url 'inventory:ingredient_list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'inventory' and request.resolver_match.url_name in 'ingredient_list,ingredient_create,ingredient_adjust,ingredient_wastage' %}active{% endif %}"
+         aria-label="Ingredient Inventory">
+        <span class="nav-icon"><i data-lucide="flask-conical" class="nav-icon" aria-hidden="true"></i></span>
+        <span class="nav-label">Ingredients</span>
+        <span class="sidebar-tooltip" aria-hidden="true">Ingredients</span>
+      </a>
+
+      <div class="nav-section-title">Packaging</div>
+      {# Packaging Inventory: accessible to admin and cashier (cashier_or_admin_required) #}
+      <a href="{% url 'inventory:packaging_list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'inventory' and request.resolver_match.url_name in 'packaging_list,packaging_create,packaging_adjust,packaging_wastage' %}active{% endif %}"
+         aria-label="Packaging Inventory">
+        <span class="nav-icon"><i data-lucide="package" class="nav-icon" aria-hidden="true"></i></span>
+        <span class="nav-label">Packaging</span>
+        <span class="sidebar-tooltip" aria-hidden="true">Packaging</span>
       </a>
 
       <div class="nav-section-title">Store</div>

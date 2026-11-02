@@ -1,0 +1,228 @@
+{% extends "base_admin.html" %}
+{% block page_title %}Packaging Inventory{% endblock %}
+
+{% block content %}
+
+{# ── Page header ──────────────────────────────────────────────────────────── #}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Packaging Inventory</h1>
+    <p class="page-subtitle">Track stock levels for cups, lids, straws, containers, and other packaging materials</p>
+  </div>
+  <a href="{% url 'inventory:packaging_create' %}" class="btn btn-primary">
+    <i data-lucide="plus" class="btn-icon" aria-hidden="true"></i>
+    Add Item
+  </a>
+</div>
+
+{# ── Summary cards ────────────────────────────────────────────────────────── #}
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-label">Total Items</div>
+    <div class="stat-value">{{ total_count }}</div>
+    <div class="stat-sub">Packaging materials</div>
+    <div class="stat-icon"><i data-lucide="package"></i></div>
+  </div>
+  <div class="stat-card {% if low_stock_count %}red{% endif %}">
+    <div class="stat-label">Low Stock</div>
+    <div class="stat-value">{{ low_stock_count }}</div>
+    <div class="stat-sub">At or below alert threshold</div>
+    <div class="stat-icon"><i data-lucide="triangle-alert"></i></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Inactive</div>
+    <div class="stat-value">{{ inactive_count }}</div>
+    <div class="stat-sub">Deactivated items</div>
+    <div class="stat-icon"><i data-lucide="eye-off"></i></div>
+  </div>
+</div>
+
+{# ── Filter bar ───────────────────────────────────────────────────────────── #}
+<div class="filter-bar" style="margin-bottom:1rem">
+  <form method="get" id="pkg-filter-form" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;min-width:0">
+    <input type="text" name="q" id="pkg-search"
+           value="{{ q }}"
+           placeholder="Search by name…"
+           class="form-control"
+           aria-label="Search packaging items">
+    <select name="status" id="pkg-status" class="form-control" aria-label="Filter by status">
+      <option value="">All Statuses</option>
+      <option value="active"   {% if status_filter == 'active'   %}selected{% endif %}>Active</option>
+      <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>Inactive</option>
+    </select>
+    {% if q or status_filter %}
+      <a href="{% url 'inventory:packaging_list' %}" class="btn btn-outline btn-sm">Clear</a>
+    {% endif %}
+  </form>
+</div>
+
+{# ── Results ──────────────────────────────────────────────────────────────── #}
+<div id="results-region">
+
+{% if low_stock_count and not q and not status_filter %}
+<div class="alert alert-warning" style="margin-bottom:20px;align-items:flex-start">
+  <i data-lucide="triangle-alert" class="status-icon" style="flex-shrink:0;margin-top:2px" aria-hidden="true"></i>
+  <div>
+    <strong style="display:block;margin-bottom:4px">Low stock alert</strong>
+    <div>{{ low_stock_count }} item{{ low_stock_count|pluralize }} at or below the alert threshold.</div>
+    <div style="margin-top:4px;opacity:0.8;font-size:0.83rem">Review the items highlighted below.</div>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="table-wrapper">
+    <table class="table-packaging-list" data-mobile-cards="true">
+      <thead>
+        <tr>
+          <th data-role="primary">Name</th>
+          <th data-role="secondary">Unit</th>
+          <th data-role="amount">On Hand</th>
+          <th data-role="amount">Reserved</th>
+          <th data-role="amount">Available</th>
+          <th data-role="secondary">Threshold</th>
+          <th data-role="status">Status</th>
+          <th data-role="actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr{% if not item.is_active %} style="opacity:0.55"{% endif %}
+            {% if item.is_active and item.is_low_stock %} class="row-warning"{% endif %}>
+          <td style="font-weight:600">
+            {{ item.name }}
+            {% if item.description %}
+              <div style="font-weight:400;font-size:0.78rem;color:#aaa;margin-top:2px">{{ item.description|truncatechars:60 }}</div>
+            {% endif %}
+          </td>
+          <td style="font-size:0.9rem;color:#666">{{ item.get_base_unit_display }}</td>
+          <td style="font-weight:700;font-size:1rem">{{ item.on_hand_quantity|floatformat:"-3" }}</td>
+          <td style="color:#888">{{ item.reserved_quantity|floatformat:"-3" }}</td>
+          <td style="font-weight:700;{% if item.is_active and item.is_low_stock %}color:var(--red-accent){% else %}color:var(--green-success){% endif %}">
+            {{ item.available_quantity|floatformat:"-3" }}
+          </td>
+          <td style="font-size:0.85rem;color:#999">{{ item.low_stock_threshold|floatformat:"-3" }}</td>
+          <td>
+            {% if item.is_active %}
+              <span class="badge badge-ready">Active</span>
+            {% else %}
+              <span class="badge badge-cancelled">Inactive</span>
+            {% endif %}
+          </td>
+          <td>
+            <a href="{% url 'inventory:packaging_adjust' item.pk %}" class="btn btn-sm btn-outline" title="Adjust stock count">Adjust</a>
+            <a href="{% url 'inventory:packaging_wastage' item.pk %}" class="btn btn-sm" style="background:transparent;border:2px solid var(--red-accent);color:var(--red-accent)" title="Record wastage">Waste</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="8" style="text-align:center;padding:48px 32px">
+            {% if q or status_filter %}
+              <div style="color:#aaa;font-size:0.95rem">No items match the current filters.</div>
+              <a href="{% url 'inventory:packaging_list' %}" class="btn btn-outline" style="margin-top:16px">Clear filters</a>
+            {% else %}
+              <div style="margin-bottom:12px">
+                <i data-lucide="package" style="width:48px;height:48px;color:#ddd;display:block;margin:0 auto 12px" aria-hidden="true"></i>
+              </div>
+              <div style="font-weight:600;font-size:1rem;margin-bottom:8px">No packaging items yet</div>
+              <div style="color:#aaa;font-size:0.9rem;margin-bottom:20px">
+                Add the cups, lids, containers, and other packaging materials used to serve your menu items.
+              </div>
+              <a href="{% url 'inventory:packaging_create' %}" class="btn btn-primary">
+                <i data-lucide="plus" class="btn-icon" aria-hidden="true"></i>
+                Add your first item
+              </a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+</div>{# /results-region #}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  'use strict';
+
+  var searchInput  = document.getElementById('pkg-search');
+  var statusSelect = document.getElementById('pkg-status');
+  var resultsRegion = document.getElementById('results-region');
+  if (!searchInput || !resultsRegion) return;
+
+  history.replaceState({ url: window.location.href }, '', window.location.href);
+
+  var filterForm = searchInput.closest('form');
+  if (filterForm) {
+    filterForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      clearTimeout(timer);
+      fetchResults(buildUrl(), 'push');
+    });
+  }
+
+  var controller = null;
+  var seq = 0;
+
+  function buildUrl() {
+    var params = new URLSearchParams();
+    var q = searchInput.value.trim();
+    if (q) params.set('q', q);
+    if (statusSelect && statusSelect.value) params.set('status', statusSelect.value);
+    var qs = params.toString();
+    return window.location.pathname + (qs ? '?' + qs : '');
+  }
+
+  function fetchResults(url, historyMode) {
+    if (historyMode === 'push')    history.pushState({ url: url }, '', url);
+    else if (historyMode === 'replace') history.replaceState({ url: url }, '', url);
+
+    if (controller) controller.abort();
+    controller = new AbortController();
+    var mySeq = ++seq;
+
+    fetch(url, { signal: controller.signal, credentials: 'same-origin' })
+      .then(function (resp) {
+        if (mySeq !== seq) return null;
+        if (!resp.ok || !(resp.headers.get('content-type') || '').includes('text/html')) return null;
+        return resp.text();
+      })
+      .then(function (html) {
+        if (!html || mySeq !== seq) return;
+        var doc = (new DOMParser()).parseFromString(html, 'text/html');
+        var newRegion = doc.getElementById('results-region');
+        if (!newRegion) return;
+        resultsRegion.innerHTML = newRegion.innerHTML;
+        if (typeof window.initResponsiveTables === 'function') window.initResponsiveTables();
+        if (typeof window.reinitLucide === 'function') window.reinitLucide();
+      })
+      .catch(function (err) { if (err && err.name !== 'AbortError') { /* silent */ } });
+  }
+
+  var timer = null;
+  searchInput.addEventListener('input', function () {
+    clearTimeout(timer);
+    var url = buildUrl();
+    history.replaceState({ url: url }, '', url);
+    timer = setTimeout(function () { fetchResults(url, 'push'); }, 350);
+  });
+
+  if (statusSelect) statusSelect.addEventListener('change', function () {
+    clearTimeout(timer);
+    fetchResults(buildUrl(), 'push');
+  });
+
+  window.addEventListener('popstate', function (e) {
+    var url = (e.state && e.state.url) ? e.state.url : window.location.href;
+    var params = new URLSearchParams((url.split('?')[1] || ''));
+    searchInput.value = params.get('q') || '';
+    if (statusSelect) statusSelect.value = params.get('status') || '';
+    fetchResults(url, 'none');
+  });
+})();
+</script>
+{% endblock extra_js %}
