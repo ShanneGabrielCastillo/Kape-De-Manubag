@@ -844,3 +844,732 @@ class StockPurchaseItem(models.Model):
             f'of {self.inventory_item.name} → {self.base_quantity} '
             f'{self.inventory_item.base_unit}'
         )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Phase 4B-1 — Recipe Foundation
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# These models are ADDITIVE. They do not alter any existing model.
+#
+# Rev 3 §D.4 and §D.5.
+#
+# Phase 4B-1 adds the data structures only. Services (resolve_plan,
+# get_available_units, approval/retirement logic) belong to later stages.
+# Packaging models (PackagingProfile, PackagingProfileItem,
+# ProductPackagingRule) belong to Stage 4B-2.
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+# ── Recipe ────────────────────────────────────────────────────────────────────
+
+class Recipe(models.Model):
+    """
+    One ingredient recipe for a (product, size, order_type_scope) combination.
+
+    Rev 3 §D.4.
+
+    A recipe defines which ingredients are consumed to produce one unit of the
+    product at a given size and order type. Packaging is handled separately
+    through ProductPackagingRule (Phase 4B-2).
+
+    Lifecycle:
+      draft    — work in progress; never used for order placement.
+      approved — live and immutable; used by resolve_plan() to build plans.
+      retired  — superseded by a newer revision; never used for new orders.
+
+    Immutability: an approved recipe cannot be edited. A change creates a new
+    draft revision (copied from the approved one), which is then approved in
+    the same transaction that retires its predecessor, while holding the
+    Product row lock (Rev 3 §H.9). This ensures order placement, which holds
+    the same Product lock, cannot see a mix of old and new configuration.
+
+    No mixed scopes: for one (product, size), the approved set is either
+    {all} or {dine_in, takeout}, never both. Enforced at approval time by the
+    service, not by the DB.
+
+    Approval requires at least one RecipeItem where every item is active and
+    item_type='ingredient'. The DB cannot express the item_type constraint
+    across tables; it is enforced by the approval service.
+    """
+
+    # ── Size vocabulary ───────────────────────────────────────────────────────
+    # Must match OrderItem.SIZE_CHOICES exactly (Rev 3 §D.4).
+    # Import at class body level to avoid a module-level circular import while
+    # still keeping the source of truth in one place.
+    SIZE_NONE   = 'none'
+    SIZE_SMALL  = 'small'
+    SIZE_MEDIUM = 'medium'
+    SIZE_LARGE  = 'large'
+    SIZE_HOT    = 'hot'
+    SIZE_CHOICES = [
+        (SIZE_NONE,   'Regular'),
+        (SIZE_SMALL,  'Small'),
+        (SIZE_MEDIUM, 'Medium'),
+        (SIZE_LARGE,  'Large'),
+        (SIZE_HOT,    'Hot'),
+    ]
+
+    # ── Order-type scope ──────────────────────────────────────────────────────
+    SCOPE_ALL     = 'all'
+    SCOPE_DINE_IN = 'dine_in'
+    SCOPE_TAKEOUT = 'takeout'
+    SCOPE_CHOICES = [
+        (SCOPE_ALL,     'All order types'),
+        (SCOPE_DINE_IN, 'Dine-in only'),
+        (SCOPE_TAKEOUT, 'Takeout only'),
+    ]
+
+    # ── Status ────────────────────────────────────────────────────────────────
+    STATUS_DRAFT    = 'draft'
+    STATUS_APPROVED = 'approved'
+    STATUS_RETIRED  = 'retired'
+    STATUS_CHOICES = [
+        (STATUS_DRAFT,    'Draft'),
+        (STATUS_APPROVED, 'Approved'),
+        (STATUS_RETIRED,  'Retired'),
+    ]
+
+    # ── Fields ────────────────────────────────────────────────────────────────
+    product = models.ForeignKey(
+        'menu.Product',
+        on_delete=models.PROTECT,
+        related_name='recipes',
+        help_text='The menu product this recipe serves.',
+    )
+    size = models.CharField(
+        max_length=10,
+        choices=SIZE_CHOICES,
+        help_text=(
+            'The product size this recipe applies to. '
+            'Uses the same vocabulary as OrderItem.SIZE_CHOICES.'
+        ),
+    )
+    order_type_scope = models.CharField(
+        max_length=10,
+        choices=SCOPE_CHOICES,
+        help_text=(
+            '"all" applies to both dine-in and takeout. '
+            '"dine_in" or "takeout" creates a scope-specific override. '
+            'A (product, size) cannot have both an "all" recipe and a '
+            'scope-specific recipe simultaneously.'
+        ),
+    )
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default=STATUS_DRAFT,
+        help_text='Draft: editable. Approved: live and immutable. Retired: superseded.',
+    )
+    revision = models.PositiveIntegerField(
+        help_text=(
+            'Monotonically increasing per (product, size, order_type_scope). '
+            'Revision numbers are never reused.'
+        ),
+    )
+
+    # ── Approval metadata ─────────────────────────────────────────────────────
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='approved_recipes',
+        help_text='Staff member who approved this recipe revision.',
+    )
+    approved_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text='When this recipe was approved. Null for drafts and retired recipes.',
+    )
+    approval_note = models.TextField(
+        blank=True, default='',
+        help_text=(
+            'How and when the client confirmed this recipe [C]. '
+            'Required when approving.'
+        ),
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['product', 'size', 'order_type_scope', '-revision']
+        indexes = [
+            # Covers resolve_plan(): approved recipe lookup by (product, size, status).
+            models.Index(
+                fields=['product', 'size', 'status'],
+                name='idx_recipe_product_size_status',
+            ),
+        ]
+        constraints = [
+            # ── recipe_one_approved_per_scope ─────────────────────────────────
+            # At most one approved recipe per (product, size, scope).
+            # Partial UniqueConstraint — only applies to approved recipes.
+            # This is the DB-level backstop that makes resolve_plan()
+            # unambiguous: if a concurrent approval somehow slips through,
+            # this constraint fires before the transaction commits.
+            models.UniqueConstraint(
+                fields=['product', 'size', 'order_type_scope'],
+                condition=Q(status='approved'),
+                name='recipe_one_approved_per_scope',
+                violation_error_message=(
+                    'An approved recipe for this product/size/scope already exists. '
+                    'Retire the existing recipe before approving a new one.'
+                ),
+            ),
+            # ── recipe_revision_unique ────────────────────────────────────────
+            # Revision numbers are never reused per (product, size, scope).
+            models.UniqueConstraint(
+                fields=['product', 'size', 'order_type_scope', 'revision'],
+                name='recipe_revision_unique',
+                violation_error_message=(
+                    'This revision number is already in use for this product/size/scope.'
+                ),
+            ),
+            # ── recipe_approved_has_approval ──────────────────────────────────
+            # Every approved recipe must carry an approval timestamp.
+            # Prevents the service from approving without recording when.
+            models.CheckConstraint(
+                **_check(condition=~Q(status='approved') | Q(approved_at__isnull=False)),
+                name='recipe_approved_has_approval',
+            ),
+            # ── recipe_status_valid ───────────────────────────────────────────
+            models.CheckConstraint(
+                **_check(condition=Q(status__in=['draft', 'approved', 'retired'])),
+                name='recipe_status_valid',
+            ),
+            # ── recipe_size_valid ─────────────────────────────────────────────
+            # Must match OrderItem.SIZE_CHOICES values exactly.
+            models.CheckConstraint(
+                **_check(condition=Q(size__in=['none', 'small', 'medium', 'large', 'hot'])),
+                name='recipe_size_valid',
+            ),
+            # ── recipe_scope_valid ────────────────────────────────────────────
+            models.CheckConstraint(
+                **_check(condition=Q(order_type_scope__in=['all', 'dine_in', 'takeout'])),
+                name='recipe_scope_valid',
+            ),
+            # ── recipe_revision_positive ──────────────────────────────────────
+            # revision is PositiveIntegerField (>= 1), but an explicit CHECK
+            # makes the rule visible in the DB schema and migration history.
+            models.CheckConstraint(
+                **_check(condition=Q(revision__gt=0)),
+                name='recipe_revision_positive',
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f'Recipe({self.product_id}, {self.size}, '
+            f'{self.order_type_scope}, rev={self.revision}, '
+            f'{self.status})'
+        )
+
+
+# ── RecipeItem ────────────────────────────────────────────────────────────────
+
+class RecipeItem(models.Model):
+    """
+    One ingredient line in a Recipe.
+
+    Rev 3 §D.5.
+
+    Each row specifies how much of one InventoryItem is consumed to produce
+    one unit of the parent recipe's product at its given size.
+
+    quantity is in the InventoryItem's base unit (g, ml, or pcs).
+
+    Service rule (enforced at save time, not by DB): inventory_item.item_type
+    must be 'ingredient'. Packaging materials are handled separately through
+    PackagingProfileItem (Phase 4B-2).
+
+    Only drafts can be edited or deleted. Once the recipe is approved, its
+    RecipeItem rows are immutable (the recipe FK uses CASCADE so removing the
+    draft recipe removes its lines, but approved recipes are never deleted
+    while referenced by a reservation line).
+    """
+
+    recipe = models.ForeignKey(
+        Recipe,
+        on_delete=models.CASCADE,
+        related_name='items',
+        help_text='The parent recipe. Only draft recipes can have their items edited.',
+    )
+    inventory_item = models.ForeignKey(
+        InventoryItem,
+        on_delete=models.PROTECT,
+        related_name='recipe_items',
+        help_text=(
+            'The ingredient consumed. '
+            'Service rule: must have item_type="ingredient".'
+        ),
+    )
+    quantity = _qty_field(
+        help_text=(
+            'Quantity consumed per one product unit, in the ingredient\'s '
+            'base unit. Must be > 0.'
+        ),
+    )
+
+    class Meta:
+        ordering = ['recipe', 'inventory_item']
+        constraints = [
+            # ── recipeitem_quantity_positive ──────────────────────────────────
+            # A recipe line that consumes zero or negative of an ingredient
+            # is meaningless.
+            models.CheckConstraint(
+                **_check(condition=Q(quantity__gt=Decimal('0.000'))),
+                name='recipeitem_quantity_positive',
+            ),
+            # ── recipeitem_unique_item ─────────────────────────────────────────
+            # Each ingredient appears at most once per recipe.
+            # If staff need to add the same ingredient for two different
+            # reasons, the quantities should be summed into one line.
+            models.UniqueConstraint(
+                fields=['recipe', 'inventory_item'],
+                name='recipeitem_unique_item',
+                violation_error_message=(
+                    'This ingredient already has a line in this recipe. '
+                    'Edit the existing line to change the quantity.'
+                ),
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f'RecipeItem(recipe={self.recipe_id}, '
+            f'item={self.inventory_item_id}, '
+            f'qty={self.quantity})'
+        )
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Phase 4B-2 — Packaging Models
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Implements Rev 3 §D.6:  PackagingProfile, PackagingProfileItem,
+# ProductPackagingRule.
+#
+# Packaging is separated from ingredient recipes (Option B, Rev 3 §I.1):
+#   • Ingredient quantities live in Recipe / RecipeItem (one per product+size).
+#   • Packaging materials are grouped into a reusable PackagingProfile.
+#   • Each (product, size, order_type) is linked to exactly one profile or is
+#     explicitly declared packaging-free via ProductPackagingRule.
+#
+# resolve_plan() (Phase 5B) reads these tables but they are not written here.
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+# ── PackagingProfile ──────────────────────────────────────────────────────────
+
+class PackagingProfile(models.Model):
+    """
+    A named, versioned collection of packaging materials used to wrap or
+    contain one unit of a product.
+
+    Rev 3 §D.6.
+
+    A profile is deliberately decoupled from any specific product so the
+    same packaging configuration can be shared across products (e.g. all
+    medium takeout drinks use the same lid and cup profile). Each product
+    is linked to a profile through ProductPackagingRule.
+
+    Lifecycle mirrors Recipe (§D.4):
+      draft    — work in progress; cannot be pointed to by a rule.
+      approved — live and immutable; rules may reference it.
+      retired  — superseded; no new rule may reference it.
+
+    Approving a new profile revision changes no rule: each rule is
+    repointed explicitly by staff, one product at a time, under the
+    Product lock (Rev 3 §H.9). Retiring a profile is only allowed when
+    no ProductPackagingRule references it (checked under the profile row
+    lock at the time of retirement — enforced by the service, not the DB).
+
+    Immutability: once approved, a profile's items cannot be changed. A
+    change creates a new draft revision; approving it does not retire the
+    old one automatically.
+    """
+
+    # ── Status ────────────────────────────────────────────────────────────────
+    STATUS_DRAFT    = 'draft'
+    STATUS_APPROVED = 'approved'
+    STATUS_RETIRED  = 'retired'
+    STATUS_CHOICES = [
+        (STATUS_DRAFT,    'Draft'),
+        (STATUS_APPROVED, 'Approved'),
+        (STATUS_RETIRED,  'Retired'),
+    ]
+
+    # ── Fields ────────────────────────────────────────────────────────────────
+    name = models.CharField(
+        max_length=120,
+        help_text=(
+            'Human-readable profile name (e.g. "Medium Takeout Cup Set"). '
+            'Unique per revision; at most one approved profile per name '
+            '(case-insensitive).'
+        ),
+    )
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default=STATUS_DRAFT,
+        help_text='Draft: editable. Approved: live and immutable. Retired: superseded.',
+    )
+    revision = models.PositiveIntegerField(
+        help_text=(
+            'Monotonically increasing per profile name. '
+            'Revision numbers are never reused for the same name.'
+        ),
+    )
+
+    # ── Approval metadata ─────────────────────────────────────────────────────
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='approved_packaging_profiles',
+        help_text='Staff member who approved this profile revision.',
+    )
+    approved_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text='When this profile was approved. Null for drafts and retired profiles.',
+    )
+    approval_note = models.TextField(
+        blank=True, default='',
+        help_text=(
+            'How and when the client confirmed this packaging configuration [C]. '
+            'Required when approving.'
+        ),
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name', '-revision']
+        indexes = [
+            # Covers packaging profile management list filtered by status.
+            models.Index(
+                fields=['status'],
+                name='idx_pp_status',
+            ),
+        ]
+        constraints = [
+            # ── pp_revision_unique ────────────────────────────────────────────
+            # (name, revision) is unique: revision numbers are never reused for
+            # the same profile name.
+            models.UniqueConstraint(
+                fields=['name', 'revision'],
+                name='pp_revision_unique',
+                violation_error_message=(
+                    'This revision number is already in use for this packaging profile name.'
+                ),
+            ),
+            # ── pp_one_approved_per_name ──────────────────────────────────────
+            # At most one approved profile per name (case-insensitive).
+            # Partial unique index; only fires for approved profiles.
+            # Uses Lower() expression to make the uniqueness case-insensitive,
+            # consistent with item_name_unique_ci on InventoryItem.
+            models.UniqueConstraint(
+                models.functions.Lower('name'),
+                condition=Q(status='approved'),
+                name='pp_one_approved_per_name',
+                violation_error_message=(
+                    'An approved packaging profile with this name already exists. '
+                    'Retire the existing profile before approving a new revision.'
+                ),
+            ),
+            # ── pp_approved_has_approval ──────────────────────────────────────
+            # An approved profile must record when it was approved.
+            # Mirrors recipe_approved_has_approval (§D.4).
+            models.CheckConstraint(
+                **_check(
+                    condition=~Q(status='approved') | Q(approved_at__isnull=False),
+                ),
+                name='pp_approved_has_approval',
+            ),
+            # ── pp_status_valid ───────────────────────────────────────────────
+            models.CheckConstraint(
+                **_check(condition=Q(status__in=['draft', 'approved', 'retired'])),
+                name='pp_status_valid',
+            ),
+            # ── pp_revision_positive ──────────────────────────────────────────
+            # PositiveIntegerField already enforces >= 1 at the Python level;
+            # the CHECK makes the rule explicit in the DB schema.
+            models.CheckConstraint(
+                **_check(condition=Q(revision__gt=0)),
+                name='pp_revision_positive',
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f'PackagingProfile({self.name!r}, rev={self.revision}, {self.status})'
+        )
+
+
+# ── PackagingProfileItem ──────────────────────────────────────────────────────
+
+class PackagingProfileItem(models.Model):
+    """
+    One packaging material line in a PackagingProfile.
+
+    Rev 3 §D.6.
+
+    Each row specifies how many units of one packaging InventoryItem are
+    consumed to produce one unit of the parent profile's product.
+
+    quantity is in the InventoryItem's base unit (pcs for most packaging,
+    but g or ml are also valid if a profile item is measured by weight or
+    volume).
+
+    Service rule (enforced at save time): inventory_item.item_type must be
+    'packaging'. Ingredient materials are handled separately through
+    RecipeItem. The DB cannot express this cross-table rule.
+
+    Only drafts can be edited or deleted (same immutability contract as
+    RecipeItem on an approved Recipe).
+    """
+
+    profile = models.ForeignKey(
+        PackagingProfile,
+        on_delete=models.CASCADE,
+        related_name='items',
+        help_text='The parent packaging profile. Only draft profiles can have items edited.',
+    )
+    inventory_item = models.ForeignKey(
+        InventoryItem,
+        on_delete=models.PROTECT,
+        related_name='packaging_profile_items',
+        help_text=(
+            'The packaging material consumed. '
+            'Service rule: must have item_type="packaging".'
+        ),
+    )
+    quantity = _qty_field(
+        help_text=(
+            'Quantity consumed per one product unit, in the packaging item\'s '
+            'base unit. Must be > 0.'
+        ),
+    )
+
+    class Meta:
+        ordering = ['profile', 'inventory_item']
+        constraints = [
+            # ── ppi_quantity_positive ─────────────────────────────────────────
+            # A profile line that consumes zero or negative packaging is
+            # meaningless.
+            models.CheckConstraint(
+                **_check(condition=Q(quantity__gt=Decimal('0.000'))),
+                name='ppi_quantity_positive',
+            ),
+            # ── ppi_unique_item ────────────────────────────────────────────────
+            # Each packaging material appears at most once per profile.
+            # Mirrors recipeitem_unique_item.
+            models.UniqueConstraint(
+                fields=['profile', 'inventory_item'],
+                name='ppi_unique_item',
+                violation_error_message=(
+                    'This packaging material already has a line in this profile. '
+                    'Edit the existing line to change the quantity.'
+                ),
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f'PackagingProfileItem(profile={self.profile_id}, '
+            f'item={self.inventory_item_id}, '
+            f'qty={self.quantity})'
+        )
+
+
+# ── ProductPackagingRule ──────────────────────────────────────────────────────
+
+class ProductPackagingRule(models.Model):
+    """
+    Defines what packaging (if any) is applied when one unit of a product at
+    a given size is sold under a given order type.
+
+    Rev 3 §D.6.
+
+    There is deliberately no "all" scope here: dine-in and takeout packaging
+    differ for most products, so every (product, size) needs two explicit
+    rules — one for dine_in and one for takeout — unless the product is sold
+    under only one order type.
+
+    Exactly one of two outcomes is required per rule:
+      • profile is set and no_packaging is False: use the named profile.
+      • profile is null and no_packaging is True: explicitly no packaging.
+
+    The DB enforces this XOR via ppr_profile_xor_none. "Silence" — a missing
+    rule — is handled at resolve_plan() time, which raises
+    PackagingRuleMissingError if no rule exists for the order's (product,
+    size, order_type). There is no silent fallback.
+
+    Mutability: rules can be edited (repointed to a new profile or changed
+    from no_packaging to a profile) by staff under the Product row lock
+    (H.9). Unlike recipes and profiles, rules do not have a revision history:
+    the audit trail lives in PackagingProfile revisions and in the
+    ReservationItem snapshots that record which profile was active at
+    placement time.
+
+    Configuration lock (Rev 3 §H.9):
+      Creating, changing, or deleting a ProductPackagingRule requires:
+        Lock(Product, ascending id) → Lock(target PackagingProfile, ascending id).
+      The service re-reads the profile's status under its lock and rejects
+      a non-approved profile. This ensures placement (which holds the Product
+      lock) and rule writers cannot interleave, so every order sees a
+      consistent (recipe + rule) pair.
+    """
+
+    # ── Order-type choices ────────────────────────────────────────────────────
+    # Deliberately excludes 'all': §D.6 requires per-order-type rules.
+    ORDER_TYPE_DINE_IN  = 'dine_in'
+    ORDER_TYPE_TAKEOUT  = 'takeout'
+    ORDER_TYPE_CHOICES = [
+        (ORDER_TYPE_DINE_IN, 'Dine-in'),
+        (ORDER_TYPE_TAKEOUT, 'Takeout'),
+    ]
+
+    # ── Size vocabulary (mirrors Recipe.SIZE_CHOICES and OrderItem.SIZE_CHOICES)
+    SIZE_NONE   = 'none'
+    SIZE_SMALL  = 'small'
+    SIZE_MEDIUM = 'medium'
+    SIZE_LARGE  = 'large'
+    SIZE_HOT    = 'hot'
+    SIZE_CHOICES = [
+        (SIZE_NONE,   'Regular'),
+        (SIZE_SMALL,  'Small'),
+        (SIZE_MEDIUM, 'Medium'),
+        (SIZE_LARGE,  'Large'),
+        (SIZE_HOT,    'Hot'),
+    ]
+
+    # ── Fields ────────────────────────────────────────────────────────────────
+    product = models.ForeignKey(
+        'menu.Product',
+        on_delete=models.PROTECT,
+        related_name='packaging_rules',
+        help_text='The product this rule applies to.',
+    )
+    size = models.CharField(
+        max_length=10,
+        choices=SIZE_CHOICES,
+        help_text=(
+            'The product size this rule covers. '
+            'Uses the same vocabulary as OrderItem.SIZE_CHOICES.'
+        ),
+    )
+    order_type = models.CharField(
+        max_length=10,
+        choices=ORDER_TYPE_CHOICES,
+        help_text=(
+            'The order type this rule covers. '
+            'There is no "all" scope: dine_in and takeout are configured separately.'
+        ),
+    )
+
+    # ── Packaging outcome ─────────────────────────────────────────────────────
+    profile = models.ForeignKey(
+        PackagingProfile,
+        on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name='rules',
+        help_text=(
+            'The packaging profile to use. '
+            'Must be null when no_packaging is True, and non-null otherwise. '
+            'Service rule: the referenced profile must have status="approved" '
+            'when the rule is saved and again at order time.'
+        ),
+    )
+    no_packaging = models.BooleanField(
+        default=False,
+        help_text=(
+            'When True, this combination explicitly requires no packaging. '
+            'profile must be null. '
+            'This is a positive confirmation by staff, not a default.'
+        ),
+    )
+
+    # ── Confirmation metadata ─────────────────────────────────────────────────
+    # Rev 3 §D.6 lists confirmed_by, confirmed_at, updated_by, updated_at.
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='confirmed_packaging_rules',
+        help_text='Staff member who confirmed this packaging rule.',
+    )
+    confirmed_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text='When this rule was first confirmed by staff.',
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='updated_packaging_rules',
+        help_text='Staff member who most recently updated this rule.',
+    )
+    updated_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text='When this rule was most recently updated.',
+    )
+
+    class Meta:
+        ordering = ['product', 'size', 'order_type']
+        indexes = [
+            # Covers resolve_plan(): rule lookup by (product, size, order_type).
+            models.Index(
+                fields=['product', 'size', 'order_type'],
+                name='idx_ppr_product_size_otype',
+            ),
+        ]
+        constraints = [
+            # ── ppr_unique_combination ────────────────────────────────────────
+            # One rule per (product, size, order_type) combination.
+            # resolve_plan() must never find more than one rule.
+            models.UniqueConstraint(
+                fields=['product', 'size', 'order_type'],
+                name='ppr_unique_combination',
+                violation_error_message=(
+                    'A packaging rule for this product/size/order_type already exists.'
+                ),
+            ),
+            # ── ppr_profile_xor_none ──────────────────────────────────────────
+            # Exactly one of (profile, no_packaging) is set:
+            #   profile is non-null AND no_packaging is False  — use the profile
+            #   profile is null     AND no_packaging is True   — explicit no-pack
+            # Silence (profile null, no_packaging False) and contradiction
+            # (profile set, no_packaging True) are both rejected.
+            models.CheckConstraint(
+                **_check(
+                    condition=(
+                        Q(profile__isnull=False, no_packaging=False)
+                        | Q(profile__isnull=True, no_packaging=True)
+                    ),
+                ),
+                name='ppr_profile_xor_none',
+            ),
+            # ── ppr_size_valid ────────────────────────────────────────────────
+            models.CheckConstraint(
+                **_check(condition=Q(size__in=['none', 'small', 'medium', 'large', 'hot'])),
+                name='ppr_size_valid',
+            ),
+            # ── ppr_order_type_valid ──────────────────────────────────────────
+            # Deliberately excludes 'all': there is no order-type "all" for rules.
+            models.CheckConstraint(
+                **_check(condition=Q(order_type__in=['dine_in', 'takeout'])),
+                name='ppr_order_type_valid',
+            ),
+        ]
+
+    def __str__(self):
+        outcome = (
+            f'profile={self.profile_id}'
+            if self.profile_id
+            else 'no_packaging'
+        )
+        return (
+            f'ProductPackagingRule({self.product_id}, {self.size}, '
+            f'{self.order_type}, {outcome})'
+        )
