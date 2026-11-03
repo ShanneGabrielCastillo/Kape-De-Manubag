@@ -1,0 +1,72 @@
+{% extends "base_admin.html" %}
+{% block page_title %}Configuration Status — {{ product.name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ product.name }} — Configuration Status</h1>
+    <p class="page-subtitle">Recipe and packaging completeness matrix for ingredient-tracked product</p>
+  </div>
+  <a href="{% url 'inventory:recipe_list' %}" class="btn btn-outline">
+    <i data-lucide="arrow-left" class="btn-icon" aria-hidden="true"></i>
+    Recipes
+  </a>
+</div>
+
+{% if messages %}
+  {% for message in messages %}
+  <div class="alert alert-{{ message.tags }}" role="alert">{{ message }}</div>
+  {% endfor %}
+{% endif %}
+
+{% if matrix %}
+<div class="card">
+  <div class="table-wrapper">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Size</th>
+          {% for ot in order_types %}
+          <th style="text-transform:capitalize">{{ ot|cut:"_" }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in matrix %}
+        <tr>
+          <td style="font-weight:600;text-transform:capitalize">{{ row.size }}</td>
+          {% for cell in row.cells %}
+          <td>
+            {% if cell.ok %}
+              <span style="color:#27ae60;font-size:1.1rem" title="Complete">&#10003;</span>
+              <span style="font-size:0.8rem;color:#555;margin-left:4px">
+                Recipe rev {{ cell.recipe.revision }}
+                {% if cell.packaging_rule.no_packaging %}· No packaging{% elif cell.packaging_rule.profile %}· {{ cell.packaging_rule.profile.name }}{% endif %}
+              </span>
+            {% else %}
+              <span style="color:#e74c3c;font-size:1.1rem" title="Incomplete">&#10007;</span>
+              <span style="font-size:0.78rem;color:#e74c3c;margin-left:4px" title="{{ cell.reason }}">
+                {{ cell.reason|truncatechars:80 }}
+              </span>
+            {% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="card">
+  <div style="padding:2rem;text-align:center;color:#aaa">
+    No recipes or packaging rules have been created for this product yet.
+  </div>
+</div>
+{% endif %}
+
+<div style="margin-top:1.5rem;display:flex;gap:.75rem;flex-wrap:wrap">
+  <a href="{% url 'inventory:recipe_create' %}" class="btn btn-outline">Add Recipe</a>
+  <a href="{% url 'inventory:packaging_rule_create' %}?product={{ product.pk }}" class="btn btn-outline">Add Packaging Rule</a>
+</div>
+{% endblock %}

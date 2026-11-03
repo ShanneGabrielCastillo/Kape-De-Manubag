@@ -934,3 +934,579 @@ def purchase_detail(request, pk):
         'purchase': purchase,
         'items':    items,
     })
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 4B-5 — Recipe and Packaging Configuration Management
+# ═══════════════════════════════════════════════════════════════════════════════
+
+from .models import (
+    Recipe, RecipeItem,
+    PackagingProfile, PackagingProfileItem, ProductPackagingRule,
+)
+from .forms import (
+    RecipeForm, RecipeApprovalForm, RecipeItemForm,
+    PackagingProfileForm, PackagingProfileApprovalForm, PackagingProfileItemForm,
+    ProductPackagingRuleForm,
+)
+from .services import (
+    approve_recipe, retire_recipe,
+    approve_packaging_profile, retire_packaging_profile, save_packaging_rule,
+    RecipeConfigError, PackagingConfigError,
+)
+
+
+# ── Recipe list ───────────────────────────────────────────────────────────────
+
+@login_required
+@cashier_or_admin_required
+def recipe_list(request):
+    """List all Recipes, ordered by product / size / scope / revision."""
+    recipes = (
+        Recipe.objects
+        .select_related('product', 'approved_by')
+        .order_by('product__name', 'size', 'order_type_scope', '-revision')
+    )
+    q = request.GET.get('q', '').strip()
+    if q:
+        recipes = recipes.filter(product__name__icontains=q)
+    status_filter = request.GET.get('status', '').strip()
+    if status_filter in ('draft', 'approved', 'retired'):
+        recipes = recipes.filter(status=status_filter)
+    else:
+        status_filter = ''
+    return render(request, 'inventory/recipe_list.html', {
+        'recipes':       recipes,
+        'q':             q,
+        'status_filter': status_filter,
+    })
+
+
+# ── Recipe create ─────────────────────────────────────────────────────────────
+
+@login_required
+@cashier_or_admin_required
+def recipe_create(request):
+    """Create a new draft Recipe header."""
+    if request.method == 'POST':
+        form = RecipeForm(request.POST)
+        if form.is_valid():
+            try:
+                with transaction.atomic():
+                    recipe = form.save(commit=False)
+                    recipe.status = Recipe.STATUS_DRAFT
+                    recipe.save()
+                    log_action(request.user, 'inventory.recipe_create', recipe,
+                               detail=str(recipe))
+            except IntegrityError:
+                messages.error(request, 'Could not save recipe — a conflict occurred. Check revision number.')
+                return render(request, 'inventory/recipe_form.html', {'form': form, 'title': 'Add Recipe'})
+            messages.success(request, f'Draft recipe created for {recipe.product.name}.')
+            return redirect('inventory:recipe_detail', pk=recipe.pk)
+    else:
+        form = RecipeForm()
+    return render(request, 'inventory/recipe_form.html', {'form': form, 'title': 'Add Recipe'})
+
+
+# ── Recipe detail ─────────────────────────────────────────────────────────────
+
+@login_required
+@cashier_or_admin_required
+def recipe_detail(request, pk):
+    """View a Recipe and its items. Dispatch add-item POST from here."""
+    recipe = get_object_or_404(Recipe.objects.select_related('product', 'approved_by'), pk=pk)
+    items  = RecipeItem.objects.filter(recipe=recipe).select_related('inventory_item').order_by('id')
+
+    # Add-item form (only shown / processed for drafts).
+    item_form = None
+    if recipe.status == Recipe.STATUS_DRAFT:
+        if request.method == 'POST' and 'add_item' in request.POST:
+            item_form = RecipeItemForm(request.POST, recipe=recipe)
+            if item_form.is_valid():
+                try:
+                    with transaction.atomic():
+                        ri = item_form.save(commit=False)
+                        ri.recipe = recipe
+                        ri.save()
+                        log_action(request.user, 'inventory.recipe_item_add', recipe,
+                                   detail=f'{ri.inventory_item.name} × {ri.quantity}')
+                    messages.success(request, f'Added {ri.inventory_item.name} to recipe.')
+                    return redirect('inventory:recipe_detail', pk=pk)
+                except IntegrityError:
+                    messages.error(request, 'Could not add ingredient — a conflict occurred.')
+        else:
+            item_form = RecipeItemForm(recipe=recipe)
+
+    return render(request, 'inventory/recipe_detail.html', {
+        'recipe':    recipe,
+        'items':     items,
+        'item_form': item_form,
+    })
+
+
+# ── Recipe edit ───────────────────────────────────────────────────────────────
+
+@login_required
+@cashier_or_admin_required
+def recipe_edit(request, pk):
+    """Edit a draft Recipe header. Approved/retired recipes are immutable."""
+    recipe = get_object_or_404(Recipe, pk=pk)
+    if recipe.status != Recipe.STATUS_DRAFT:
+        messages.error(request, 'Only draft recipes can be edited.')
+        return redirect('inventory:recipe_detail', pk=pk)
+    if request.method == 'POST':
+        form = RecipeForm(request.POST, instance=recipe)
+        if form.is_valid():
+            try:
+                with transaction.atomic():
+                    form.save()
+                    log_action(request.user, 'inventory.recipe_edit', recipe, detail=str(recipe))
+            except IntegrityError:
+                messages.error(request, 'Could not save recipe — revision number conflict.')
+                return render(request, 'inventory/recipe_form.html',
+                              {'form': form, 'recipe': recipe, 'title': 'Edit Recipe'})
+            messages.success(request, 'Recipe updated.')
+            return redirect('inventory:recipe_detail', pk=pk)
+    else:
+        form = RecipeForm(instance=recipe)
+    return render(request, 'inventory/recipe_form.html',
+                  {'form': form, 'recipe': recipe, 'title': 'Edit Recipe'})
+
+
+# ── Recipe item delete ────────────────────────────────────────────────────────
+
+@login_required
+@cashier_or_admin_required
+def recipe_item_delete(request, pk, item_pk):
+    """Remove a RecipeItem from a draft Recipe."""
+    recipe = get_object_or_404(Recipe, pk=pk)
+    if recipe.status != Recipe.STATUS_DRAFT:
+        messages.error(request, 'Cannot remove items from a non-draft recipe.')
+        return redirect('inventory:recipe_detail', pk=pk)
+    ri = get_object_or_404(RecipeItem, pk=item_pk, recipe=recipe)
+    if request.method == 'POST':
+        with transaction.atomic():
+            name = ri.inventory_item.name
+            ri.delete()
+            log_action(request.user, 'inventory.recipe_item_delete', recipe, detail=name)
+        messages.success(request, f'Removed {name} from recipe.')
+    return redirect('inventory:recipe_detail', pk=pk)
+
+
+# ── Recipe approve ────────────────────────────────────────────────────────────
+
+@login_required
+@cashier_or_admin_required
+def recipe_approve(request, pk):
+    """Approve a draft Recipe (POST with approval note)."""
+    recipe = get_object_or_404(Recipe, pk=pk)
+    if request.method == 'POST':
+        form = RecipeApprovalForm(request.POST)
+        if form.is_valid():
+            try:
+                recipe = approve_recipe(
+                    recipe_id=pk,
+                    approved_by=request.user,
+                    approval_note=form.cleaned_data['approval_note'],
+                )
+                log_action(request.user, 'inventory.recipe_approve', recipe, detail=str(recipe))
+                messages.success(request, f'Recipe approved (rev {recipe.revision}).')
+                return redirect('inventory:recipe_detail', pk=pk)
+            except RecipeConfigError as exc:
+                messages.error(request, str(exc))
+                return render(request, 'inventory/recipe_approve.html',
+                              {'recipe': recipe, 'form': form})
+    else:
+        form = RecipeApprovalForm()
+    return render(request, 'inventory/recipe_approve.html', {'recipe': recipe, 'form': form})
+
+
+# ── Recipe retire ─────────────────────────────────────────────────────────────
+
+@login_required
+@cashier_or_admin_required
+def recipe_retire(request, pk):
+    """Retire an approved Recipe (POST confirmation)."""
+    recipe = get_object_or_404(Recipe, pk=pk)
+    if request.method == 'POST':
+        try:
+            recipe = retire_recipe(recipe_id=pk)
+            log_action(request.user, 'inventory.recipe_retire', recipe, detail=str(recipe))
+            messages.success(request, f'Recipe retired (rev {recipe.revision}).')
+        except RecipeConfigError as exc:
+            messages.error(request, str(exc))
+        return redirect('inventory:recipe_detail', pk=pk)
+    return render(request, 'inventory/recipe_retire_confirm.html', {'recipe': recipe})
+
+
+# ── Packaging profile list ────────────────────────────────────────────────────
+
+@login_required
+@cashier_or_admin_required
+def packaging_profile_list(request):
+    """List all PackagingProfiles."""
+    profiles = (
+        PackagingProfile.objects
+        .select_related('approved_by')
+        .order_by('name', '-revision')
+    )
+    q = request.GET.get('q', '').strip()
+    if q:
+        profiles = profiles.filter(name__icontains=q)
+    status_filter = request.GET.get('status', '').strip()
+    if status_filter in ('draft', 'approved', 'retired'):
+        profiles = profiles.filter(status=status_filter)
+    else:
+        status_filter = ''
+    return render(request, 'inventory/packaging_profile_list.html', {
+        'profiles':      profiles,
+        'q':             q,
+        'status_filter': status_filter,
+    })
+
+
+# ── Packaging profile create ──────────────────────────────────────────────────
+
+@login_required
+@cashier_or_admin_required
+def packaging_profile_create(request):
+    """Create a new draft PackagingProfile."""
+    if request.method == 'POST':
+        form = PackagingProfileForm(request.POST)
+        if form.is_valid():
+            try:
+                with transaction.atomic():
+                    profile = form.save(commit=False)
+                    profile.status = PackagingProfile.STATUS_DRAFT
+                    profile.save()
+                    log_action(request.user, 'inventory.packaging_profile_create',
+                               profile, detail=str(profile))
+            except IntegrityError:
+                messages.error(request, 'Could not save profile — a conflict occurred.')
+                return render(request, 'inventory/packaging_profile_form.html',
+                              {'form': form, 'title': 'Add Packaging Profile'})
+            messages.success(request, f'Draft packaging profile "{profile.name}" created.')
+            return redirect('inventory:packaging_profile_detail', pk=profile.pk)
+    else:
+        form = PackagingProfileForm()
+    return render(request, 'inventory/packaging_profile_form.html',
+                  {'form': form, 'title': 'Add Packaging Profile'})
+
+
+# ── Packaging profile detail ──────────────────────────────────────────────────
+
+@login_required
+@cashier_or_admin_required
+def packaging_profile_detail(request, pk):
+    """View a PackagingProfile and manage its items."""
+    profile = get_object_or_404(
+        PackagingProfile.objects.select_related('approved_by'), pk=pk
+    )
+    items = PackagingProfileItem.objects.filter(profile=profile).select_related('inventory_item').order_by('id')
+
+    item_form = None
+    if profile.status == PackagingProfile.STATUS_DRAFT:
+        if request.method == 'POST' and 'add_item' in request.POST:
+            item_form = PackagingProfileItemForm(request.POST, profile=profile)
+            if item_form.is_valid():
+                try:
+                    with transaction.atomic():
+                        ppi = item_form.save(commit=False)
+                        ppi.profile = profile
+                        ppi.save()
+                        log_action(request.user, 'inventory.packaging_profile_item_add',
+                                   profile, detail=f'{ppi.inventory_item.name} × {ppi.quantity}')
+                    messages.success(request, f'Added {ppi.inventory_item.name} to profile.')
+                    return redirect('inventory:packaging_profile_detail', pk=pk)
+                except IntegrityError:
+                    messages.error(request, 'Could not add item — a conflict occurred.')
+        else:
+            item_form = PackagingProfileItemForm(profile=profile)
+
+    return render(request, 'inventory/packaging_profile_detail.html', {
+        'profile':   profile,
+        'items':     items,
+        'item_form': item_form,
+    })
+
+
+# ── Packaging profile edit ────────────────────────────────────────────────────
+
+@login_required
+@cashier_or_admin_required
+def packaging_profile_edit(request, pk):
+    """Edit a draft PackagingProfile header."""
+    profile = get_object_or_404(PackagingProfile, pk=pk)
+    if profile.status != PackagingProfile.STATUS_DRAFT:
+        messages.error(request, 'Only draft packaging profiles can be edited.')
+        return redirect('inventory:packaging_profile_detail', pk=pk)
+    if request.method == 'POST':
+        form = PackagingProfileForm(request.POST, instance=profile)
+        if form.is_valid():
+            try:
+                with transaction.atomic():
+                    form.save()
+                    log_action(request.user, 'inventory.packaging_profile_edit',
+                               profile, detail=str(profile))
+            except IntegrityError:
+                messages.error(request, 'Could not save profile — revision conflict.')
+                return render(request, 'inventory/packaging_profile_form.html',
+                              {'form': form, 'profile': profile, 'title': 'Edit Packaging Profile'})
+            messages.success(request, 'Packaging profile updated.')
+            return redirect('inventory:packaging_profile_detail', pk=pk)
+    else:
+        form = PackagingProfileForm(instance=profile)
+    return render(request, 'inventory/packaging_profile_form.html',
+                  {'form': form, 'profile': profile, 'title': 'Edit Packaging Profile'})
+
+
+# ── Packaging profile item delete ─────────────────────────────────────────────
+
+@login_required
+@cashier_or_admin_required
+def packaging_profile_item_delete(request, pk, item_pk):
+    """Remove a PackagingProfileItem from a draft PackagingProfile."""
+    profile = get_object_or_404(PackagingProfile, pk=pk)
+    if profile.status != PackagingProfile.STATUS_DRAFT:
+        messages.error(request, 'Cannot remove items from a non-draft packaging profile.')
+        return redirect('inventory:packaging_profile_detail', pk=pk)
+    ppi = get_object_or_404(PackagingProfileItem, pk=item_pk, profile=profile)
+    if request.method == 'POST':
+        with transaction.atomic():
+            name = ppi.inventory_item.name
+            ppi.delete()
+            log_action(request.user, 'inventory.packaging_profile_item_delete',
+                       profile, detail=name)
+        messages.success(request, f'Removed {name} from profile.')
+    return redirect('inventory:packaging_profile_detail', pk=pk)
+
+
+# ── Packaging profile approve ─────────────────────────────────────────────────
+
+@login_required
+@cashier_or_admin_required
+def packaging_profile_approve(request, pk):
+    """Approve a draft PackagingProfile."""
+    profile = get_object_or_404(PackagingProfile, pk=pk)
+    if request.method == 'POST':
+        form = PackagingProfileApprovalForm(request.POST)
+        if form.is_valid():
+            try:
+                profile = approve_packaging_profile(
+                    profile_id=pk,
+                    approved_by=request.user,
+                    approval_note=form.cleaned_data['approval_note'],
+                )
+                log_action(request.user, 'inventory.packaging_profile_approve',
+                           profile, detail=str(profile))
+                messages.success(request, f'Packaging profile "{profile.name}" approved.')
+                return redirect('inventory:packaging_profile_detail', pk=pk)
+            except PackagingConfigError as exc:
+                messages.error(request, str(exc))
+                return render(request, 'inventory/packaging_profile_approve.html',
+                              {'profile': profile, 'form': form})
+    else:
+        form = PackagingProfileApprovalForm()
+    return render(request, 'inventory/packaging_profile_approve.html',
+                  {'profile': profile, 'form': form})
+
+
+# ── Packaging profile retire ──────────────────────────────────────────────────
+
+@login_required
+@cashier_or_admin_required
+def packaging_profile_retire(request, pk):
+    """Retire an approved PackagingProfile."""
+    profile = get_object_or_404(PackagingProfile, pk=pk)
+    if request.method == 'POST':
+        try:
+            profile = retire_packaging_profile(profile_id=pk)
+            log_action(request.user, 'inventory.packaging_profile_retire',
+                       profile, detail=str(profile))
+            messages.success(request, f'Packaging profile "{profile.name}" retired.')
+        except PackagingConfigError as exc:
+            messages.error(request, str(exc))
+        return redirect('inventory:packaging_profile_detail', pk=pk)
+    return render(request, 'inventory/packaging_profile_retire_confirm.html',
+                  {'profile': profile})
+
+
+# ── Product packaging rules list (per product) ────────────────────────────────
+
+@login_required
+@cashier_or_admin_required
+def packaging_rule_list(request):
+    """List all ProductPackagingRules across all products."""
+    from apps.menu.models import Product as _Product
+    rules = (
+        ProductPackagingRule.objects
+        .select_related('product', 'profile', 'confirmed_by', 'updated_by')
+        .order_by('product__name', 'size', 'order_type')
+    )
+    products = _Product.objects.filter(is_active=True).order_by('name')
+    product_filter = request.GET.get('product', '').strip()
+    if product_filter:
+        try:
+            rules = rules.filter(product_id=int(product_filter))
+        except (ValueError, TypeError):
+            product_filter = ''
+    return render(request, 'inventory/packaging_rule_list.html', {
+        'rules':          rules,
+        'products':       products,
+        'product_filter': product_filter,
+    })
+
+
+# ── Product packaging rule create ─────────────────────────────────────────────
+
+@login_required
+@cashier_or_admin_required
+def packaging_rule_create(request):
+    """Create a new ProductPackagingRule."""
+    from apps.menu.models import Product as _Product
+    if request.method == 'POST':
+        form = ProductPackagingRuleForm(request.POST)
+        if form.is_valid():
+            try:
+                rule = save_packaging_rule(
+                    product_id=form.cleaned_data['product_id'],
+                    size=form.cleaned_data['size'],
+                    order_type=form.cleaned_data['order_type'],
+                    profile_id=form.cleaned_data.get('profile_id') or None,
+                    no_packaging=form.cleaned_data.get('no_packaging', False),
+                    confirmed_by=request.user,
+                )
+                log_action(request.user, 'inventory.packaging_rule_create',
+                           rule, detail=str(rule))
+                messages.success(request, 'Packaging rule saved.')
+                return redirect('inventory:packaging_rule_list')
+            except (PackagingConfigError, IntegrityError) as exc:
+                messages.error(request, str(exc))
+    else:
+        # Pre-populate product_id from GET parameter.
+        product_id = request.GET.get('product', '')
+        initial = {}
+        if product_id:
+            try:
+                initial['product_id'] = int(product_id)
+            except (ValueError, TypeError):
+                pass
+        form = ProductPackagingRuleForm(initial=initial)
+    products = _Product.objects.filter(is_active=True).order_by('name')
+    return render(request, 'inventory/packaging_rule_form.html', {
+        'form':     form,
+        'title':    'Add Packaging Rule',
+        'products': products,
+    })
+
+
+# ── Product packaging rule edit ───────────────────────────────────────────────
+
+@login_required
+@cashier_or_admin_required
+def packaging_rule_edit(request, pk):
+    """Edit an existing ProductPackagingRule."""
+    from apps.menu.models import Product as _Product
+    rule = get_object_or_404(ProductPackagingRule.objects.select_related('product', 'profile'), pk=pk)
+    if request.method == 'POST':
+        form = ProductPackagingRuleForm(request.POST)
+        if form.is_valid():
+            # Ensure the submitted product_id matches the rule's product.
+            if form.cleaned_data['product_id'] != rule.product_id:
+                messages.error(request, 'Product cannot be changed when editing a rule.')
+                return redirect('inventory:packaging_rule_edit', pk=pk)
+            try:
+                rule = save_packaging_rule(
+                    product_id=rule.product_id,
+                    size=form.cleaned_data['size'],
+                    order_type=form.cleaned_data['order_type'],
+                    profile_id=form.cleaned_data.get('profile_id') or None,
+                    no_packaging=form.cleaned_data.get('no_packaging', False),
+                    confirmed_by=request.user,
+                    existing_rule_id=pk,
+                )
+                log_action(request.user, 'inventory.packaging_rule_edit',
+                           rule, detail=str(rule))
+                messages.success(request, 'Packaging rule updated.')
+                return redirect('inventory:packaging_rule_list')
+            except (PackagingConfigError, IntegrityError) as exc:
+                messages.error(request, str(exc))
+    else:
+        form = ProductPackagingRuleForm(initial={
+            'product_id':   rule.product_id,
+            'size':         rule.size,
+            'order_type':   rule.order_type,
+            'no_packaging': rule.no_packaging,
+            'profile_id':   rule.profile_id or '',
+        })
+    products = _Product.objects.filter(is_active=True).order_by('name')
+    return render(request, 'inventory/packaging_rule_form.html', {
+        'form':     form,
+        'rule':     rule,
+        'title':    'Edit Packaging Rule',
+        'products': products,
+    })
+
+
+# ── Configuration completeness check ─────────────────────────────────────────
+
+@login_required
+@cashier_or_admin_required
+def recipe_config_status(request, product_pk):
+    """
+    Show the configuration completeness matrix for an ingredient-tracked product.
+
+    For each (size, order_type) combination that the product currently has
+    recipes or rules for, calls resolve_plan() and displays the result.
+
+    This is read-only and does not call any write service.
+    """
+    from apps.menu.models import Product as _Product
+    from .services import resolve_plan, RecipeIncompleteError
+
+    product = get_object_or_404(
+        _Product.objects.filter(inventory_tracking_mode='ingredient'),
+        pk=product_pk,
+    )
+
+    # Collect all sizes and order_types referenced by any Recipe or Rule for
+    # this product — the union of what has been configured so far.
+    sizes_from_recipes = list(
+        Recipe.objects.filter(product=product)
+        .values_list('size', flat=True).distinct()
+    )
+    sizes_from_rules = list(
+        ProductPackagingRule.objects.filter(product=product)
+        .values_list('size', flat=True).distinct()
+    )
+    all_sizes = sorted(set(sizes_from_recipes + sizes_from_rules)) or ['none']
+    order_types = ['dine_in', 'takeout']
+
+    matrix = []
+    for size in all_sizes:
+        row = {'size': size, 'cells': []}
+        for ot in order_types:
+            try:
+                plan = resolve_plan(product.pk, size, ot)
+                row['cells'].append({
+                    'order_type': ot,
+                    'ok': True,
+                    'reason': '',
+                    'recipe': plan.recipe,
+                    'packaging_rule': plan.packaging_rule,
+                })
+            except RecipeIncompleteError as exc:
+                row['cells'].append({
+                    'order_type': ot,
+                    'ok': False,
+                    'reason': str(exc),
+                    'recipe': None,
+                    'packaging_rule': None,
+                })
+        matrix.append(row)
+
+    return render(request, 'inventory/recipe_config_status.html', {
+        'product': product,
+        'matrix':  matrix,
+        'order_types': order_types,
+    })

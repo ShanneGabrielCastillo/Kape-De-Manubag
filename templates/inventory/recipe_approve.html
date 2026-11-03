@@ -1,0 +1,42 @@
+{% extends "base_admin.html" %}
+{% block page_title %}Approve Recipe{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Approve Recipe</h1>
+    <p class="page-subtitle">{{ recipe.product.name }} — {{ recipe.get_size_display }} / {{ recipe.get_order_type_scope_display }} — Rev {{ recipe.revision }}</p>
+  </div>
+  <a href="{% url 'inventory:recipe_detail' recipe.pk %}" class="btn btn-outline">
+    <i data-lucide="arrow-left" class="btn-icon" aria-hidden="true"></i>
+    Back
+  </a>
+</div>
+
+{% if messages %}
+  {% for message in messages %}
+  <div class="alert alert-{{ message.tags }}" role="alert">{{ message }}</div>
+  {% endfor %}
+{% endif %}
+
+<div class="card" style="max-width:560px">
+  <div class="card-body">
+    <p style="margin-bottom:1rem;color:#555">Approving this recipe makes it live for order placement. It will retire the current approved revision (if any) in the same transaction. This action cannot be undone — approved recipes are immutable.</p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for field in form %}
+      <div class="form-group" style="margin-bottom:1rem">
+        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }} <span style="color:#e74c3c">*</span></label>
+        {{ field }}
+        {% if field.help_text %}<div class="form-text" style="font-size:0.8rem;margin-top:2px">{{ field.help_text }}</div>{% endif %}
+        {% for err in field.errors %}<div style="color:#e74c3c;font-size:0.82rem">{{ err }}</div>{% endfor %}
+      </div>
+      {% endfor %}
+      <div style="display:flex;gap:.5rem;margin-top:1.5rem">
+        <button type="submit" class="btn btn-primary">Confirm Approval</button>
+        <a href="{% url 'inventory:recipe_detail' recipe.pk %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,99 @@
+{% extends "base_admin.html" %}
+{% block page_title %}Packaging Profile — {{ profile.name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ profile.name }}</h1>
+    <p class="page-subtitle">Rev {{ profile.revision }} &middot;
+      {% if profile.status == 'approved' %}<span class="badge badge-success">Approved</span>
+      {% elif profile.status == 'draft' %}<span class="badge badge-warning">Draft</span>
+      {% else %}<span class="badge badge-secondary">Retired</span>{% endif %}
+    </p>
+  </div>
+  <div style="display:flex;gap:.5rem">
+    <a href="{% url 'inventory:packaging_profile_list' %}" class="btn btn-outline">
+      <i data-lucide="arrow-left" class="btn-icon" aria-hidden="true"></i>
+      Profiles
+    </a>
+    {% if profile.status == 'draft' %}
+    <a href="{% url 'inventory:packaging_profile_edit' profile.pk %}" class="btn btn-outline">Edit Header</a>
+    <a href="{% url 'inventory:packaging_profile_approve' profile.pk %}" class="btn btn-primary">Approve</a>
+    {% elif profile.status == 'approved' %}
+    <a href="{% url 'inventory:packaging_profile_retire' profile.pk %}" class="btn btn-outline" style="color:#e74c3c;border-color:#e74c3c">Retire</a>
+    {% endif %}
+  </div>
+</div>
+
+{% if messages %}
+  {% for message in messages %}
+  <div class="alert alert-{{ message.tags }}" role="alert">{{ message }}</div>
+  {% endfor %}
+{% endif %}
+
+{% if profile.status != 'draft' %}
+<div class="card" style="max-width:560px;margin-bottom:1.5rem">
+  <div class="card-body">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;font-size:0.85rem">
+      <div><div style="color:#aaa;font-size:0.75rem">Approved by</div><div>{{ profile.approved_by.username|default:"—" }}</div></div>
+      <div><div style="color:#aaa;font-size:0.75rem">Approved at</div><div>{{ profile.approved_at|date:"M d, Y g:i A"|default:"—" }}</div></div>
+      <div style="grid-column:span 2"><div style="color:#aaa;font-size:0.75rem">Approval note</div><div>{{ profile.approval_note|default:"—" }}</div></div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="card" style="margin-bottom:1.5rem">
+  <div style="padding:1rem 1.25rem;border-bottom:1px solid #f0ece8;font-weight:700">Packaging Items</div>
+  {% if items %}
+  <div class="table-wrapper">
+    <table class="table">
+      <thead><tr><th>Item</th><th>Base Unit</th><th>Qty per Unit</th>{% if profile.status == 'draft' %}<th>Remove</th>{% endif %}</tr></thead>
+      <tbody>
+        {% for ppi in items %}
+        <tr>
+          <td>{{ ppi.inventory_item.name }}</td>
+          <td>{{ ppi.inventory_item.get_base_unit_display }}</td>
+          <td>{{ ppi.quantity }}</td>
+          {% if profile.status == 'draft' %}
+          <td>
+            <form method="post" action="{% url 'inventory:packaging_profile_item_delete' profile.pk ppi.pk %}" style="display:inline">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm" style="color:#e74c3c;background:none;border:1px solid #e74c3c" onclick="return confirm('Remove this item?')">Remove</button>
+            </form>
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="padding:2rem;text-align:center;color:#aaa">No packaging items yet.{% if profile.status == 'draft' %} Add one below.{% endif %}</div>
+  {% endif %}
+</div>
+
+{% if profile.status == 'draft' and item_form %}
+<div class="card" style="max-width:560px">
+  <div style="padding:1rem 1.25rem;border-bottom:1px solid #f0ece8;font-weight:700">Add Packaging Item</div>
+  <div class="card-body">
+    <form method="post" novalidate>
+      {% csrf_token %}
+      <input type="hidden" name="add_item" value="1">
+      {% for field in item_form %}
+      <div class="form-group" style="margin-bottom:1rem">
+        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+        {{ field }}
+        {% if field.help_text %}<div class="form-text" style="font-size:0.8rem">{{ field.help_text }}</div>{% endif %}
+        {% for err in field.errors %}<div style="color:#e74c3c;font-size:0.82rem">{{ err }}</div>{% endfor %}
+      </div>
+      {% endfor %}
+      {% if item_form.non_field_errors %}
+        {% for err in item_form.non_field_errors %}<div style="color:#e74c3c;font-size:0.82rem;margin-bottom:.5rem">{{ err }}</div>{% endfor %}
+      {% endif %}
+      <button type="submit" class="btn btn-primary">Add Item</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

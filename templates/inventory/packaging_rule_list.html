@@ -1,0 +1,80 @@
+{% extends "base_admin.html" %}
+{% block page_title %}Product Packaging Rules{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Product Packaging Rules</h1>
+    <p class="page-subtitle">Per-product, per-size, per-order-type packaging configuration</p>
+  </div>
+  <a href="{% url 'inventory:packaging_rule_create' %}" class="btn btn-primary">
+    <i data-lucide="plus" class="btn-icon" aria-hidden="true"></i>
+    Add Rule
+  </a>
+</div>
+
+{% if messages %}
+  {% for message in messages %}
+  <div class="alert alert-{{ message.tags }}" role="alert">{{ message }}</div>
+  {% endfor %}
+{% endif %}
+
+<div class="card" style="margin-bottom:1rem">
+  <form method="get" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;padding:1rem">
+    <select name="product" class="form-control" style="max-width:260px" aria-label="Filter by product">
+      <option value="">All Products</option>
+      {% for p in products %}
+      <option value="{{ p.pk }}" {% if product_filter == p.pk|stringformat:"s" %}selected{% endif %}>{{ p.name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-outline">Filter</button>
+    {% if product_filter %}<a href="{% url 'inventory:packaging_rule_list' %}" class="btn btn-outline">Clear</a>{% endif %}
+  </form>
+</div>
+
+<div class="card">
+  <div class="table-wrapper">
+    <table class="table" data-mobile-cards="true">
+      <thead>
+        <tr>
+          <th data-role="primary">Product</th>
+          <th>Size</th>
+          <th>Order Type</th>
+          <th>Packaging</th>
+          <th>Confirmed by</th>
+          <th data-role="actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for rule in rules %}
+        <tr>
+          <td style="font-weight:600">{{ rule.product.name }}</td>
+          <td>{{ rule.get_size_display }}</td>
+          <td>{{ rule.get_order_type_display }}</td>
+          <td>
+            {% if rule.no_packaging %}
+              <span style="color:#888;font-style:italic">No packaging</span>
+            {% elif rule.profile %}
+              {{ rule.profile.name }} (rev {{ rule.profile.revision }})
+              {% if rule.profile.status != 'approved' %}
+                <span class="badge badge-warning" style="margin-left:4px">{{ rule.profile.status }}</span>
+              {% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td style="font-size:0.85rem">{{ rule.confirmed_by.username|default:"—" }}</td>
+          <td><a href="{% url 'inventory:packaging_rule_edit' rule.pk %}" class="btn btn-sm btn-outline">Edit</a></td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="6" style="text-align:center;padding:48px 32px">
+            <div style="font-weight:600;margin-bottom:8px">No rules yet</div>
+            <div style="color:#aaa;font-size:0.9rem;margin-bottom:20px">Add packaging rules to configure which products use which packaging.</div>
+            <a href="{% url 'inventory:packaging_rule_create' %}" class="btn btn-primary">Add Rule</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -524,3 +524,358 @@ class PurchaseLineForm(forms.Form):
                 'or it has been deactivated.'
             )
         return uc
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Phase 4B-5 — Recipe and Packaging Configuration Forms
+# ══════════════════════════════════════════════════════════════════════════════
+
+from decimal import Decimal as _Decimal
+
+from .models import (
+    InventoryItem as _InventoryItem,
+    PackagingProfile as _PackagingProfile,
+    Recipe as _Recipe,
+    RecipeItem as _RecipeItem,
+    PackagingProfileItem as _PackagingProfileItem,
+    ProductPackagingRule as _ProductPackagingRule,
+)
+
+
+class RecipeForm(forms.ModelForm):
+    """Create or edit a draft Recipe header (no items)."""
+
+    class Meta:
+        model = _Recipe
+        fields = ['product', 'size', 'order_type_scope', 'revision']
+        widgets = {
+            'product':          forms.Select(attrs={'class': 'form-control'}),
+            'size':             forms.Select(attrs={'class': 'form-control'}),
+            'order_type_scope': forms.Select(attrs={'class': 'form-control'}),
+            'revision':         forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
+        }
+        labels = {
+            'product':          'Product',
+            'size':             'Size',
+            'order_type_scope': 'Order-Type Scope',
+            'revision':         'Revision Number',
+        }
+        help_texts = {
+            'size': 'The product size this recipe covers.',
+            'order_type_scope': (
+                '"All" applies to both dine-in and takeout. '
+                'Use "Dine-in only" or "Takeout only" when ingredient '
+                'quantities differ by order type.'
+            ),
+            'revision': (
+                'Monotonically increasing per (product, size, scope). '
+                'Revision numbers cannot be reused.'
+            ),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Product selector: only active, ingredient-tracked or legacy products.
+        # (Any product may have a recipe prepared before cutover.)
+        from apps.menu.models import Product
+        self.fields['product'].queryset = (
+            Product.objects.filter(is_active=True).order_by('name')
+        )
+
+    def clean(self):
+        cleaned = super().clean()
+        product = cleaned.get('product')
+        size    = cleaned.get('size')
+        scope   = cleaned.get('order_type_scope')
+        revision = cleaned.get('revision')
+
+        if product and size and scope and revision:
+            # Reject duplicate (product, size, scope, revision).
+            qs = _Recipe.objects.filter(
+                product=product, size=size,
+                order_type_scope=scope, revision=revision,
+            )
+            if self.instance and self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise forms.ValidationError(
+                    f'Revision {revision} already exists for this product/'
+                    f'size/scope combination. Choose a higher revision number.'
+                )
+        return cleaned
+
+
+class RecipeApprovalForm(forms.Form):
+    """Collect the approval note before approving a Recipe."""
+
+    approval_note = forms.CharField(
+        label='Approval Note',
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 3,
+            'placeholder': 'How and when did the client confirm this recipe? (required)',
+            'autofocus': True,
+        }),
+        help_text=(
+            'Record how and when the client confirmed this recipe is correct. '
+            'This note is immutable once the recipe is approved.'
+        ),
+    )
+
+    def clean_approval_note(self):
+        note = self.cleaned_data.get('approval_note', '').strip()
+        if not note:
+            raise forms.ValidationError('An approval note is required.')
+        return note
+
+
+class RecipeItemForm(forms.ModelForm):
+    """Add or edit a single RecipeItem line on a draft Recipe."""
+
+    class Meta:
+        model = _RecipeItem
+        fields = ['inventory_item', 'quantity']
+        widgets = {
+            'inventory_item': forms.Select(attrs={'class': 'form-control'}),
+            'quantity':       forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.001',
+                'min': '0.001',
+                'placeholder': '0.000',
+            }),
+        }
+        labels = {
+            'inventory_item': 'Ingredient',
+            'quantity':       'Quantity (per unit, in base unit)',
+        }
+        help_texts = {
+            'inventory_item': 'Only active ingredients are shown.',
+            'quantity':       'How much of this ingredient is consumed per one product unit.',
+        }
+
+    def __init__(self, *args, recipe=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._recipe = recipe
+        # Only show active ingredient-type items.
+        self.fields['inventory_item'].queryset = (
+            _InventoryItem.objects
+            .filter(item_type=_InventoryItem.ITEM_TYPE_INGREDIENT, is_active=True)
+            .order_by('name')
+        )
+
+    def clean_quantity(self):
+        qty = self.cleaned_data.get('quantity')
+        if qty is not None and qty <= _Decimal('0'):
+            raise forms.ValidationError('Quantity must be greater than zero.')
+        return qty
+
+    def clean(self):
+        cleaned = super().clean()
+        inv_item = cleaned.get('inventory_item')
+        if inv_item and inv_item.item_type != _InventoryItem.ITEM_TYPE_INGREDIENT:
+            raise forms.ValidationError(
+                f'"{inv_item.name}" is a packaging item, not an ingredient. '
+                'Only ingredient-type items may appear in a recipe.'
+            )
+        # Duplicate ingredient check.
+        if self._recipe and inv_item:
+            qs = _RecipeItem.objects.filter(recipe=self._recipe, inventory_item=inv_item)
+            if self.instance and self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise forms.ValidationError(
+                    f'"{inv_item.name}" already has a line in this recipe. '
+                    'Edit the existing line to change the quantity.'
+                )
+        return cleaned
+
+
+class PackagingProfileForm(forms.ModelForm):
+    """Create or edit a draft PackagingProfile header (no items)."""
+
+    class Meta:
+        model = _PackagingProfile
+        fields = ['name', 'revision']
+        widgets = {
+            'name':     forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'e.g. Medium Takeout Cup Set',
+                'autofocus': True,
+            }),
+            'revision': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
+        }
+        labels = {
+            'name':     'Profile Name',
+            'revision': 'Revision Number',
+        }
+        help_texts = {
+            'name':     'Human-readable name for this packaging combination. Case-insensitive for the approved-unique check.',
+            'revision': 'Revision numbers are never reused for the same profile name.',
+        }
+
+    def clean(self):
+        cleaned = super().clean()
+        name     = cleaned.get('name', '').strip()
+        revision = cleaned.get('revision')
+        if name and revision:
+            qs = _PackagingProfile.objects.filter(name__iexact=name, revision=revision)
+            if self.instance and self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise forms.ValidationError(
+                    f'Revision {revision} already exists for a profile with '
+                    'this name. Choose a higher revision number.'
+                )
+        return cleaned
+
+
+class PackagingProfileApprovalForm(forms.Form):
+    """Collect the approval note before approving a PackagingProfile."""
+
+    approval_note = forms.CharField(
+        label='Approval Note',
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 3,
+            'placeholder': 'How and when did the client confirm this packaging configuration? (required)',
+            'autofocus': True,
+        }),
+        help_text=(
+            'Record how and when the client confirmed this packaging profile. '
+            'This note is immutable once approved.'
+        ),
+    )
+
+    def clean_approval_note(self):
+        note = self.cleaned_data.get('approval_note', '').strip()
+        if not note:
+            raise forms.ValidationError('An approval note is required.')
+        return note
+
+
+class PackagingProfileItemForm(forms.ModelForm):
+    """Add or edit a single PackagingProfileItem line on a draft profile."""
+
+    class Meta:
+        model = _PackagingProfileItem
+        fields = ['inventory_item', 'quantity']
+        widgets = {
+            'inventory_item': forms.Select(attrs={'class': 'form-control'}),
+            'quantity':       forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.001',
+                'min': '0.001',
+                'placeholder': '0.000',
+            }),
+        }
+        labels = {
+            'inventory_item': 'Packaging Material',
+            'quantity':       'Quantity (per unit, in base unit)',
+        }
+        help_texts = {
+            'inventory_item': 'Only active packaging items are shown.',
+            'quantity':       'How many of this packaging item are used per one product unit.',
+        }
+
+    def __init__(self, *args, profile=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._profile = profile
+        self.fields['inventory_item'].queryset = (
+            _InventoryItem.objects
+            .filter(item_type=_InventoryItem.ITEM_TYPE_PACKAGING, is_active=True)
+            .order_by('name')
+        )
+
+    def clean_quantity(self):
+        qty = self.cleaned_data.get('quantity')
+        if qty is not None and qty <= _Decimal('0'):
+            raise forms.ValidationError('Quantity must be greater than zero.')
+        return qty
+
+    def clean(self):
+        cleaned = super().clean()
+        inv_item = cleaned.get('inventory_item')
+        if inv_item and inv_item.item_type != _InventoryItem.ITEM_TYPE_PACKAGING:
+            raise forms.ValidationError(
+                f'"{inv_item.name}" is an ingredient, not a packaging item. '
+                'Only packaging-type items may appear in a packaging profile.'
+            )
+        if self._profile and inv_item:
+            qs = _PackagingProfileItem.objects.filter(
+                profile=self._profile, inventory_item=inv_item,
+            )
+            if self.instance and self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise forms.ValidationError(
+                    f'"{inv_item.name}" already has a line in this profile. '
+                    'Edit the existing line to change the quantity.'
+                )
+        return cleaned
+
+
+class ProductPackagingRuleForm(forms.Form):
+    """Create or update a ProductPackagingRule."""
+
+    product_id = forms.IntegerField(widget=forms.HiddenInput())
+
+    size = forms.ChoiceField(
+        label='Size',
+        choices=_ProductPackagingRule.SIZE_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-control'}),
+    )
+
+    order_type = forms.ChoiceField(
+        label='Order Type',
+        choices=_ProductPackagingRule.ORDER_TYPE_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-control'}),
+    )
+
+    no_packaging = forms.BooleanField(
+        label='No packaging required',
+        required=False,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        help_text=(
+            'Check this if no packaging is used for this combination. '
+            'Must not be checked if a profile is selected.'
+        ),
+    )
+
+    profile_id = forms.IntegerField(
+        label='Packaging Profile',
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-control'}),
+        help_text='Select an approved packaging profile, or check "No packaging" above.',
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Only show approved profiles in the dropdown.
+        approved = (
+            _PackagingProfile.objects
+            .filter(status=_PackagingProfile.STATUS_APPROVED)
+            .order_by('name', '-revision')
+        )
+        # Build choices manually; empty option first.
+        choices = [('', '— Select an approved profile —')]
+        for p in approved:
+            choices.append((p.pk, f'{p.name} (rev {p.revision})'))
+        self.fields['profile_id'].widget = forms.Select(
+            attrs={'class': 'form-control'},
+            choices=choices,
+        )
+
+    def clean(self):
+        cleaned = super().clean()
+        no_packaging = cleaned.get('no_packaging', False)
+        profile_id   = cleaned.get('profile_id')
+
+        if no_packaging and profile_id:
+            raise forms.ValidationError(
+                'Cannot set both a profile and "No packaging". Choose one.'
+            )
+        if not no_packaging and not profile_id:
+            raise forms.ValidationError(
+                'Either select an approved profile or check "No packaging required".'
+            )
+        return cleaned

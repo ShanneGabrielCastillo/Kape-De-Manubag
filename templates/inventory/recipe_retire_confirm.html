@@ -1,0 +1,34 @@
+{% extends "base_admin.html" %}
+{% block page_title %}Retire Recipe{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Retire Recipe</h1>
+    <p class="page-subtitle">{{ recipe.product.name }} — {{ recipe.get_size_display }} / {{ recipe.get_order_type_scope_display }} — Rev {{ recipe.revision }}</p>
+  </div>
+  <a href="{% url 'inventory:recipe_detail' recipe.pk %}" class="btn btn-outline">
+    <i data-lucide="arrow-left" class="btn-icon" aria-hidden="true"></i>
+    Back
+  </a>
+</div>
+
+{% if messages %}
+  {% for message in messages %}
+  <div class="alert alert-{{ message.tags }}" role="alert">{{ message }}</div>
+  {% endfor %}
+{% endif %}
+
+<div class="card" style="max-width:480px">
+  <div class="card-body">
+    <p style="margin-bottom:1.5rem">Are you sure you want to retire this approved recipe? Retired recipes are no longer used for order placement. This cannot be undone.</p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      <div style="display:flex;gap:.5rem">
+        <button type="submit" class="btn" style="background:#e74c3c;color:#fff;border-color:#e74c3c">Yes, retire</button>
+        <a href="{% url 'inventory:recipe_detail' recipe.pk %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

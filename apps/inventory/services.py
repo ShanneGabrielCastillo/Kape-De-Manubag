@@ -1380,3 +1380,460 @@ def _units_for_order_type(product_id, size, order_type):
         configuration_complete=True,
         reason='',
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Phase 4B-5 — Recipe and Packaging Configuration Services
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Implements the configuration-writing services for Rev 3 §D.4, §D.5, §D.6
+# and §H.9 (configuration concurrency protocol).
+#
+# All services follow the global lock order:
+#   Order → Product (ascending) → PackagingProfile (ascending) → InventoryItem (ascending)
+#
+# Services here handle only the write side.  read_plan() remains read-only.
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+# ── Configuration-writing domain exceptions ───────────────────────────────────
+
+class RecipeConfigError(InventoryServiceError):
+    """Raised by recipe configuration service operations."""
+
+
+class PackagingConfigError(InventoryServiceError):
+    """Raised by packaging configuration service operations."""
+
+
+# ── Recipe services ───────────────────────────────────────────────────────────
+
+def approve_recipe(recipe_id, approved_by, approval_note):
+    """
+    Approve a draft Recipe, retiring the previous approved revision if one exists.
+
+    Rev 3 §H.9 lock order: Product → referenced InventoryItems (ascending pk).
+
+    Rev 3 §H.9 explicitly states that Recipe and RecipeItem rows are NOT locked
+    by configuration writers.  The Product row is the configuration lock.
+    Recipe rows are read without FOR UPDATE; the Product lock serialises all
+    concurrent configuration writers for that product, and the partial unique
+    index recipe_one_approved_per_scope is the DB-level backstop.
+
+    Validation (all performed after acquiring the Product lock):
+      - Recipe must be a draft (ordinary read — not locked).
+      - No mixed approved scopes for the same (product, size): Rev 3 §D.4
+        "For one (product, size) the approved set is either {all} or
+        {dine_in, takeout}, never both."
+      - Recipe must have at least one RecipeItem.
+      - All RecipeItems must reference active ingredients.
+      - Retire the previous approved revision for the same scope in the same
+        transaction.
+
+    Parameters
+    ----------
+    recipe_id : int
+    approved_by : CustomUser
+    approval_note : str   Rev 3: required confirmation note [C]
+
+    Returns
+    -------
+    Recipe  The newly approved recipe.
+
+    Raises
+    ------
+    RecipeConfigError
+    """
+    from apps.inventory.models import Recipe, RecipeItem
+    from apps.menu.models import Product
+    from django.utils import timezone
+
+    if not approval_note or not approval_note.strip():
+        raise RecipeConfigError(
+            'An approval note is required to confirm the client approved this recipe.'
+        )
+
+    with transaction.atomic():
+        # Read the Recipe WITHOUT select_for_update — Rev 3 §H.9: Recipe rows
+        # are not locked.  The Product lock (acquired next) serialises writers.
+        recipe = Recipe.objects.select_related('product').get(pk=recipe_id)
+
+        if recipe.status != Recipe.STATUS_DRAFT:
+            raise RecipeConfigError(
+                f'Only draft recipes can be approved. '
+                f'This recipe has status="{recipe.status}".'
+            )
+
+        # ── Level 2: Lock the Product row (Rev 3 §H.9) ───────────────────────
+        # This is the configuration lock.  Every other configuration writer for
+        # this product must also acquire it first, so no two writers can
+        # interleave.  Placement already holds it before resolving the plan.
+        product = Product.objects.select_for_update().get(pk=recipe.product_id)
+
+        # ── Post-lock TOCTOU guard ─────────────────────────────────────────────
+        # The initial status check ran before the Product lock was acquired.
+        # Under PostgreSQL READ COMMITTED, another transaction may have approved
+        # or retired this recipe between that read and the moment we acquired
+        # the lock.  Refresh the recipe status from the DB now that the lock
+        # serialises all concurrent writers for this product.
+        # No select_for_update() on the Recipe row — Rev 3 §H.9 says Recipe
+        # rows are not locked; the Product lock is sufficient.
+        recipe.refresh_from_db(fields=['status'])
+        if recipe.status != Recipe.STATUS_DRAFT:
+            raise RecipeConfigError(
+                f'Recipe status changed while waiting for the configuration lock: '
+                f'expected "draft", found "{recipe.status}". '
+                'Another request may have already approved or retired this recipe.'
+            )
+        # For one (product, size), the approved set must be either {all} or
+        # {dine_in, takeout}, never both.  Check for conflicting complementary
+        # scopes while holding the Product lock.
+        scope = recipe.order_type_scope
+        if scope == Recipe.SCOPE_ALL:
+            # Cannot have an 'all' recipe if a specific-scope recipe is approved.
+            conflict_scopes = [Recipe.SCOPE_DINE_IN, Recipe.SCOPE_TAKEOUT]
+        else:
+            # Cannot have a specific-scope recipe if an 'all' recipe is approved.
+            conflict_scopes = [Recipe.SCOPE_ALL]
+
+        conflicting = Recipe.objects.filter(
+            product=product,
+            size=recipe.size,
+            order_type_scope__in=conflict_scopes,
+            status=Recipe.STATUS_APPROVED,
+        ).first()
+        if conflicting:
+            raise RecipeConfigError(
+                f'Cannot approve this recipe (scope="{scope}"): '
+                f'an approved recipe with scope="{conflicting.order_type_scope}" '
+                f'already exists for the same product and size. '
+                f'Rev 3 §D.4: the approved set for one (product, size) must be '
+                f'either {{all}} or {{dine_in, takeout}}, never both.'
+            )
+
+        # ── Collect RecipeItems (ordinary read, no lock) ──────────────────────
+        items_qs = list(
+            RecipeItem.objects
+            .filter(recipe=recipe)
+            .select_related('inventory_item')
+        )
+        if not items_qs:
+            raise RecipeConfigError(
+                'A recipe must have at least one ingredient line before it can be approved.'
+            )
+
+        # ── Level 3: Lock referenced InventoryItems in ascending pk order ─────
+        # Rev 3 §H.9: "Verifies items are active ingredients under the lock;
+        # a concurrent approval holds the item lock until it commits."
+        item_pks = sorted(ri.inventory_item_id for ri in items_qs)
+        locked_items = {
+            item.pk: item
+            for item in InventoryItem.objects
+            .select_for_update()
+            .filter(pk__in=item_pks)
+            .order_by('pk')
+        }
+
+        # Validate under lock: every item must be active and of type ingredient.
+        for ri in items_qs:
+            inv_item = locked_items[ri.inventory_item_id]
+            if not inv_item.is_active:
+                raise RecipeConfigError(
+                    f'Ingredient "{inv_item.name}" is inactive. '
+                    'Reactivate it or remove it from the recipe before approving.'
+                )
+            if inv_item.item_type != InventoryItem.ITEM_TYPE_INGREDIENT:
+                raise RecipeConfigError(
+                    f'"{inv_item.name}" is a packaging item, not an ingredient. '
+                    'Recipe lines must reference ingredients only.'
+                )
+
+        # ── Retire the existing approved revision for this scope (ordinary read)
+        # The Product lock guarantees no concurrent writer can change this row's
+        # status while we hold the Product lock.  No FOR UPDATE needed here.
+        existing_approved = Recipe.objects.filter(
+            product=product,
+            size=recipe.size,
+            order_type_scope=recipe.order_type_scope,
+            status=Recipe.STATUS_APPROVED,
+        ).first()
+
+        if existing_approved and existing_approved.pk != recipe.pk:
+            existing_approved.status = Recipe.STATUS_RETIRED
+            existing_approved.save(update_fields=['status', 'updated_at'])
+
+        # ── Approve ───────────────────────────────────────────────────────────
+        recipe.status        = Recipe.STATUS_APPROVED
+        recipe.approved_by   = approved_by
+        recipe.approved_at   = timezone.now()
+        recipe.approval_note = approval_note.strip()
+        recipe.save(update_fields=['status', 'approved_by', 'approved_at', 'approval_note', 'updated_at'])
+
+    return recipe
+
+
+def retire_recipe(recipe_id):
+    """
+    Retire an approved Recipe.
+
+    Rev 3 §H.9 lock order: Product.
+    Rev 3 §H.9 explicitly states that Recipe rows are NOT locked.  The Product
+    row is the configuration lock; acquiring it serialises concurrent writers.
+
+    Refuses standalone retirement if the product is in ingredient mode and no
+    replacement approved recipe exists for the same (product, size, scope).
+    For legacy-mode products, retirement is always safe.
+
+    Returns the retired Recipe.
+    """
+    from apps.inventory.models import Recipe
+    from apps.menu.models import Product
+
+    with transaction.atomic():
+        # Read the Recipe WITHOUT select_for_update — Rev 3 §H.9: Recipe rows
+        # are not locked.  The Product lock (acquired next) serialises writers.
+        recipe = Recipe.objects.get(pk=recipe_id)
+
+        if recipe.status == Recipe.STATUS_RETIRED:
+            raise RecipeConfigError('This recipe is already retired.')
+        if recipe.status == Recipe.STATUS_DRAFT:
+            raise RecipeConfigError(
+                'Draft recipes are not retired — delete them instead.'
+            )
+
+        # ── Level 2: Lock the Product row (Rev 3 §H.9) ───────────────────────
+        product = Product.objects.select_for_update().get(pk=recipe.product_id)
+
+        # ── Post-lock TOCTOU guard ─────────────────────────────────────────────
+        # Another transaction may have changed the recipe's status between the
+        # initial pre-lock read and the moment this transaction acquired the
+        # Product lock.  Refresh from DB now that the lock is held.
+        # No select_for_update() on Recipe — Rev 3 §H.9: Recipe rows not locked.
+        recipe.refresh_from_db(fields=['status'])
+        if recipe.status == Recipe.STATUS_RETIRED:
+            raise RecipeConfigError('This recipe is already retired.')
+        if recipe.status == Recipe.STATUS_DRAFT:
+            raise RecipeConfigError(
+                'Draft recipes are not retired — delete them instead.'
+            )
+        if recipe.status != Recipe.STATUS_APPROVED:
+            raise RecipeConfigError(
+                f'Recipe status changed while waiting for the configuration lock: '
+                f'found "{recipe.status}". Cannot retire.'
+            )
+
+        # Rev 3 §H.9: "Retire recipe | Product | Refused for an ingredient-mode
+        # product unless a replacement is approved in the same transaction."
+        if product.inventory_tracking_mode == Product.INVENTORY_TRACKING_INGREDIENT:
+            replacement = Recipe.objects.filter(
+                product=product,
+                size=recipe.size,
+                order_type_scope=recipe.order_type_scope,
+                status=Recipe.STATUS_APPROVED,
+            ).exclude(pk=recipe.pk).exists()
+            if not replacement:
+                raise RecipeConfigError(
+                    'Cannot retire the only approved recipe for an ingredient-tracked product '
+                    'without a replacement. Approve a new revision first.'
+                )
+
+        recipe.status = Recipe.STATUS_RETIRED
+        recipe.save(update_fields=['status', 'updated_at'])
+
+    return recipe
+
+
+# ── Packaging profile services ────────────────────────────────────────────────
+
+def approve_packaging_profile(profile_id, approved_by, approval_note):
+    """
+    Approve a draft PackagingProfile.
+
+    Rev 3 §H.9: lock PackagingProfile (new row only — no Product lock because
+    approving a profile changes no resolution until rules are repointed).
+
+    Validation:
+      - Profile must be draft.
+      - Profile must have at least one PackagingProfileItem.
+      - All items must be active packaging items.
+
+    Returns the approved profile.
+    """
+    from apps.inventory.models import PackagingProfile, PackagingProfileItem
+    from django.utils import timezone
+
+    if not approval_note or not approval_note.strip():
+        raise PackagingConfigError(
+            'An approval note is required to confirm the client approved this packaging profile.'
+        )
+
+    with transaction.atomic():
+        profile = PackagingProfile.objects.select_for_update().get(pk=profile_id)
+
+        if profile.status != PackagingProfile.STATUS_DRAFT:
+            raise PackagingConfigError(
+                f'Only draft profiles can be approved. '
+                f'This profile has status="{profile.status}".'
+            )
+
+        items_qs = list(
+            PackagingProfileItem.objects
+            .filter(profile=profile)
+            .select_related('inventory_item')
+        )
+        if not items_qs:
+            raise PackagingConfigError(
+                'A packaging profile must have at least one item line before it can be approved.'
+            )
+
+        # Lock the referenced InventoryItems in ascending pk order.
+        item_pks = sorted(ppi.inventory_item_id for ppi in items_qs)
+        locked_items = {
+            item.pk: item
+            for item in InventoryItem.objects.select_for_update()
+            .filter(pk__in=item_pks).order_by('pk')
+        }
+
+        for ppi in items_qs:
+            inv_item = locked_items[ppi.inventory_item_id]
+            if not inv_item.is_active:
+                raise PackagingConfigError(
+                    f'Packaging item "{inv_item.name}" is inactive. '
+                    'Reactivate it or remove it before approving the profile.'
+                )
+            if inv_item.item_type != InventoryItem.ITEM_TYPE_PACKAGING:
+                raise PackagingConfigError(
+                    f'"{inv_item.name}" is an ingredient, not a packaging item. '
+                    'Packaging profile lines must reference packaging items only.'
+                )
+
+        profile.status       = PackagingProfile.STATUS_APPROVED
+        profile.approved_by  = approved_by
+        profile.approved_at  = timezone.now()
+        profile.approval_note = approval_note.strip()
+        profile.save(update_fields=['status', 'approved_by', 'approved_at', 'approval_note', 'updated_at'])
+
+    return profile
+
+
+def retire_packaging_profile(profile_id):
+    """
+    Retire an approved PackagingProfile.
+
+    Rev 3 §H.9: lock PackagingProfile.  Refused while any ProductPackagingRule
+    references it (counted under the lock).
+
+    Returns the retired profile.
+    """
+    from apps.inventory.models import PackagingProfile, ProductPackagingRule
+
+    with transaction.atomic():
+        profile = PackagingProfile.objects.select_for_update().get(pk=profile_id)
+
+        if profile.status == PackagingProfile.STATUS_RETIRED:
+            raise PackagingConfigError('This profile is already retired.')
+        if profile.status == PackagingProfile.STATUS_DRAFT:
+            raise PackagingConfigError(
+                'Draft profiles are not retired — delete them instead.'
+            )
+
+        # Check under the lock that no rule still references this profile.
+        rule_count = ProductPackagingRule.objects.filter(profile=profile).count()
+        if rule_count:
+            raise PackagingConfigError(
+                f'Cannot retire this profile: {rule_count} product packaging '
+                f'rule(s) still reference it. Repoint those rules first.'
+            )
+
+        profile.status = PackagingProfile.STATUS_RETIRED
+        profile.save(update_fields=['status', 'updated_at'])
+
+    return profile
+
+
+def save_packaging_rule(product_id, size, order_type,
+                        profile_id=None, no_packaging=False,
+                        confirmed_by=None, existing_rule_id=None):
+    """
+    Create or update a ProductPackagingRule.
+
+    Rev 3 §H.9: lock Product → lock target PackagingProfile (ascending).
+    Re-reads the profile's status under its lock; rejects a non-approved profile.
+
+    Parameters
+    ----------
+    product_id : int
+    size : str
+    order_type : str   'dine_in' or 'takeout'
+    profile_id : int or None   None when no_packaging=True
+    no_packaging : bool
+    confirmed_by : CustomUser
+    existing_rule_id : int or None   If updating an existing rule.
+
+    Returns
+    -------
+    ProductPackagingRule
+
+    Raises
+    ------
+    PackagingConfigError
+    """
+    from apps.inventory.models import PackagingProfile, ProductPackagingRule
+    from apps.menu.models import Product
+    from django.utils import timezone
+
+    # Validate the XOR invariant before touching the DB.
+    if no_packaging and profile_id is not None:
+        raise PackagingConfigError(
+            'A packaging rule cannot have both a profile and no_packaging=True.'
+        )
+    if not no_packaging and profile_id is None:
+        raise PackagingConfigError(
+            'A packaging rule must either reference an approved profile or '
+            'explicitly declare no_packaging=True.'
+        )
+
+    with transaction.atomic():
+        # Lock Product (level 2).
+        product = Product.objects.select_for_update().get(pk=product_id)
+
+        # Lock PackagingProfile (level 3 in the config sub-hierarchy).
+        profile = None
+        if profile_id is not None:
+            profile = PackagingProfile.objects.select_for_update().get(pk=profile_id)
+            if profile.status != PackagingProfile.STATUS_APPROVED:
+                raise PackagingConfigError(
+                    f'The packaging profile "{profile.name}" is not approved '
+                    f'(status="{profile.status}"). Only approved profiles may be '
+                    'referenced by a packaging rule.'
+                )
+
+        now = timezone.now()
+        if existing_rule_id is not None:
+            rule = ProductPackagingRule.objects.select_for_update().get(
+                pk=existing_rule_id, product=product,
+            )
+            rule.size         = size
+            rule.order_type   = order_type
+            rule.profile      = profile
+            rule.no_packaging = no_packaging
+            rule.updated_by   = confirmed_by
+            rule.updated_at   = now
+            rule.save(update_fields=[
+                'size', 'order_type', 'profile', 'no_packaging',
+                'updated_by', 'updated_at',
+            ])
+        else:
+            rule = ProductPackagingRule.objects.create(
+                product=product,
+                size=size,
+                order_type=order_type,
+                profile=profile,
+                no_packaging=no_packaging,
+                confirmed_by=confirmed_by,
+                confirmed_at=now,
+                updated_by=confirmed_by,
+                updated_at=now,
+            )
+
+    return rule
