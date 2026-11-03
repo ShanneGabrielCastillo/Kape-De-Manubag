@@ -727,3 +727,656 @@ def record_purchase(
             )
 
     return purchase
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Phase 4B-3 — resolve_plan() Service
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Implements Rev 3 §I.2: the read-only resolver that converts a
+# (product, size, order_type) request into a ResolvedPlan containing
+# every ingredient and packaging component needed for one unit.
+#
+# This module is deliberately read-only.  resolve_plan() acquires no locks,
+# writes nothing to the database, and changes no stock quantities.
+# The caller (place_order_inventory, Phase 5B) holds the Product-row locks
+# before calling here, consistent with Rev 3 §H.2 and §H.9.
+# ══════════════════════════════════════════════════════════════════════════════
+
+import dataclasses
+
+
+# ── Configuration-error exception hierarchy ───────────────────────────────────
+#
+# Rev 3 has two names for configuration errors raised by resolve_plan:
+#   §I.2 pseudocode uses the four specific names below.
+#   §H.2 comment and §H.7 use "RecipeIncompleteError" as the umbrella.
+#   §H.7: "InsufficientStockError, RecipeIncompleteError, and
+#           DispositionRequired subclass ValueError"
+#
+# We reconcile this by making RecipeIncompleteError the shared base class
+# for all four, while each specific class adds its own context attributes.
+# The existing view-level `except ValueError` handlers catch all of them
+# because InventoryServiceError already subclasses ValueError.
+
+class RecipeIncompleteError(InventoryServiceError):
+    """
+    Base class for all configuration errors raised by resolve_plan().
+
+    Rev 3 §H.7: subclasses ValueError (via InventoryServiceError) so the
+    existing view-level except-ValueError handlers catch it without change.
+
+    All four specific resolve_plan exceptions subclass this one so that
+    place_order_inventory callers can either catch them all with one
+    `except RecipeIncompleteError` or handle each specifically.
+    """
+
+
+class RecipeMissingError(RecipeIncompleteError):
+    """
+    No approved recipe exists for the requested (product, size, order_type).
+
+    Rev 3 §I.2: "IF none: RAISE RecipeMissingError".
+
+    Raised when:
+    - No Recipe row at all for (product, size, scope IN ('all', order_type)).
+    - Only draft or retired recipes exist (neither counts as approved).
+    """
+    def __init__(self, product_id, size, order_type):
+        self.product_id = product_id
+        self.size       = size
+        self.order_type = order_type
+        super().__init__(
+            f'No approved recipe for product_id={product_id}, '
+            f'size={size!r}, order_type={order_type!r}. '
+            'A draft or retired recipe exists but only approved recipes '
+            'may be used for order placement.'
+        )
+
+
+class AmbiguousRecipeError(RecipeIncompleteError):
+    """
+    More than one approved recipe matches the request.
+
+    Rev 3 §I.2: "IF many: RAISE AmbiguousRecipeError".
+
+    This indicates a misconfigured state: an 'all'-scope recipe and a
+    scope-specific recipe are both approved for the same (product, size).
+    Rev 3 §D.4 requires "For one (product, size) the approved set is
+    either {all} or {dine_in, takeout}, never both." The DB partial unique
+    index prevents duplicates per scope, but it cannot prevent both 'all'
+    and 'dine_in' from being approved simultaneously — that is enforced
+    at approval time and caught here as a backstop.
+    """
+    def __init__(self, product_id, size, order_type, matching_ids):
+        self.product_id   = product_id
+        self.size         = size
+        self.order_type   = order_type
+        self.matching_ids = matching_ids
+        super().__init__(
+            f'Ambiguous recipe configuration for product_id={product_id}, '
+            f'size={size!r}, order_type={order_type!r}: '
+            f'{len(matching_ids)} approved recipes found '
+            f'(recipe ids: {matching_ids}). '
+            'Retire all but one approved recipe for this combination.'
+        )
+
+
+class PackagingRuleMissingError(RecipeIncompleteError):
+    """
+    No ProductPackagingRule exists for the requested (product, size, order_type).
+
+    Rev 3 §I.2: "IF rule IS NONE: RAISE PackagingRuleMissingError".
+    Silence is never treated as 'no packaging' — an explicit rule is required.
+    """
+    def __init__(self, product_id, size, order_type):
+        self.product_id = product_id
+        self.size       = size
+        self.order_type = order_type
+        super().__init__(
+            f'No packaging rule for product_id={product_id}, '
+            f'size={size!r}, order_type={order_type!r}. '
+            'Create a ProductPackagingRule with an approved profile or '
+            'explicitly set no_packaging=True.'
+        )
+
+
+class InactiveItemError(RecipeIncompleteError):
+    """
+    A referenced InventoryItem is inactive, or its item_type does not match
+    the expected type for its context.
+
+    Rev 3 §I.2: "REQUIRE every referenced item is active, recipe items are
+    ingredients, packaging items are packaging."
+    Rev 3 §I.3: "Orders fail loudly with InactiveItemError."
+
+    Raised in two situations:
+    1. item.is_active is False.
+    2. A RecipeItem references an item with item_type != 'ingredient'.
+    3. A PackagingProfileItem references an item with item_type != 'packaging'.
+
+    Also raised when the PackagingProfile referenced by a rule is not
+    'approved' (a rule must point at an approved profile; a retired or
+    draft profile fails validation here).
+    """
+    def __init__(self, message, item=None):
+        self.item = item
+        super().__init__(message)
+
+
+# ── ResolvedPlan data structures ──────────────────────────────────────────────
+
+#: Constants for ResolvedPlanComponent.component_source.
+#: These match the 'recipe' | 'packaging' vocabulary used in
+#: OrderIngredientReservationItem.component_source (Rev 3 §D.10).
+COMPONENT_SOURCE_RECIPE    = 'recipe'
+COMPONENT_SOURCE_PACKAGING = 'packaging'
+
+
+@dataclasses.dataclass(frozen=True)
+class ResolvedPlanComponent:
+    """
+    One ingredient or packaging requirement from a resolved plan.
+
+    Rev 3 §D.10 maps directly to OrderIngredientReservationItem fields:
+      inventory_item       → inventory_item FK
+      component_source     → component_source ('recipe' | 'packaging')
+      source_recipe_id     → source_recipe FK (null for packaging)
+      source_packaging_profile_id → source_packaging_profile FK (null for ingredients)
+      source_revision      → source_revision snapshot
+      quantity_per_unit    → quantity_per_unit snapshot (Decimal, base units)
+
+    Frozen so callers cannot mutate snapshot data after resolution.
+    """
+    inventory_item:               object    # InventoryItem instance
+    component_source:             str       # COMPONENT_SOURCE_RECIPE or COMPONENT_SOURCE_PACKAGING
+    source_recipe_id:             int | None
+    source_packaging_profile_id:  int | None
+    source_revision:              int
+    quantity_per_unit:            Decimal
+
+
+@dataclasses.dataclass(frozen=True)
+class ResolvedPlan:
+    """
+    The complete ingredient + packaging plan for one unit of a product at a
+    given size and order type.
+
+    Rev 3 §I.2: "RETURN plan(components = recipe items + packaging items,
+    with ids, revisions, quantities)".
+
+    Fields
+    ------
+    product_id : int
+        PK of the Product this plan was resolved for.
+    size : str
+        The size dimension (from Recipe.SIZE_CHOICES vocabulary).
+    order_type : str
+        'dine_in' or 'takeout'.
+    recipe : Recipe
+        The one approved Recipe that was selected.
+    packaging_rule : ProductPackagingRule
+        The rule that determined whether packaging is needed.
+    components : tuple[ResolvedPlanComponent, ...]
+        All ingredient components (source='recipe') followed by all
+        packaging components (source='packaging').
+        Empty packaging section when packaging_rule.no_packaging is True.
+
+    Usage by place_order_inventory (Phase 5B)
+    -----------------------------------------
+    For one order line of quantity Q:
+        required[comp.inventory_item.pk] += comp.quantity_per_unit * Q
+    """
+    product_id:      int
+    size:            str
+    order_type:      str
+    recipe:          object    # Recipe instance
+    packaging_rule:  object    # ProductPackagingRule instance
+    components:      tuple     # tuple[ResolvedPlanComponent, ...]
+
+
+# ── resolve_plan() ────────────────────────────────────────────────────────────
+
+def resolve_plan(product_id, size, order_type):
+    """
+    Resolve the complete ingredient and packaging plan for one unit of a
+    product at a given size and order type.
+
+    Rev 3 §I.2 FUNCTION resolve_plan(product, size, order_type).
+
+    This function is read-only.  It acquires no locks, writes nothing to the
+    database, and does not modify any stock quantity.  The caller is
+    responsible for holding the Product-row lock before calling here
+    (Rev 3 §H.9) so that the configuration read here cannot race with a
+    configuration write.
+
+    Resolution steps
+    ----------------
+    1. Find approved Recipe rows whose (product, size, scope) matches:
+           scope IN ('all', order_type)
+       Exactly one must exist; zero → RecipeMissingError, two+ → AmbiguousRecipeError.
+
+    2. Find the ProductPackagingRule for (product, size, order_type).
+       Missing → PackagingRuleMissingError.
+
+    3. If rule.no_packaging is True, packaging components are empty.
+       Otherwise, verify rule.profile.status == 'approved'.
+
+    4. Validate every referenced InventoryItem:
+       - must be active (is_active=True) → InactiveItemError if not
+       - RecipeItem items must have item_type='ingredient' → InactiveItemError
+       - PackagingProfileItem items must have item_type='packaging' → InactiveItemError
+
+    5. Return a ResolvedPlan with all components.
+
+    Parameters
+    ----------
+    product_id : int
+        PK of the menu.Product to resolve.
+    size : str
+        One of the SIZE_CHOICES values: 'none', 'small', 'medium', 'large', 'hot'.
+    order_type : str
+        Either 'dine_in' or 'takeout'.
+
+    Returns
+    -------
+    ResolvedPlan
+        Frozen dataclass with recipe, packaging_rule, and components list.
+
+    Raises
+    ------
+    RecipeMissingError
+        No approved recipe for (product, size, order_type).
+    AmbiguousRecipeError
+        More than one approved recipe matches (product, size, order_type).
+    PackagingRuleMissingError
+        No ProductPackagingRule for (product, size, order_type).
+    InactiveItemError
+        A referenced InventoryItem is inactive, wrong item_type, or the
+        referenced packaging profile is not 'approved'.
+    """
+    # Deferred imports — avoid circular import risk during startup and keep the
+    # top of services.py clean, consistent with the Phase 3 import pattern.
+    from apps.inventory.models import (
+        Recipe,
+        RecipeItem,
+        PackagingProfile,
+        PackagingProfileItem,
+        ProductPackagingRule,
+    )
+
+    # ── Step 1: recipe resolution ─────────────────────────────────────────────
+    # Rev 3 §I.2: "approved Recipes WHERE product, size, scope IN ('all', order_type)"
+    # select_related prefetches the recipe's items and their inventory_item in
+    # one trip so the validation loop (step 4) does not issue N+1 queries.
+    candidates = list(
+        Recipe.objects
+        .filter(
+            product_id=product_id,
+            size=size,
+            status=Recipe.STATUS_APPROVED,
+            order_type_scope__in=[Recipe.SCOPE_ALL, order_type],
+        )
+        .prefetch_related('items__inventory_item')
+        .order_by('id')
+    )
+
+    if len(candidates) == 0:
+        raise RecipeMissingError(product_id, size, order_type)
+
+    if len(candidates) > 1:
+        raise AmbiguousRecipeError(
+            product_id, size, order_type,
+            matching_ids=[r.pk for r in candidates],
+        )
+
+    recipe = candidates[0]
+
+    # ── Step 2: packaging rule lookup ─────────────────────────────────────────
+    # Rev 3 §D.6: ProductPackagingRule has no 'all' order_type; the lookup is
+    # always an exact match on (product, size, order_type).
+    # ppr_unique_combination guarantees at most one row; .get() is safe but we
+    # use filter/first to return None rather than DoesNotExist on a miss.
+    try:
+        rule = ProductPackagingRule.objects.get(
+            product_id=product_id,
+            size=size,
+            order_type=order_type,
+        )
+    except ProductPackagingRule.DoesNotExist:
+        raise PackagingRuleMissingError(product_id, size, order_type)
+
+    # ── Step 3: packaging profile validation ──────────────────────────────────
+    # Rev 3 §I.2: "REQUIRE rule.profile.status = 'approved'"
+    # (only checked when no_packaging is False — a profile must be set and live)
+    packaging_items = []   # list[PackagingProfileItem]
+
+    if not rule.no_packaging:
+        # profile is guaranteed non-null by ppr_profile_xor_none constraint
+        # when no_packaging is False, but we access .profile which is a FK —
+        # prefetch_related is not used on the rule, so access it directly.
+        profile = rule.profile
+        if profile.status != PackagingProfile.STATUS_APPROVED:
+            raise InactiveItemError(
+                f'Packaging profile {profile.pk!r} ({profile.name!r}) '
+                f'has status={profile.status!r} but must be "approved". '
+                'Repoint the rule to an approved profile.',
+                item=None,
+            )
+        packaging_items = list(
+            PackagingProfileItem.objects
+            .filter(profile=profile)
+            .select_related('inventory_item')
+            .order_by('id')
+        )
+
+    # ── Step 4: validate all referenced items ─────────────────────────────────
+    # Rev 3 §I.2: "REQUIRE every referenced item is active, recipe items are
+    # ingredients, packaging items are packaging."
+    # We validate here (before building components) so any error fires before
+    # the caller wastes time on downstream processing.
+
+    recipe_items = list(recipe.items.select_related('inventory_item').order_by('id'))
+
+    for ri in recipe_items:
+        item = ri.inventory_item
+        if not item.is_active:
+            raise InactiveItemError(
+                f'Ingredient "{item.name}" (id={item.pk}) referenced by '
+                f'recipe {recipe.pk} is inactive. '
+                'Reactivate the item or update the recipe.',
+                item=item,
+            )
+        if item.item_type != 'ingredient':
+            raise InactiveItemError(
+                f'Item "{item.name}" (id={item.pk}) in recipe {recipe.pk} '
+                f'has item_type={item.item_type!r} but must be "ingredient".',
+                item=item,
+            )
+
+    for ppi in packaging_items:
+        item = ppi.inventory_item
+        if not item.is_active:
+            raise InactiveItemError(
+                f'Packaging item "{item.name}" (id={item.pk}) referenced by '
+                f'profile {rule.profile_id} is inactive. '
+                'Reactivate the item or update the packaging profile.',
+                item=item,
+            )
+        if item.item_type != 'packaging':
+            raise InactiveItemError(
+                f'Item "{item.name}" (id={item.pk}) in packaging profile '
+                f'{rule.profile_id} has item_type={item.item_type!r} '
+                'but must be "packaging".',
+                item=item,
+            )
+
+    # ── Step 5: build the resolved components list ────────────────────────────
+    # Rev 3 §I.2: "RETURN plan(components = recipe items + packaging items,
+    #                           with ids, revisions, quantities)"
+    # Ingredient components come first, then packaging components.
+
+    components = []
+
+    for ri in recipe_items:
+        components.append(
+            ResolvedPlanComponent(
+                inventory_item=ri.inventory_item,
+                component_source=COMPONENT_SOURCE_RECIPE,
+                source_recipe_id=recipe.pk,
+                source_packaging_profile_id=None,
+                source_revision=recipe.revision,
+                quantity_per_unit=ri.quantity,
+            )
+        )
+
+    for ppi in packaging_items:
+        components.append(
+            ResolvedPlanComponent(
+                inventory_item=ppi.inventory_item,
+                component_source=COMPONENT_SOURCE_PACKAGING,
+                source_recipe_id=None,
+                source_packaging_profile_id=rule.profile_id,
+                source_revision=rule.profile.revision,
+                quantity_per_unit=ppi.quantity,
+            )
+        )
+
+    return ResolvedPlan(
+        product_id=product_id,
+        size=size,
+        order_type=order_type,
+        recipe=recipe,
+        packaging_rule=rule,
+        components=tuple(components),
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Phase 4B-4 — get_available_units() Service
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Implements Rev 3 §C.2 and §E.3b: the read-only availability function that
+# answers "how many units of this product can still be sold right now?"
+#
+# For legacy products: returns Product.stock_quantity (unchanged behaviour).
+# For ingredient-tracked products: resolves the approved plan and returns the
+# minimum of floor(available / quantity_per_unit) over all components.
+#
+# This function is read-only.  It acquires no locks, writes nothing to the
+# database, and changes no stock quantities.  It is a pure informational
+# check that call sites (cart, checkout, POS, dashboard — Phase 5B) use
+# to gate or cap the quantity a customer may order.
+# ══════════════════════════════════════════════════════════════════════════════
+
+import math
+import typing
+
+
+# ── Return structure ──────────────────────────────────────────────────────────
+
+class AvailabilityResult(typing.NamedTuple):
+    """
+    Return value of get_available_units().
+
+    Rev 3 §E.3b: "If no complete approved plan exists it returns 0 with a
+    reason, so the product is not sellable rather than silently under-deducted."
+
+    Fields
+    ------
+    units : int
+        How many product units can be sold right now (>= 0).
+        0 means either genuinely out of stock or configuration is incomplete.
+    configuration_complete : bool
+        True  — units reflects actual stock availability.
+        False — plan resolution failed; units is 0 because the configuration
+                is broken, not necessarily because stock is exhausted.
+                Rev 3 §E.3b: "show a configuration warning for ingredient
+                products lacking an approved plan" (Phase 5B POS / dashboard).
+    reason : str
+        Human-readable explanation.  Empty string when everything is fine.
+    """
+    units:                  int
+    configuration_complete: bool
+    reason:                 str
+
+
+# ── Availability function ─────────────────────────────────────────────────────
+
+def get_available_units(product, size, order_type=None):
+    """
+    Return how many units of a product at a given size can be sold right now.
+
+    Rev 3 §C.2 and §E.3b.
+
+    This function is read-only.  It acquires no locks and writes nothing to
+    the database.  The result is a best-effort estimate: it can be stale by
+    the time an order is placed, and the authoritative check is always the
+    reservation at placement (Rev 3 §E.3b).  A 1-unit stale over-estimate
+    results in a clear InsufficientStockError at placement; it never silently
+    under-deducts (Rev 3 §T9).
+
+    Routing by tracking mode (Rev 3 §C.2)
+    ──────────────────────────────────────
+    Legacy product (inventory_tracking_mode='legacy'):
+        Returns product.stock_quantity directly.  size and order_type are
+        irrelevant: legacy stock is not split by size or order type.
+
+    Ingredient-tracked product (inventory_tracking_mode='ingredient'):
+        Calls resolve_plan() to obtain the complete approved plan, then
+        returns min(floor(available / quantity_per_unit)) over all components.
+        Both ingredient and packaging components count.
+
+        If resolve_plan() raises RecipeIncompleteError (any subclass —
+        RecipeMissingError, AmbiguousRecipeError, PackagingRuleMissingError,
+        InactiveItemError), returns 0 with configuration_complete=False so
+        the caller can show an admin warning instead of a stock-out message.
+
+    Optional order_type (Rev 3 §E.3b)
+    ────────────────────────────────────
+    When order_type is None (cart stage, order type not yet known):
+        "Use the most restrictive applicable order type."
+        Both 'dine_in' and 'takeout' are applicable at the cart stage (the
+        customer has not declared a preference yet).  Rev 3 §E.3b also states:
+        "If no complete approved plan exists it returns 0 with a reason, so
+        the product is not sellable rather than silently under-deducted."
+        A broken plan for either order type means the product cannot safely
+        be sold through that channel; a cart item could become that channel.
+        Therefore both results are computed and the minimum is returned.  An
+        incomplete result has units=0, so it is always the minimum when
+        configuration is broken — the product is unsellable.
+        configuration_complete=True only when BOTH order types have complete
+        plans; if either is broken the result carries complete=False so the
+        POS/dashboard can show the configuration warning.
+
+    Parameters
+    ----------
+    product : menu.Product
+        The product instance to check.
+    size : str
+        One of 'none', 'small', 'medium', 'large', 'hot'.
+    order_type : str or None
+        'dine_in', 'takeout', or None (most-restrictive check).
+
+    Returns
+    -------
+    AvailabilityResult
+        NamedTuple(units: int, configuration_complete: bool, reason: str).
+    """
+    # Deferred import — avoids circular import risk (same pattern as
+    # resolve_plan); Product is from the menu app.
+    from apps.menu.models import Product
+
+    # ── Legacy product — return stock_quantity directly ───────────────────────
+    # Rev 3 §C.2: "Returns stock_quantity" for legacy lines.
+    if product.inventory_tracking_mode != Product.INVENTORY_TRACKING_INGREDIENT:
+        return AvailabilityResult(
+            units=int(product.stock_quantity),
+            configuration_complete=True,
+            reason='',
+        )
+
+    # ── Ingredient-tracked product ────────────────────────────────────────────
+    # Rev 3 §C.2: "Returns the number of units the current approved plan can
+    # still make."
+    # Rev 3 §E.3b: "resolves the approved plan and returns the minimum over
+    # its components of floor(available / quantity_per_unit)."
+
+    if order_type is not None:
+        # Single order_type: resolve directly.
+        return _units_for_order_type(product.pk, size, order_type)
+
+    # order_type is None — most restrictive of both order types.
+    # Rev 3 §E.3b: "use the most restrictive applicable order type."
+    # Both dine_in and takeout are applicable at the cart stage.
+    # Rev 3 §E.3b also: "If no complete approved plan exists it returns 0 with
+    # a reason, so the product is not sellable rather than silently
+    # under-deducted." An incomplete plan for either order type means the
+    # product is not safely sellable at the cart stage, so an incomplete
+    # result (units=0, complete=False) is always the minimum and the
+    # configuration_complete flag propagates to the caller.
+    result_dine_in = _units_for_order_type(product.pk, size, 'dine_in')
+    result_takeout = _units_for_order_type(product.pk, size, 'takeout')
+
+    # Effective units: treat an incomplete result as 0 for the minimum
+    # calculation (it already has units=0, so just compare directly).
+    if result_dine_in.units <= result_takeout.units:
+        most_restrictive = result_dine_in
+    else:
+        most_restrictive = result_takeout
+
+    # configuration_complete is True only when BOTH plans are complete.
+    both_complete = (
+        result_dine_in.configuration_complete
+        and result_takeout.configuration_complete
+    )
+    if both_complete:
+        return most_restrictive
+
+    # At least one plan is incomplete — return 0 with complete=False.
+    # Use the incomplete result's reason when available; prefer whichever
+    # is incomplete (both may be; pick dine_in arbitrarily).
+    if not result_dine_in.configuration_complete:
+        return AvailabilityResult(
+            units=0,
+            configuration_complete=False,
+            reason=result_dine_in.reason,
+        )
+    return AvailabilityResult(
+        units=0,
+        configuration_complete=False,
+        reason=result_takeout.reason,
+    )
+
+
+def _units_for_order_type(product_id, size, order_type):
+    """
+    Resolve the plan for (product_id, size, order_type) and compute available
+    units.  Returns AvailabilityResult.  Never raises.
+
+    Internal helper for get_available_units().
+    """
+    try:
+        plan = resolve_plan(product_id, size, order_type)
+    except RecipeIncompleteError as exc:
+        # Rev 3 §E.3b: "If no complete approved plan exists it returns 0 with
+        # a reason, so the product is not sellable rather than silently
+        # under-deducted."
+        return AvailabilityResult(
+            units=0,
+            configuration_complete=False,
+            reason=str(exc),
+        )
+
+    # Rev 3 §E.3b: "minimum over its components of floor(available / qty)"
+    if not plan.components:
+        # Defensively: an approved recipe with zero items is blocked by the
+        # approval service rule, but protect against edge cases.
+        return AvailabilityResult(
+            units=0,
+            configuration_complete=False,
+            reason=(
+                f'No components in resolved plan for product_id={product_id}, '
+                f'size={size!r}, order_type={order_type!r}.'
+            ),
+        )
+
+    min_units = None
+    for comp in plan.components:
+        available = comp.inventory_item.available_quantity  # Decimal, always >= 0
+        qty_per   = comp.quantity_per_unit                  # Decimal, always > 0
+
+        # floor(available / qty_per_unit) — number of whole product units
+        # this component can support.  Using math.floor on Decimal is safe
+        # in Python (math.floor converts to int directly).
+        component_units = math.floor(available / qty_per)
+
+        if min_units is None or component_units < min_units:
+            min_units = component_units
+
+    # min_units is always an int (math.floor returns int for finite inputs).
+    return AvailabilityResult(
+        units=int(min_units),
+        configuration_complete=True,
+        reason='',
+    )
