@@ -10,7 +10,18 @@ from django.db.models.signals import pre_delete
 from django.dispatch import receiver
 from django.utils import timezone
 from django.conf import settings
+import django
 from apps.menu.models import Product
+
+# ── Django version compatibility ──────────────────────────────────────────────
+# CheckConstraint used 'check=' before Django 5.1 and 'condition=' from 5.1+.
+_ORDERS_DJANGO_VERSION = django.VERSION[:2]
+if _ORDERS_DJANGO_VERSION >= (5, 1):
+    def _orders_check(**kwargs):
+        return {'condition': kwargs['condition']}
+else:
+    def _orders_check(**kwargs):
+        return {'check': kwargs['condition']}
 
 
 class Order(models.Model):
@@ -298,6 +309,31 @@ class OrderItem(models.Model):
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
     notes = models.CharField(max_length=200, blank=True)
 
+    # ── Phase 4A: Per-line inventory ledger snapshot ──────────────────────────
+    # Rev 3 §D.1. Set once at order placement (Phase 5A+) from
+    # Product.inventory_tracking_mode; never updated after the order line is
+    # created. All existing rows receive 'legacy' from the column default,
+    # which is correct because every historical line was handled by the legacy
+    # ledger. The application does NOT yet read or act on this field — that
+    # begins in Phase 5A.
+    INVENTORY_MODE_LEGACY     = 'legacy'
+    INVENTORY_MODE_INGREDIENT = 'ingredient'
+    INVENTORY_MODE_CHOICES = [
+        (INVENTORY_MODE_LEGACY,     'Legacy'),
+        (INVENTORY_MODE_INGREDIENT, 'Ingredient'),
+    ]
+    inventory_mode = models.CharField(
+        max_length=10,
+        choices=INVENTORY_MODE_CHOICES,
+        default=INVENTORY_MODE_LEGACY,
+        help_text=(
+            'Snapshot of the inventory ledger used for this order line, '
+            'copied from Product.inventory_tracking_mode at placement time. '
+            'Immutable after the line is created. All existing lines default '
+            'to "legacy".'
+        ),
+    )
+
     def save(self, *args, **kwargs):
         if self.product and not self.product_name:
             self.product_name = self.product.name
@@ -330,6 +366,15 @@ class OrderItem(models.Model):
                 fields=['order', 'product', 'size'],
                 condition=models.Q(product__isnull=False),
                 name='unique_orderitem_order_product_size',
+            ),
+            # Phase 4A: inventory_mode must be one of two defined values.
+            # The DB-level backstop ensures no code path can write an invalid
+            # mode even if it bypasses form/model validation.
+            models.CheckConstraint(
+                **_orders_check(condition=models.Q(
+                    inventory_mode__in=['legacy', 'ingredient']
+                )),
+                name='orderitem_inventory_mode_valid',
             ),
         ]
 

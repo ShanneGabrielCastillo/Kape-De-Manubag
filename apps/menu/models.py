@@ -270,6 +270,35 @@ class Product(models.Model):
     stock_quantity = models.PositiveIntegerField(default=100)
     low_stock_threshold = models.PositiveIntegerField(default=10)
 
+    # ── Phase 4A: Inventory tracking mode ────────────────────────────────────
+    # Rev 3 §D.1. Controls which inventory ledger is used for this product.
+    # 'legacy'     — existing Product.stock_quantity system (default for all
+    #               existing and new products until explicitly switched).
+    # 'ingredient' — new ingredient-based reservation system (Phase 5B+).
+    #
+    # This field is set only by the cutover/rollback service (Phase 8).
+    # It must NEVER be exposed on generic product forms or admin editing
+    # screens. The application behavior is unchanged until Phase 5A+ reads it.
+    INVENTORY_TRACKING_LEGACY     = 'legacy'
+    INVENTORY_TRACKING_INGREDIENT = 'ingredient'
+    INVENTORY_TRACKING_CHOICES = [
+        (INVENTORY_TRACKING_LEGACY,     'Legacy'),
+        (INVENTORY_TRACKING_INGREDIENT, 'Ingredient'),
+    ]
+    inventory_tracking_mode = models.CharField(
+        max_length=10,
+        choices=INVENTORY_TRACKING_CHOICES,
+        default=INVENTORY_TRACKING_LEGACY,
+        db_index=True,
+        help_text=(
+            'Which inventory ledger tracks this product. '
+            '"legacy" uses the existing stock_quantity system. '
+            '"ingredient" uses the ingredient-based reservation system (future). '
+            'Changed only by the inventory cutover service — never through '
+            'the product edit form.'
+        ),
+    )
+
     objects = ProductManager()
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -446,6 +475,16 @@ class Product(models.Model):
             models.CheckConstraint(
                 **_check_constraint_kwargs,
                 name='product_stock_non_negative',
+            ),
+            # Phase 4A: inventory tracking mode must be one of two defined values.
+            # The field is set only by the cutover/rollback service (Phase 8);
+            # all records default to 'legacy' and this constraint is the DB-level
+            # backstop against invalid writes.
+            models.CheckConstraint(
+                **({'condition': Q(inventory_tracking_mode__in=['legacy', 'ingredient'])}
+                   if _DJANGO_VERSION >= (5, 1) else
+                   {'check': Q(inventory_tracking_mode__in=['legacy', 'ingredient'])}),
+                name='product_inventory_mode_valid',
             ),
         ]
 
