@@ -5,8 +5,15 @@ from django.db import IntegrityError, transaction
 from django.db.models import Count, DecimalField, ExpressionWrapper, F, Q
 from django.http import JsonResponse
 from django.core.paginator import Paginator
-from .models import InventoryItem, InventoryLog
-from .forms import InventoryItemForm, AdjustmentForm, WastageForm, PackagingItemForm
+from .models import InventoryItem, InventoryLog, UnitConversion, StockPurchase, StockPurchaseItem
+from .forms import (
+    InventoryItemForm,
+    AdjustmentForm,
+    WastageForm,
+    PackagingItemForm,
+    PurchaseHeaderForm,
+    PurchaseLineForm,
+)
 from .services import (
     record_adjustment,
     record_wastage,
@@ -14,6 +21,9 @@ from .services import (
     StaleExpectedQuantityError,
     ReservedConflictError,
     ExceedsAvailableError,
+    FractionalPcsError,
+    PurchaseLineError,
+    record_purchase,
 )
 from apps.menu.models import CRITICAL_STOCK_THRESHOLD, Category, Product
 from apps.accounts.decorators import cashier_or_admin_required
@@ -656,4 +666,271 @@ def packaging_record_wastage(request, pk):
     return render(request, 'inventory/packaging_wastage.html', {
         'item': item,
         'form': form,
+    })
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 3-3 — Purchase Management UI
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@login_required
+@cashier_or_admin_required
+def purchase_create(request):
+    """
+    Record a new stock purchase with one or more purchase lines.
+
+    GET:  Renders the purchase form with empty header and no lines.
+          Generates a fresh UUID idempotency key embedded in the header form.
+
+    POST: Validates header + line data.  For each line, looks up the
+          UnitConversion server-side (never trusts a client-submitted factor).
+          Calls record_purchase() with the resolved data.  On success, redirects
+          to the purchase detail page.
+
+    Idempotency key design:
+    - The UUID is a field on PurchaseHeaderForm (hidden), generated on GET and
+      preserved across POST re-renders via the form's own POST data.
+    - It is validated as a real UUID4 by the form's clean_idempotency_key().
+    - A network retry that re-POSTs the same form body will carry the same key;
+      record_purchase() handles that safely.
+    - A browser refresh of a successful redirect lands on the detail page (302),
+      so there is no automatic re-submission.
+    - A deliberate manual reload and re-submit on the create page would re-POST
+      the same key. record_purchase() idempotency ensures this is safe: the
+      service returns the already-committed purchase unchanged.
+    - Disabling the submit button is a convenience, not a security boundary.
+      The service is the authoritative safeguard.
+
+    Form data preservation on validation failure:
+    - Header form fields (date, notes) are preserved via bound form data.
+    - Line data is passed back through 'line_initial_json' so the JS can
+      reinstate item, unit, and quantity selections.
+    - Errors are displayed per-line using messages.
+    """
+    import uuid
+    import json
+
+    if request.method == 'POST':
+        header_form = PurchaseHeaderForm(request.POST)
+
+        # Parse line data from POST.  Lines are submitted as:
+        #   lines[0][inventory_item_id], lines[0][purchase_unit_id],
+        #   lines[0][purchase_quantity], lines[0][note], …
+        line_forms = []
+        idx = 0
+        while f'lines[{idx}][inventory_item_id]' in request.POST:
+            prefix_data = {
+                'inventory_item_id': request.POST.get(f'lines[{idx}][inventory_item_id]', ''),
+                'purchase_unit_id':  request.POST.get(f'lines[{idx}][purchase_unit_id]', ''),
+                'purchase_quantity': request.POST.get(f'lines[{idx}][purchase_quantity]', ''),
+                'note':              request.POST.get(f'lines[{idx}][note]', ''),
+            }
+            line_forms.append(PurchaseLineForm(prefix_data))
+            idx += 1
+
+        # Idempotency key comes from the validated header form.
+        # We peek at the raw POST value before full validation so we can
+        # return it on re-render even if other header fields failed.
+        raw_key = request.POST.get('idempotency_key', '').strip()
+        try:
+            uuid.UUID(raw_key, version=4)
+            idempotency_key = raw_key
+        except (ValueError, AttributeError):
+            # Invalid key in POST — generate a new one for the re-render.
+            idempotency_key = str(uuid.uuid4())
+
+        if not line_forms:
+            messages.error(request, 'Add at least one purchase line before saving.')
+            header_form.is_valid()  # populate cleaned_data even on error
+            return _render_purchase_create(request, header_form, [], idempotency_key)
+
+        header_valid = header_form.is_valid()
+        lines_valid  = all(lf.is_valid() for lf in line_forms)
+
+        # Resolve conversions server-side for each valid line.
+        resolved_lines     = []
+        conversion_errors  = []
+        if lines_valid:
+            for i, lf in enumerate(line_forms):
+                try:
+                    uc = lf.resolve_conversion()
+                    resolved_lines.append({
+                        'inventory_item_id': lf.cleaned_data['inventory_item_id'],
+                        'purchase_unit':     uc.purchase_unit,
+                        'purchase_quantity': lf.cleaned_data['purchase_quantity'],
+                        'conversion_factor': uc.conversion_factor,
+                        'note':              lf.cleaned_data.get('note', ''),
+                    })
+                except Exception as exc:
+                    conversion_errors.append(f'Line {i + 1}: {exc}')
+
+        if not header_valid or not lines_valid or conversion_errors:
+            for err in conversion_errors:
+                messages.error(request, err)
+            return _render_purchase_create(
+                request, header_form, line_forms, idempotency_key,
+            )
+
+        # Validate item activity and existence explicitly before calling the
+        # service — gives a friendly per-line message.
+        item_errors = []
+        for i, rl in enumerate(resolved_lines):
+            try:
+                item = InventoryItem.objects.get(pk=rl['inventory_item_id'])
+                if not item.is_active:
+                    item_errors.append(
+                        f'Line {i + 1}: "{item.name}" is inactive and cannot receive stock.'
+                    )
+            except InventoryItem.DoesNotExist:
+                item_errors.append(f'Line {i + 1}: inventory item not found.')
+
+        if item_errors:
+            for err in item_errors:
+                messages.error(request, err)
+            return _render_purchase_create(
+                request, header_form, line_forms, idempotency_key,
+            )
+
+        # Call the service — this is the only place stock is mutated.
+        try:
+            purchase = record_purchase(
+                purchase_date=header_form.cleaned_data['purchase_date'],
+                lines=resolved_lines,
+                idempotency_key=idempotency_key,
+                notes=header_form.cleaned_data.get('notes', ''),
+                performed_by=request.user,
+            )
+            log_action(
+                request.user,
+                'inventory.purchase_create',
+                purchase,
+                detail=(
+                    f'{len(resolved_lines)} line(s) on '
+                    f'{header_form.cleaned_data["purchase_date"]}'
+                ),
+            )
+        except (FractionalPcsError, PurchaseLineError, InventoryServiceError) as exc:
+            messages.error(request, str(exc))
+            return _render_purchase_create(
+                request, header_form, line_forms, idempotency_key,
+            )
+
+        messages.success(
+            request,
+            f'Purchase #{purchase.pk} recorded — '
+            f'{len(resolved_lines)} line(s) added to stock.',
+        )
+        return redirect('inventory:purchase_detail', pk=purchase.pk)
+
+    # GET — generate a fresh idempotency key.
+    import uuid
+    idempotency_key = str(uuid.uuid4())
+    initial_data    = {'idempotency_key': idempotency_key}
+    header_form     = PurchaseHeaderForm(initial=initial_data)
+    return _render_purchase_create(request, header_form, [], idempotency_key)
+
+
+def _render_purchase_create(request, header_form, line_forms, idempotency_key):
+    """Shared render helper for the purchase creation page."""
+    import json
+
+    # Build the items+conversions data for the JS to populate dropdowns.
+    items = (
+        InventoryItem.objects
+        .filter(is_active=True)
+        .prefetch_related('unit_conversions')
+        .order_by('item_type', 'name')
+    )
+    items_data = []
+    for item in items:
+        conversions = [
+            {
+                'id':              uc.pk,
+                'purchase_unit':   uc.purchase_unit,
+                'factor':          str(uc.conversion_factor),
+                'base_unit':       item.base_unit,
+                'base_unit_label': item.get_base_unit_display(),
+            }
+            for uc in item.unit_conversions.filter(is_active=True)
+        ]
+        if conversions:
+            items_data.append({
+                'id':              item.pk,
+                'name':            item.name,
+                'base_unit':       item.base_unit,
+                'base_unit_label': item.get_base_unit_display(),
+                'conversions':     conversions,
+            })
+
+    # Build initial data for the line forms so JS can pre-populate values on
+    # a validation-failure re-render.  We only expose the subset of fields
+    # the JS needs: item id, unit conversion id, quantity, and note.  The
+    # conversion_factor is NOT included here; it is always re-resolved from
+    # the DB on submission.
+    line_initial = []
+    for lf in line_forms:
+        line_initial.append({
+            'inventory_item_id': lf.data.get('inventory_item_id', ''),
+            'purchase_unit_id':  lf.data.get('purchase_unit_id', ''),
+            'purchase_quantity': lf.data.get('purchase_quantity', ''),
+            'note':              lf.data.get('note', ''),
+            'errors':            [str(e) for e in lf.non_field_errors()] +
+                                 [f'{f}: {e}'
+                                  for f, errs in lf.errors.items()
+                                  if f != '__all__'
+                                  for e in errs],
+        })
+
+    return render(request, 'inventory/purchase_create.html', {
+        'header_form':       header_form,
+        'idempotency_key':   idempotency_key,
+        'items_json':        json.dumps(items_data),
+        'line_initial_json': json.dumps(line_initial),
+    })
+
+
+@login_required
+@cashier_or_admin_required
+def purchase_list(request):
+    """
+    Purchase history: paginated list of all StockPurchase records, most recent
+    first.  Annotates each purchase with its line count.
+    """
+    purchases = (
+        StockPurchase.objects
+        .select_related('performed_by')
+        .annotate(line_count=Count('items'))
+        .order_by('-purchase_date', '-created_at')
+    )
+
+    paginator = Paginator(purchases, 20)
+    page_num  = request.GET.get('page', 1)
+    page_obj  = paginator.get_page(page_num)
+
+    return render(request, 'inventory/purchase_list.html', {
+        'page_obj': page_obj,
+    })
+
+
+@login_required
+@cashier_or_admin_required
+def purchase_detail(request, pk):
+    """
+    Purchase detail: shows the header and all StockPurchaseItem snapshots.
+    Snapshots are historical; they do not change when UnitConversion settings
+    change later.
+    """
+    purchase = get_object_or_404(
+        StockPurchase.objects.select_related('performed_by'),
+        pk=pk,
+    )
+    items = (
+        purchase.items
+        .select_related('inventory_item')
+        .order_by('inventory_item__name')
+    )
+    return render(request, 'inventory/purchase_detail.html', {
+        'purchase': purchase,
+        'items':    items,
     })

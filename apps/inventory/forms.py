@@ -386,3 +386,141 @@ class PackagingItemForm(forms.Form):
         if value < Decimal('0'):
             raise forms.ValidationError('Low-stock threshold cannot be negative.')
         return value
+
+
+# ── Phase 3-3: Purchase management forms ──────────────────────────────────────
+
+import uuid as _uuid_module
+
+
+class PurchaseHeaderForm(forms.Form):
+    """
+    Header-level fields for a new stock purchase.
+    """
+
+    purchase_date = forms.DateField(
+        label='Purchase Date',
+        widget=forms.DateInput(attrs={
+            'class': 'form-control',
+            'type': 'date',
+        }),
+        help_text='The date the stock was actually received.',
+    )
+
+    notes = forms.CharField(
+        label='Notes',
+        required=False,
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 2,
+            'placeholder': 'Optional — supplier name, invoice number, delivery notes…',
+        }),
+        max_length=1000,
+    )
+
+    # Hidden UUID — carries the idempotency key across POST re-renders so
+    # that a validation-failure re-render preserves the original key.
+    idempotency_key = forms.CharField(
+        widget=forms.HiddenInput(),
+        required=True,
+        max_length=36,   # UUID4 canonical string length
+    )
+
+    def clean_idempotency_key(self):
+        value = self.cleaned_data.get('idempotency_key', '').strip()
+        try:
+            _uuid_module.UUID(value, version=4)
+        except (ValueError, AttributeError):
+            raise forms.ValidationError('Invalid idempotency key. Please reload the form.')
+        return value
+
+
+class PurchaseLineForm(forms.Form):
+    """
+    One purchase line: an inventory item, the purchase unit to use,
+    and the quantity received.
+
+    Security: conversion_factor is NOT accepted from the user. The view
+    resolves it server-side from the UnitConversion record identified by
+    (inventory_item_id, purchase_unit_id). A user-submitted factor would
+    allow stock inflation.
+
+    purchase_unit_id: the PK of the UnitConversion row, which carries both
+    the purchase_unit name and the conversion_factor to use.
+    """
+
+    inventory_item_id = forms.IntegerField(
+        label='Inventory Item',
+        widget=forms.Select(attrs={'class': 'form-control'}),
+        min_value=1,
+    )
+
+    purchase_unit_id = forms.IntegerField(
+        label='Purchase Unit',
+        widget=forms.Select(attrs={'class': 'form-control'}),
+        help_text='Select the purchase unit. The conversion factor is looked up automatically.',
+        min_value=1,
+    )
+
+    purchase_quantity = forms.DecimalField(
+        label='Quantity',
+        min_value=0,
+        decimal_places=3,
+        max_digits=14,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'step': '0.001',
+            'min': '0.001',
+            'placeholder': '0.000',
+        }),
+        help_text='Quantity in the selected purchase unit. Must be greater than zero.',
+    )
+
+    note = forms.CharField(
+        label='Line Note',
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Optional note for this line',
+            'maxlength': '200',
+        }),
+        max_length=200,
+    )
+
+    def clean_purchase_quantity(self):
+        from decimal import Decimal
+        value = self.cleaned_data.get('purchase_quantity')
+        if value is not None and value <= Decimal('0'):
+            raise forms.ValidationError('Quantity must be greater than zero.')
+        return value
+
+    def resolve_conversion(self):
+        """
+        Look up the UnitConversion row for this line.
+
+        Returns the UnitConversion instance or raises ValidationError if
+        the conversion does not exist, belongs to a different item, or is
+        inactive. This is the only place the conversion_factor is sourced —
+        never from user-submitted data.
+
+        Both item_id and uc_id are validated as positive integers by the form
+        fields before this method is called, so we do not need to guard
+        against non-integer inputs here.
+        """
+        from apps.inventory.models import UnitConversion
+        item_id = self.cleaned_data.get('inventory_item_id')
+        uc_id   = self.cleaned_data.get('purchase_unit_id')
+        if not item_id or not uc_id:
+            return None
+        try:
+            uc = UnitConversion.objects.select_related('inventory_item').get(
+                pk=uc_id,
+                inventory_item_id=item_id,  # ensures uc belongs to the stated item
+                is_active=True,
+            )
+        except UnitConversion.DoesNotExist:
+            raise forms.ValidationError(
+                'The selected purchase unit is not valid for this item, '
+                'or it has been deactivated.'
+            )
+        return uc

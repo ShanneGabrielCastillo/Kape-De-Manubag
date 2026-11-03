@@ -1,0 +1,87 @@
+{% extends "base_admin.html" %}
+{% block page_title %}Purchase #{{ purchase.pk }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Purchase #{{ purchase.pk }}</h1>
+    <p class="page-subtitle">Stock purchase detail — historical data is preserved exactly as recorded</p>
+  </div>
+  <a href="{% url 'inventory:purchase_list' %}" class="btn btn-outline">
+    <i data-lucide="arrow-left" class="btn-icon" aria-hidden="true"></i>
+    Back to Purchases
+  </a>
+</div>
+
+{# ── Purchase header ───────────────────────────────────────────────────────── #}
+<div class="card" style="max-width:700px;margin-bottom:1.5rem">
+  <div class="card-body">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;font-size:0.9rem">
+      <div>
+        <div style="color:#aaa;font-size:0.78rem;margin-bottom:2px">Purchase Date</div>
+        <div style="font-weight:700;font-size:1rem">{{ purchase.purchase_date }}</div>
+      </div>
+      <div>
+        <div style="color:#aaa;font-size:0.78rem;margin-bottom:2px">Recorded by</div>
+        <div>{{ purchase.performed_by.username|default:"—" }}</div>
+      </div>
+      <div>
+        <div style="color:#aaa;font-size:0.78rem;margin-bottom:2px">Created</div>
+        <div>{{ purchase.created_at|date:"M d, Y g:i A" }}</div>
+      </div>
+      <div>
+        <div style="color:#aaa;font-size:0.78rem;margin-bottom:2px">Reference</div>
+        <div style="font-family:monospace;font-size:0.85rem">#{{ purchase.pk }}</div>
+      </div>
+    </div>
+    {% if purchase.notes %}
+    <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid #f0ece8">
+      <div style="color:#aaa;font-size:0.78rem;margin-bottom:4px">Notes</div>
+      <div style="white-space:pre-wrap">{{ purchase.notes }}</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{# ── Purchase lines ────────────────────────────────────────────────────────── #}
+<div class="card">
+  <div class="table-wrapper">
+    <table data-mobile-cards="true">
+      <thead>
+        <tr>
+          <th data-role="primary">Item</th>
+          <th data-role="secondary">Type</th>
+          <th data-role="amount">Qty Purchased</th>
+          <th data-role="secondary">Unit</th>
+          <th data-role="secondary">Factor</th>
+          <th data-role="amount">Stock Added</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for spi in items %}
+        <tr>
+          <td style="font-weight:600">{{ spi.inventory_item.name }}</td>
+          <td>
+            {% if spi.inventory_item.item_type == 'ingredient' %}
+              <span class="badge badge-preparing">Ingredient</span>
+            {% else %}
+              <span class="badge badge-muted">Packaging</span>
+            {% endif %}
+          </td>
+          <td style="font-weight:700">{{ spi.purchase_quantity|floatformat:"-3" }}</td>
+          <td style="font-size:0.9rem;color:#666">{{ spi.purchase_unit }}</td>
+          <td style="font-size:0.85rem;color:#999" title="1 {{ spi.purchase_unit }} = {{ spi.conversion_factor }} {{ spi.inventory_item.get_base_unit_display }}">
+            × {{ spi.conversion_factor }}
+          </td>
+          <td style="font-weight:700;color:var(--green-success)">
+            +{{ spi.base_quantity|floatformat:"-3" }} {{ spi.inventory_item.get_base_unit_display }}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" style="text-align:center;padding:2rem;color:#aaa">No lines found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

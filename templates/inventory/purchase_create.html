@@ -1,0 +1,311 @@
+{% extends "base_admin.html" %}
+{% block page_title %}Record Purchase{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Record Purchase</h1>
+    <p class="page-subtitle">Add received stock to ingredient and packaging inventory</p>
+  </div>
+  <a href="{% url 'inventory:purchase_list' %}" class="btn btn-outline">
+    <i data-lucide="arrow-left" class="btn-icon" aria-hidden="true"></i>
+    Back to Purchases
+  </a>
+</div>
+
+{% if messages %}
+{% for msg in messages %}
+<div class="alert {% if msg.tags == 'error' %}alert-danger{% else %}alert-warning{% endif %}" role="alert" style="margin-bottom:1rem">{{ msg }}</div>
+{% endfor %}
+{% endif %}
+
+{% if header_form.non_field_errors %}
+<div class="alert alert-danger" role="alert" style="margin-bottom:1rem">
+  {% for err in header_form.non_field_errors %}{{ err }}{% endfor %}
+</div>
+{% endif %}
+
+<form method="post" id="purchase-form" novalidate>
+  {% csrf_token %}
+
+  {# ── Idempotency key — hidden field on the header form ───────────────────── #}
+  {{ header_form.idempotency_key }}
+
+  {# ── Header ──────────────────────────────────────────────────────────────── #}
+  <div class="card" style="max-width:700px;margin-bottom:1.5rem">
+    <div class="card-body">
+      <h3 style="font-size:1rem;font-weight:700;margin-bottom:1rem">Purchase Details</h3>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+        <div class="form-group{% if header_form.purchase_date.errors %} has-error{% endif %}">
+          <label class="form-label" for="{{ header_form.purchase_date.id_for_label }}">
+            {{ header_form.purchase_date.label }}
+            <span style="color:var(--red-accent)" aria-hidden="true">*</span>
+          </label>
+          {{ header_form.purchase_date }}
+          {% if header_form.purchase_date.errors %}
+            <p class="pf-field-error" role="alert">{{ header_form.purchase_date.errors.0 }}</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="form-group{% if header_form.notes.errors %} has-error{% endif %}">
+        <label class="form-label" for="{{ header_form.notes.id_for_label }}">{{ header_form.notes.label }}</label>
+        {{ header_form.notes }}
+        {% if header_form.notes.errors %}
+          <p class="pf-field-error" role="alert">{{ header_form.notes.errors.0 }}</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ── Purchase lines ──────────────────────────────────────────────────────── #}
+  <div class="card" style="max-width:900px;margin-bottom:1.5rem">
+    <div class="card-body">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+        <h3 style="font-size:1rem;font-weight:700;margin:0">Purchase Lines</h3>
+        <button type="button" onclick="addLine()" class="btn btn-sm btn-outline">
+          <i data-lucide="plus" class="btn-icon" aria-hidden="true"></i>
+          Add Line
+        </button>
+      </div>
+      <div id="lines-container"></div>
+      <p id="no-lines-msg" style="color:#aaa;text-align:center;padding:1rem;display:none">
+        No lines yet. Click <strong>Add Line</strong> to begin.
+      </p>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:2rem">
+    <button type="submit" class="btn btn-primary" id="submit-btn">
+      <i data-lucide="save" class="btn-icon" aria-hidden="true"></i>
+      Record Purchase
+    </button>
+    <a href="{% url 'inventory:purchase_list' %}" class="btn btn-outline">Cancel</a>
+  </div>
+
+</form>
+
+{# ── Hidden line template ─────────────────────────────────────────────────── #}
+<template id="line-template">
+  <div class="purchase-line" style="border:1px solid #e8ddd0;border-radius:8px;padding:1rem;margin-bottom:.75rem;background:#faf9f7">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.75rem">
+      <span style="font-weight:600;font-size:0.9rem">Line <span class="line-num"></span></span>
+      <button type="button" onclick="removeLine(this)" class="btn btn-sm" style="background:transparent;border:1px solid #ddd;color:#999" aria-label="Remove line">
+        <i data-lucide="x" class="btn-icon" aria-hidden="true"></i>
+      </button>
+    </div>
+    <div class="line-errors" style="color:var(--red-accent);font-size:0.85rem;margin-bottom:.5rem;display:none"></div>
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:.75rem;align-items:start">
+      <div class="form-group">
+        <label class="form-label">Item <span style="color:var(--red-accent)" aria-hidden="true">*</span></label>
+        <select name="" class="form-control line-item-select" onchange="onItemChange(this)" required>
+          <option value="">— Select item —</option>
+        </select>
+        <input type="hidden" name="" class="line-item-id">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Unit <span style="color:var(--red-accent)" aria-hidden="true">*</span></label>
+        <select name="" class="form-control line-unit-select" onchange="onUnitChange(this)" required>
+          <option value="">— Select unit —</option>
+        </select>
+        <input type="hidden" name="" class="line-unit-id">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Qty <span style="color:var(--red-accent)" aria-hidden="true">*</span></label>
+        <input type="number" name="" class="form-control line-qty" step="0.001" min="0.001" placeholder="0.000" oninput="onQtyInput(this)" required>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:.75rem;align-items:start">
+      <div class="form-group">
+        <label class="form-label">Note</label>
+        <input type="text" name="" class="form-control line-note" placeholder="Optional note" maxlength="200">
+      </div>
+      <div class="line-preview" style="font-size:0.82rem;color:#666;padding-top:1.6rem;display:none;align-items:center;gap:.3rem">
+        <i data-lucide="arrow-right" class="btn-icon" style="flex-shrink:0" aria-hidden="true"></i>
+        <span class="preview-text"></span>
+      </div>
+    </div>
+  </div>
+</template>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  'use strict';
+
+  var ITEMS    = {{ items_json|safe }};
+  var INITIAL  = {{ line_initial_json|safe }};   // previously submitted line data
+
+  // Fast-lookup maps.
+  var ITEM_MAP = {};
+  var UNIT_MAP = {};
+  ITEMS.forEach(function (item) {
+    ITEM_MAP[item.id] = item;
+    item.conversions.forEach(function (uc) { UNIT_MAP[uc.id] = uc; });
+  });
+
+  var linesContainer = document.getElementById('lines-container');
+  var noLinesMsg     = document.getElementById('no-lines-msg');
+  var lineIndex      = 0;   // monotonically increasing; matches server-side [N]
+
+  function updateNoLinesMsg() {
+    noLinesMsg.style.display = linesContainer.children.length === 0 ? 'block' : 'none';
+  }
+
+  function updateLineNumbers() {
+    var lines = linesContainer.querySelectorAll('.purchase-line');
+    lines.forEach(function (line, i) {
+      line.querySelector('.line-num').textContent = i + 1;
+    });
+  }
+
+  // Build and append one line DOM node.
+  // initial: optional object with {inventory_item_id, purchase_unit_id,
+  //          purchase_quantity, note, errors}
+  function _addLine(initial) {
+    var tpl   = document.getElementById('line-template');
+    var clone = tpl.content.cloneNode(true);
+    var idx   = lineIndex++;
+
+    // Bind server-expected field names.
+    clone.querySelector('.line-item-select').name = 'lines[' + idx + '][inventory_item_id_display]';
+    clone.querySelector('.line-item-id').name      = 'lines[' + idx + '][inventory_item_id]';
+    clone.querySelector('.line-unit-select').name  = 'lines[' + idx + '][purchase_unit_id_display]';
+    clone.querySelector('.line-unit-id').name      = 'lines[' + idx + '][purchase_unit_id]';
+    clone.querySelector('.line-qty').name           = 'lines[' + idx + '][purchase_quantity]';
+    clone.querySelector('.line-note').name          = 'lines[' + idx + '][note]';
+
+    // Populate item dropdown.
+    var itemSel = clone.querySelector('.line-item-select');
+    ITEMS.forEach(function (item) {
+      var opt = document.createElement('option');
+      opt.value       = item.id;
+      opt.textContent = item.name + ' (' + item.base_unit_label + ')';
+      itemSel.appendChild(opt);
+    });
+
+    linesContainer.appendChild(clone);
+    // clone is now detached from the DocumentFragment — get the real node.
+    var lineEl = linesContainer.lastElementChild;
+
+    // Restore previous values if provided (re-render after validation failure).
+    if (initial) {
+      var itemId = parseInt(initial.inventory_item_id, 10);
+      var ucId   = parseInt(initial.purchase_unit_id, 10);
+      var qty    = initial.purchase_quantity || '';
+      var note   = initial.note || '';
+
+      if (itemId && ITEM_MAP[itemId]) {
+        lineEl.querySelector('.line-item-select').value = itemId;
+        lineEl.querySelector('.line-item-id').value     = itemId;
+        _populateUnitDropdown(lineEl, itemId);
+        if (ucId && UNIT_MAP[ucId]) {
+          lineEl.querySelector('.line-unit-select').value = ucId;
+          lineEl.querySelector('.line-unit-id').value     = ucId;
+        }
+      }
+      if (qty) {
+        lineEl.querySelector('.line-qty').value = qty;
+      }
+      if (note) {
+        lineEl.querySelector('.line-note').value = note;
+      }
+      // Show validation errors from the server.
+      if (initial.errors && initial.errors.length) {
+        var errEl = lineEl.querySelector('.line-errors');
+        errEl.textContent = initial.errors.join(' | ');
+        errEl.style.display = 'block';
+      }
+      // Refresh the preview.
+      var uc = UNIT_MAP[ucId];
+      if (uc && qty) { _updatePreview(lineEl, uc, qty); }
+    }
+
+    updateLineNumbers();
+    updateNoLinesMsg();
+    if (typeof window.reinitLucide === 'function') window.reinitLucide();
+  }
+
+  // Public entry point: add a blank line.
+  window.addLine = function () { _addLine(null); };
+
+  window.removeLine = function (btn) {
+    btn.closest('.purchase-line').remove();
+    updateLineNumbers();
+    updateNoLinesMsg();
+  };
+
+  function _populateUnitDropdown(lineEl, itemId) {
+    var unitSel = lineEl.querySelector('.line-unit-select');
+    unitSel.innerHTML = '<option value="">— Select unit —</option>';
+    var item = ITEM_MAP[itemId];
+    if (!item) return;
+    item.conversions.forEach(function (uc) {
+      var opt = document.createElement('option');
+      opt.value       = uc.id;
+      opt.textContent = uc.purchase_unit +
+        ' (1 ' + uc.purchase_unit + ' = ' + uc.factor + ' ' + uc.base_unit_label + ')';
+      unitSel.appendChild(opt);
+    });
+  }
+
+  window.onItemChange = function (sel) {
+    var line   = sel.closest('.purchase-line');
+    var itemId = parseInt(sel.value, 10);
+    line.querySelector('.line-item-id').value = itemId || '';
+    line.querySelector('.line-unit-id').value = '';
+    line.querySelector('.line-preview').style.display = 'none';
+    _populateUnitDropdown(line, itemId);
+  };
+
+  window.onUnitChange = function (sel) {
+    var line = sel.closest('.purchase-line');
+    var ucId = parseInt(sel.value, 10);
+    line.querySelector('.line-unit-id').value = ucId || '';
+    var uc = UNIT_MAP[ucId];
+    if (uc) {
+      var qty = line.querySelector('.line-qty').value;
+      _updatePreview(line, uc, qty);
+    } else {
+      line.querySelector('.line-preview').style.display = 'none';
+    }
+  };
+
+  window.onQtyInput = function (qtyIn) {
+    var line = qtyIn.closest('.purchase-line');
+    var ucId = parseInt(line.querySelector('.line-unit-id').value, 10);
+    var uc   = UNIT_MAP[ucId];
+    if (uc) _updatePreview(line, uc, qtyIn.value);
+  };
+
+  function _updatePreview(line, uc, qtyStr) {
+    var preview = line.querySelector('.line-preview');
+    var qty     = parseFloat(qtyStr);
+    if (!isNaN(qty) && qty > 0) {
+      var base = (qty * parseFloat(uc.factor)).toFixed(3).replace(/\.?0+$/, '');
+      preview.querySelector('.preview-text').textContent =
+        qty + ' ' + uc.purchase_unit + ' → ' + base + ' ' + uc.base_unit_label;
+      preview.style.display = 'flex';
+    } else {
+      preview.style.display = 'none';
+    }
+  }
+
+  // Prevent double-submit: disable the button after first click.
+  document.getElementById('purchase-form').addEventListener('submit', function () {
+    var btn = document.getElementById('submit-btn');
+    btn.disabled    = true;
+    btn.textContent = 'Saving…';
+  });
+
+  // Initialize lines: if INITIAL has entries (re-render after validation
+  // failure), restore them; otherwise start empty.
+  if (INITIAL.length > 0) {
+    INITIAL.forEach(function (init) { _addLine(init); });
+  }
+  updateNoLinesMsg();
+})();
+</script>
+{% endblock extra_js %}

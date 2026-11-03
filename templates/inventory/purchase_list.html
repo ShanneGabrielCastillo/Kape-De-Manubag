@@ -1,0 +1,85 @@
+{% extends "base_admin.html" %}
+{% block page_title %}Purchase History{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Purchase History</h1>
+    <p class="page-subtitle">All recorded stock purchases, most recent first</p>
+  </div>
+  <a href="{% url 'inventory:purchase_create' %}" class="btn btn-primary">
+    <i data-lucide="plus" class="btn-icon" aria-hidden="true"></i>
+    Record Purchase
+  </a>
+</div>
+
+<div class="card">
+  <div class="table-wrapper">
+    <table class="table-purchase-list" data-mobile-cards="true">
+      <thead>
+        <tr>
+          <th data-role="primary">Reference</th>
+          <th data-role="secondary">Date</th>
+          <th data-role="amount">Lines</th>
+          <th data-role="secondary">Recorded by</th>
+          <th data-role="date">Created</th>
+          <th data-role="actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for purchase in page_obj %}
+        <tr>
+          <td style="font-weight:600">
+            #{{ purchase.pk }}
+            {% if purchase.notes %}
+              <div style="font-weight:400;font-size:0.78rem;color:#aaa;margin-top:2px">{{ purchase.notes|truncatechars:60 }}</div>
+            {% endif %}
+          </td>
+          <td>{{ purchase.purchase_date }}</td>
+          <td>{{ purchase.line_count }}</td>
+          <td style="font-size:0.9rem">{{ purchase.performed_by.username|default:"—" }}</td>
+          <td style="font-size:0.8rem;color:#aaa">{{ purchase.created_at|date:"M d, Y g:i A" }}</td>
+          <td>
+            <a href="{% url 'inventory:purchase_detail' purchase.pk %}" class="btn btn-sm btn-outline">View</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="6" style="text-align:center;padding:48px 32px">
+            <div style="margin-bottom:12px">
+              <i data-lucide="shopping-cart" style="width:48px;height:48px;color:#ddd;display:block;margin:0 auto 12px" aria-hidden="true"></i>
+            </div>
+            <div style="font-weight:600;font-size:1rem;margin-bottom:8px">No purchases yet</div>
+            <div style="color:#aaa;font-size:0.9rem;margin-bottom:20px">
+              Record a purchase to add stock to your ingredient and packaging inventory.
+            </div>
+            <a href="{% url 'inventory:purchase_create' %}" class="btn btn-primary">
+              <i data-lucide="plus" class="btn-icon" aria-hidden="true"></i>
+              Record your first purchase
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if page_obj.has_other_pages %}
+<div class="pagination">
+  {% if page_obj.has_previous %}
+  <a href="?page={{ page_obj.previous_page_number }}" class="page-link">‹ Prev</a>
+  {% endif %}
+  {% for num in page_obj.paginator.page_range %}
+    {% if page_obj.number == num %}
+    <span class="page-link active">{{ num }}</span>
+    {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+    <a href="?page={{ num }}" class="page-link">{{ num }}</a>
+    {% endif %}
+  {% endfor %}
+  {% if page_obj.has_next %}
+  <a href="?page={{ page_obj.next_page_number }}" class="page-link">Next ›</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

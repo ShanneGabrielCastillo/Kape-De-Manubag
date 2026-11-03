@@ -159,6 +159,15 @@
         <span class="sidebar-tooltip" aria-hidden="true">Packaging</span>
       </a>
 
+      <div class="nav-section-title">Purchases</div>
+      {# Purchase Management: accessible to admin and cashier (cashier_or_admin_required) #}
+      <a href="{% url 'inventory:purchase_list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'inventory' and request.resolver_match.url_name in 'purchase_list,purchase_create,purchase_detail' %}active{% endif %}"
+         aria-label="Purchase Management">
+        <span class="nav-icon"><i data-lucide="shopping-cart" class="nav-icon" aria-hidden="true"></i></span>
+        <span class="nav-label">Purchases</span>
+        <span class="sidebar-tooltip" aria-hidden="true">Purchases</span>
+      </a>
+
       <div class="nav-section-title">Store</div>
       <a href="{% url 'menu:index' %}" class="sidebar-link" target="_blank"
          aria-label="Customer Menu (opens in new tab)">

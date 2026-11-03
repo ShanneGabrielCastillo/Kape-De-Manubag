@@ -22,4 +22,9 @@ urlpatterns = [
     path('packaging/add/', views.packaging_create, name='packaging_create'),
     path('packaging/<int:pk>/adjust/', views.packaging_adjust, name='packaging_adjust'),
     path('packaging/<int:pk>/wastage/', views.packaging_record_wastage, name='packaging_wastage'),
+
+    # ── Phase 3-3: purchase management ────────────────────────────────────────
+    path('purchases/', views.purchase_list, name='purchase_list'),
+    path('purchases/new/', views.purchase_create, name='purchase_create'),
+    path('purchases/<int:pk>/', views.purchase_detail, name='purchase_detail'),
 ]
