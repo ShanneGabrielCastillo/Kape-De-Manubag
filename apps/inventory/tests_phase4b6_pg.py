@@ -318,13 +318,19 @@ def _blocker_diagnostic(holder_pid, waiter_pid, results=None,
 # ── Worker functions ──────────────────────────────────────────────────────────
 
 def _worker_approve_recipe(recipe_id, user_pk, note, barrier, results, idx,
-                           pid_box=None):
+                           pid_box=None, start_gate=None):
     """
     Worker: call approve_recipe() inside its own transaction.
 
     If pid_box is a list, stores this worker's PostgreSQL backend PID in
-    pid_box[0] before reaching the barrier so the main thread can poll
+    pid_box[0] before reaching the start point so the main thread can poll
     pg_stat_activity once the holder has the lock.
+
+    start_gate: if provided (a threading.Event), the worker waits on this
+    event instead of the barrier before calling the service.  This allows
+    sequential holder-before-waiter ordering: the test sets start_gate only
+    after hold_event confirms the holder holds the intended database lock.
+    When start_gate is None the worker uses barrier.wait() as before.
     """
     from django.db import connection as c
     from apps.inventory.services import approve_recipe, RecipeConfigError
@@ -334,7 +340,10 @@ def _worker_approve_recipe(recipe_id, user_pk, note, barrier, results, idx,
             with c.cursor() as cur:
                 cur.execute('SELECT pg_backend_pid()')
                 pid_box[0] = cur.fetchone()[0]
-        barrier.wait(timeout=_BARRIER_TIMEOUT)
+        if start_gate is not None:
+            start_gate.wait()
+        else:
+            barrier.wait(timeout=_BARRIER_TIMEOUT)
         user = CustomUser.objects.get(pk=user_pk)
         recipe = approve_recipe(recipe_id, user, note)
         results[idx] = ('ok', recipe.pk, recipe.approved_by_id, recipe.approval_note)
@@ -380,10 +389,14 @@ def _worker_approve_profile(profile_id, user_pk, note, barrier, results, idx):
         c.close()
 
 
-def _worker_retire_profile(profile_id, barrier, results, idx, pid_box=None):
+def _worker_retire_profile(profile_id, barrier, results, idx, pid_box=None,
+                           start_gate=None):
     """Worker: call retire_packaging_profile().
 
-    If pid_box is a list, stores the PG backend PID before the barrier.
+    If pid_box is a list, stores the PG backend PID before the start point.
+
+    start_gate: if provided (a threading.Event), the worker waits on this
+    event instead of the barrier.  See _worker_approve_recipe for rationale.
     """
     from django.db import connection as c
     from apps.inventory.services import retire_packaging_profile, PackagingConfigError
@@ -392,7 +405,10 @@ def _worker_retire_profile(profile_id, barrier, results, idx, pid_box=None):
             with c.cursor() as cur:
                 cur.execute('SELECT pg_backend_pid()')
                 pid_box[0] = cur.fetchone()[0]
-        barrier.wait(timeout=_BARRIER_TIMEOUT)
+        if start_gate is not None:
+            start_gate.wait()
+        else:
+            barrier.wait(timeout=_BARRIER_TIMEOUT)
         profile = retire_packaging_profile(profile_id)
         results[idx] = ('ok', profile.pk)
     except PackagingConfigError as exc:
@@ -695,53 +711,64 @@ class ConcurrentRecipeApprovalTests(TransactionTestCase):
         _make_recipe_item(rec1, ing)
 
         results       = [None, None]
-        barrier       = threading.Barrier(2, timeout=_BARRIER_TIMEOUT)
-        hold_event    = threading.Event()
-        release_event = threading.Event()
+        # No barrier needed: holder starts alone, waiter starts after hold_event.
+        # Using Barrier(1) releases the holder immediately when it calls barrier.wait().
+        holder_barrier = threading.Barrier(1, timeout=_BARRIER_TIMEOUT)
+        hold_event     = threading.Event()
+        release_event  = threading.Event()
+        # start_gate is set by the test after hold_event confirms the holder
+        # has the Product lock, guaranteeing the waiter starts after the lock
+        # is held — enforcing strict holder-before-waiter ordering.
+        start_gate    = threading.Event()
         holder_pid    = [None]
         approver_pid  = [None]
 
         t_holder = threading.Thread(
             name='lock-holder',
             target=_worker_hold_product_lock,
-            args=(prod.pk, barrier, hold_event, release_event, results, 0),
+            args=(prod.pk, holder_barrier, hold_event, release_event, results, 0),
             kwargs={'holder_pid_box': holder_pid},
             daemon=True,
         )
         t_approver = threading.Thread(
             name='approver',
             target=_worker_approve_recipe,
-            args=(rec1.pk, user.pk, 'After lock released', barrier, results, 1),
-            kwargs={'pid_box': approver_pid},
+            args=(rec1.pk, user.pk, 'After lock released', None, results, 1),
+            kwargs={'pid_box': approver_pid, 'start_gate': start_gate},
             daemon=True,
         )
 
+        t_approver_started = False
         try:
+            # Start the holder alone first.
             t_holder.start()
-            t_approver.start()
 
-            # Step 1: wait for the holder to acquire the Product lock and
-            # record its PID.
+            # Step 1: wait for the holder to acquire the Product lock.
             held = hold_event.wait(timeout=_HOLD_TIMEOUT)
             self.assertTrue(held, 'Holder never signalled hold_event.')
 
-            # Step 2: wait for both PIDs to be populated.
+            # Step 2: now that the holder owns the lock, start the approver
+            # and open its start_gate simultaneously.  The approver will
+            # record its PID, then immediately attempt approve_recipe() which
+            # must block on the Product lock.
+            t_approver.start()
+            t_approver_started = True
+            start_gate.set()
+
+            # Step 3: wait for the approver's PID to be populated.
             deadline = time.monotonic() + _HOLD_TIMEOUT
-            while (holder_pid[0] is None or approver_pid[0] is None) \
-                    and time.monotonic() < deadline:
+            while approver_pid[0] is None and time.monotonic() < deadline:
                 time.sleep(0.05)
             self.assertIsNotNone(holder_pid[0],
-                'Holder did not record its PG backend PID in time.')
+                'Holder did not record its PG backend PID. '
+                'hold_event fired but holder_pid is unexpectedly None.')
             self.assertIsNotNone(approver_pid[0],
                 'Approver did not record its PG backend PID in time.')
 
-            # Step 3: confirm the holder is actually blocking the approver at
+            # Step 4: confirm the holder is actually blocking the approver at
             # the PostgreSQL level using pg_blocking_pids().
-            # This is immune to scheduler latency: it is True only when the
-            # approver has reached its SELECT FOR UPDATE and is blocked by the
-            # holder's transaction.  The holder stays alive for
-            # _HOLDER_RELEASE_TIMEOUT (120 s), which far exceeds the
-            # _BLOCKER_POLL_TIMEOUT (30 s) polling window.
+            # Because the holder held the lock before the approver started,
+            # the approver is guaranteed to hit the lock before we poll.
             blocking = _wait_for_blocker(holder_pid[0], approver_pid[0])
             self.assertTrue(
                 blocking,
@@ -754,16 +781,19 @@ class ConcurrentRecipeApprovalTests(TransactionTestCase):
                 ),
             )
 
-            # Step 4: release the holder - it commits and releases the lock.
+            # Step 5: release the holder - it commits and releases the lock.
             release_event.set()
 
         finally:
             release_event.set()
+            start_gate.set()   # unblock approver if not already started
             t_holder.join(timeout=_JOIN_TIMEOUT)
-            t_approver.join(timeout=_JOIN_TIMEOUT)
+            if t_approver_started:
+                t_approver.join(timeout=_JOIN_TIMEOUT)
 
         self.assertFalse(t_holder.is_alive(), 'Holder thread did not exit.')
-        self.assertFalse(t_approver.is_alive(), 'Approver thread did not exit.')
+        if t_approver_started:
+            self.assertFalse(t_approver.is_alive(), 'Approver thread did not exit.')
 
         _assert_no_unexpected(self, results)
         self.assertEqual(results[0][0], 'ok',
@@ -1007,9 +1037,11 @@ class ConcurrentApprovalAndRetirementTests(TransactionTestCase):
         _make_recipe_item(rec_draft, ing)
 
         results       = [None, None]
-        barrier       = threading.Barrier(2, timeout=_BARRIER_TIMEOUT)
+        # No barrier: holder starts alone, waiter starts after hold_event.
+        holder_barrier = threading.Barrier(1, timeout=_BARRIER_TIMEOUT)
         hold_event    = threading.Event()
         release_event = threading.Event()
+        start_gate    = threading.Event()
         approver_pid  = [None]
 
         holder_pid = [None]
@@ -1018,39 +1050,46 @@ class ConcurrentApprovalAndRetirementTests(TransactionTestCase):
             name='retire-holder',
             target=_worker_hold_product_lock_then_retire,
             args=(prod.pk, rec_approved.pk,
-                  barrier, hold_event, release_event, results, 0),
+                  holder_barrier, hold_event, release_event, results, 0),
             kwargs={'holder_pid_box': holder_pid},
             daemon=True,
         )
         t_approver = threading.Thread(
             name='approver',
             target=_worker_approve_recipe,
-            args=(rec_draft.pk, user.pk, 'After retire commits', barrier, results, 1),
-            kwargs={'pid_box': approver_pid},
+            args=(rec_draft.pk, user.pk, 'After retire commits', None, results, 1),
+            kwargs={'pid_box': approver_pid, 'start_gate': start_gate},
             daemon=True,
         )
 
+        t_approver_started = False
         try:
+            # Start the holder alone first.
             t_holder.start()
-            t_approver.start()
 
-            # Step 1: wait for the holder to acquire the Product lock and
-            # record its PID.
+            # Step 1: wait for the holder to acquire the Product lock.
             held = hold_event.wait(timeout=_HOLD_TIMEOUT)
             self.assertTrue(held,
                 'Holder never signalled hold_event - did not acquire Product lock.')
 
-            # Step 2: wait for both PIDs to be populated.
+            # Step 2: start the approver and open its gate.  Because the
+            # holder already owns the Product lock, the approver is
+            # guaranteed to block on its own Product.select_for_update().
+            t_approver.start()
+            t_approver_started = True
+            start_gate.set()
+
+            # Step 3: wait for the approver's PID to be populated.
             deadline = time.monotonic() + _HOLD_TIMEOUT
-            while (holder_pid[0] is None or approver_pid[0] is None) \
-                    and time.monotonic() < deadline:
+            while approver_pid[0] is None and time.monotonic() < deadline:
                 time.sleep(0.05)
             self.assertIsNotNone(holder_pid[0],
-                'Holder did not record its PG backend PID in time.')
+                'Holder did not record its PG backend PID. '
+                'hold_event fired but holder_pid is unexpectedly None.')
             self.assertIsNotNone(approver_pid[0],
                 'Approver did not record its PG backend PID in time.')
 
-            # Step 3: confirm the holder is actually blocking the approver.
+            # Step 4: confirm the holder is actually blocking the approver.
             blocking = _wait_for_blocker(holder_pid[0], approver_pid[0])
             self.assertTrue(
                 blocking,
@@ -1063,16 +1102,19 @@ class ConcurrentApprovalAndRetirementTests(TransactionTestCase):
                 ),
             )
 
-            # Step 4: release the holder - it retires rec_approved and commits.
+            # Step 5: release the holder - it retires rec_approved and commits.
             release_event.set()
 
         finally:
             release_event.set()
+            start_gate.set()
             t_holder.join(timeout=_JOIN_TIMEOUT)
-            t_approver.join(timeout=_JOIN_TIMEOUT)
+            if t_approver_started:
+                t_approver.join(timeout=_JOIN_TIMEOUT)
 
         self.assertFalse(t_holder.is_alive(), 'Holder thread did not exit.')
-        self.assertFalse(t_approver.is_alive(), 'Approver thread did not exit.')
+        if t_approver_started:
+            self.assertFalse(t_approver.is_alive(), 'Approver thread did not exit.')
 
         _assert_no_unexpected(self, results)
 
@@ -1319,7 +1361,11 @@ class ProfileLockTests(TransactionTestCase):
         results       = [None, None]
         hold_event    = threading.Event()
         release_event = threading.Event()
-        barrier       = threading.Barrier(2, timeout=_BARRIER_TIMEOUT)
+        # Saver uses a Barrier(1) — fires immediately, no waiting for a peer.
+        # Retirer uses start_gate instead of a barrier, ensuring it starts
+        # only after the saver holds both the Product and Profile locks.
+        saver_barrier = threading.Barrier(1, timeout=_BARRIER_TIMEOUT)
+        start_gate    = threading.Event()
         retirer_pid   = [None]
         saver_pid     = [None]
 
@@ -1372,36 +1418,44 @@ class ProfileLockTests(TransactionTestCase):
             name='saver',
             target=_save_rule_then_hold,
             args=(prod.pk, prof.pk, user.pk,
-                  barrier, hold_event, release_event, results, 0, saver_pid),
+                  saver_barrier, hold_event, release_event, results, 0, saver_pid),
             daemon=True,
         )
         t_retirer = threading.Thread(
             name='retirer',
             target=_worker_retire_profile,
-            args=(prof.pk, barrier, results, 1),
-            kwargs={'pid_box': retirer_pid},
+            args=(prof.pk, None, results, 1),
+            kwargs={'pid_box': retirer_pid, 'start_gate': start_gate},
             daemon=True,
         )
 
+        t_retirer_started = False
         try:
+            # Start the saver alone first.
             t_saver.start()
-            t_retirer.start()
 
             # Step 1: wait for the saver to hold both locks and record its PID.
             held = hold_event.wait(timeout=_HOLD_TIMEOUT)
             self.assertTrue(held, 'Saver never signalled hold_event.')
 
-            # Step 2: wait for both PIDs to be populated.
+            # Step 2: start the retirer and open its gate.  Because the saver
+            # already owns the PackagingProfile lock, the retirer is guaranteed
+            # to block on its own select_for_update().
+            t_retirer.start()
+            t_retirer_started = True
+            start_gate.set()
+
+            # Step 3: wait for the retirer's PID to be populated.
             deadline = time.monotonic() + _HOLD_TIMEOUT
-            while (saver_pid[0] is None or retirer_pid[0] is None) \
-                    and time.monotonic() < deadline:
+            while retirer_pid[0] is None and time.monotonic() < deadline:
                 time.sleep(0.05)
             self.assertIsNotNone(saver_pid[0],
-                'Saver did not record its PG backend PID in time.')
+                'Saver did not record its PG backend PID. '
+                'hold_event fired but saver_pid is unexpectedly None.')
             self.assertIsNotNone(retirer_pid[0],
                 'Retirer did not record its PG backend PID in time.')
 
-            # Step 3: confirm the saver is actually blocking the retirer at
+            # Step 4: confirm the saver is actually blocking the retirer at
             # the PostgreSQL level using pg_blocking_pids().
             blocking = _wait_for_blocker(saver_pid[0], retirer_pid[0])
             self.assertTrue(
@@ -1415,16 +1469,19 @@ class ProfileLockTests(TransactionTestCase):
                 ),
             )
 
-            # Step 4: release the saver - it commits (creates the rule).
+            # Step 5: release the saver - it commits (creates the rule).
             release_event.set()
 
         finally:
             release_event.set()
+            start_gate.set()
             t_saver.join(timeout=_JOIN_TIMEOUT)
-            t_retirer.join(timeout=_JOIN_TIMEOUT)
+            if t_retirer_started:
+                t_retirer.join(timeout=_JOIN_TIMEOUT)
 
         self.assertFalse(t_saver.is_alive(), 'Saver thread did not exit.')
-        self.assertFalse(t_retirer.is_alive(), 'Retirer thread did not exit.')
+        if t_retirer_started:
+            self.assertFalse(t_retirer.is_alive(), 'Retirer thread did not exit.')
         _assert_no_unexpected(self, results)
 
         self.assertEqual(results[0][0], 'ok',
