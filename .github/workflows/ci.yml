@@ -107,6 +107,13 @@ jobs:
         # They are automatically skipped on SQLite (see tests_phase2a_pg.py).
         run: python manage.py test apps.inventory.tests_phase2a_pg --verbosity=2
 
+      - name: Run Phase 4B-6 PostgreSQL concurrency tests
+        # These tests verify Rev 3 §H.9 configuration-locking behaviour for
+        # recipe approval/retirement and packaging profile/rule operations.
+        # They use real concurrent PostgreSQL connections (TransactionTestCase +
+        # threading) and are skipped automatically on SQLite.
+        run: python manage.py test apps.inventory.tests_phase4b6_pg --verbosity=2
+
       - name: Run full inventory test suite (PostgreSQL)
         run: python manage.py test apps.inventory --verbosity=2
 
