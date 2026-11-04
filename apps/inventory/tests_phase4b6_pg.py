@@ -195,17 +195,12 @@ def _wait_for_pg_lock_wait(backend_pid, timeout=_PG_WAIT_TIMEOUT,
     Poll pg_stat_activity until the given backend reports
     wait_event_type = 'Lock', or until timeout seconds elapse.
 
+    DEPRECATED in favour of _wait_for_blocker(), which uses pg_blocking_pids()
+    for a deterministic check of the actual blocking relationship.  Kept for
+    reference; no longer called by production tests.
+
     Returns True if the backend entered a Lock wait within the timeout,
     False otherwise.
-
-    This is the only reliable way to prove that a PostgreSQL connection is
-    genuinely blocked on a row-level lock (SELECT FOR UPDATE) rather than
-    merely having not yet reached the lock statement in Python.  A
-    threading.Barrier or threading.Event only synchronises Python execution;
-    it cannot prove that the DB-level lock wait has begun.
-
-    Uses the main test thread's connection (not inside any worker transaction)
-    so the query is always immediately visible.
     """
     deadline = time.monotonic() + timeout
     sql = """
@@ -222,6 +217,65 @@ def _wait_for_pg_lock_wait(backend_pid, timeout=_PG_WAIT_TIMEOUT,
                 return True
         time.sleep(poll)
     return False
+
+
+def _wait_for_blocker(holder_pid, waiter_pid, timeout=30, poll=_PG_WAIT_POLL):
+    """
+    Poll until holder_pid appears in pg_blocking_pids(waiter_pid).
+
+    Returns True when the holder is demonstrably blocking the waiter at the
+    PostgreSQL row-lock level, or False if the timeout expires.
+
+    This is more reliable than polling pg_stat_activity alone because:
+      - pg_blocking_pids(waiter_pid) returns the set of backend PIDs that are
+        currently blocking waiter_pid from acquiring its requested lock.
+      - It is True only when the waiter is actually blocked AND the holder is
+        the specific transaction holding the conflicting lock.
+      - It is immune to scheduler starvation: even if the waiter thread is
+        delayed by the OS scheduler, the query correctly returns False until
+        the waiter actually reaches and blocks on its SELECT FOR UPDATE.
+
+    Diagnostic info on timeout:
+      Queries pg_stat_activity and pg_blocking_pids for both PIDs so the
+      failure message includes actionable context.
+    """
+    sql_check = "SELECT %s = ANY(pg_blocking_pids(%s))"
+    deadline   = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        with connection.cursor() as cur:
+            cur.execute(sql_check, [holder_pid, waiter_pid])
+            row = cur.fetchone()
+        if row and row[0]:
+            return True
+        time.sleep(poll)
+    return False
+
+
+def _blocker_diagnostic(holder_pid, waiter_pid):
+    """
+    Return a diagnostic string describing the current pg_stat_activity and
+    pg_blocking_pids state for both PIDs.  Used only in assertion failure
+    messages when _wait_for_blocker() times out.
+    """
+    sql = """
+        SELECT pid,
+               state,
+               wait_event_type,
+               wait_event,
+               pg_blocking_pids(pid) AS blocking
+        FROM   pg_stat_activity
+        WHERE  pid IN (%s, %s)
+        ORDER  BY pid
+    """
+    try:
+        with connection.cursor() as cur:
+            cur.execute(sql, [holder_pid, waiter_pid])
+            rows = cur.fetchall()
+        lines = [f'  pid={r[0]}: state={r[1]}, wait_type={r[2]}, '
+                 f'wait_event={r[3]}, blocking={r[4]}' for r in rows]
+        return '\n'.join(lines) if lines else '  (no rows found for these PIDs)'
+    except Exception as exc:
+        return f'  (diagnostic query failed: {exc})'
 
 
 # ── Worker functions ──────────────────────────────────────────────────────────
@@ -343,16 +397,17 @@ def _worker_save_rule(product_id, size, order_type, profile_id,
 # ── Hold-then-release workers ─────────────────────────────────────────────────
 
 def _worker_hold_product_lock(product_id, barrier, hold_event, release_event,
-                               results, idx):
+                               results, idx, holder_pid_box=None):
     """
     Acquire the Product lock and hold it until signalled.
 
     1. Reach barrier - synchronise with the other thread.
     2. SET LOCAL lock_timeout='15s' so a stalled lock times out cleanly.
     3. SELECT ... FOR UPDATE on the Product row.
-    4. Set hold_event - signal that the lock is held.
-    5. Wait on release_event (bounded 30 s safety net).
-    6. Exit atomic() - commit, release the lock.
+    4. Record this thread's PG backend PID in holder_pid_box[0] if provided.
+    5. Set hold_event - signal that the lock is held.
+    6. Wait on release_event (bounded 30 s safety net).
+    7. Exit atomic() - commit, release the lock.
     """
     from django.db import connection as c, transaction as tx
     from apps.menu.models import Product
@@ -362,6 +417,12 @@ def _worker_hold_product_lock(product_id, barrier, hold_event, release_event,
             with c.cursor() as cur:
                 cur.execute("SET LOCAL lock_timeout = '15s'")
             Product.objects.select_for_update().get(pk=product_id)
+            # Record PID *after* the Product lock is held so the test
+            # knows this PID is the blocker.
+            if holder_pid_box is not None:
+                with c.cursor() as cur:
+                    cur.execute('SELECT pg_backend_pid()')
+                    holder_pid_box[0] = cur.fetchone()[0]
             hold_event.set()
             released = release_event.wait(timeout=30)
             if not released:
@@ -377,7 +438,7 @@ def _worker_hold_product_lock(product_id, barrier, hold_event, release_event,
 
 def _worker_hold_product_lock_then_retire(product_id, recipe_id,
                                           barrier, hold_event, release_event,
-                                          results, idx):
+                                          results, idx, holder_pid_box=None):
     """
     Acquire the Product lock, signal hold_event, wait to be released, then
     call retire_recipe() - all inside one atomic transaction.
@@ -397,6 +458,11 @@ def _worker_hold_product_lock_then_retire(product_id, recipe_id,
                 cur.execute("SET LOCAL lock_timeout = '15s'")
             # Hold the Product lock while the approver is blocking on it.
             Product.objects.select_for_update().get(pk=product_id)
+            # Record PID *after* the Product lock is held.
+            if holder_pid_box is not None:
+                with c.cursor() as cur:
+                    cur.execute('SELECT pg_backend_pid()')
+                    holder_pid_box[0] = cur.fetchone()[0]
             hold_event.set()
             released = release_event.wait(timeout=30)
             if not released:
@@ -484,15 +550,24 @@ class ConcurrentRecipeApprovalTests(TransactionTestCase):
     @_require_postgresql
     def test_concurrent_approval_same_scope_only_one_wins(self):
         """
-        Two drafts for the same (product, size, scope) approved concurrently:
-        exactly one becomes approved; the other is rejected.
+        Two drafts for the same (product, size, scope) approved concurrently.
 
-        The Product lock serialises the two approval transactions.  The winner
-        commits its recipe as 'approved'.  The loser's TOCTOU refresh_from_db()
-        detects that its recipe is no longer draft (the winner already retired
-        it by updating the previous approved revision to 'retired'), or the
-        partial unique index recipe_one_approved_per_scope fires as the
-        DB-level backstop.
+        Both service calls legitimately return 'ok'.  The Product lock
+        serialises the two transactions:
+
+          - The winner acquires the lock, finds no existing approved recipe
+            for this scope, approves its own revision, and commits.
+          - The loser acquires the lock next.  It refreshes its recipe's
+            status (still draft — it is a different row).  It finds the
+            winner's recipe already approved via the existing_approved query,
+            retires it, and approves its own revision.  Also returns ok.
+
+        Final database state:
+          - Exactly one recipe is 'approved' (the loser's, since it ran second
+            and retired the winner's).
+          - The other recipe is 'retired'.
+          - The partial unique index recipe_one_approved_per_scope is never
+            violated because the loser retires the winner before approving.
         """
         prod = _make_product()
         ing  = _make_ingredient()
@@ -524,19 +599,29 @@ class ConcurrentRecipeApprovalTests(TransactionTestCase):
         self.assertFalse(timed_out, f'Threads timed out: {timed_out}')
         _assert_no_unexpected(self, results)
 
+        # Both service calls return ok: the second transaction retires the
+        # first's approved recipe and approves its own.
         ok_count = sum(1 for r in results if r[0] == 'ok')
-        self.assertEqual(ok_count, 1,
-            f'Expected exactly 1 approval to succeed, got {ok_count}. '
+        self.assertEqual(ok_count, 2,
+            f'Both approvals must return ok (second retires first then approves). '
             f'Results: {results}')
 
         from apps.inventory.models import Recipe
+        # Exactly one recipe remains approved.
         approved = Recipe.objects.filter(
             product=prod, size='none', order_type_scope='all',
             status=Recipe.STATUS_APPROVED,
         )
         self.assertEqual(approved.count(), 1,
             'Exactly one approved recipe must exist after concurrent approval.')
-        # Both recipe rows still exist (neither was deleted).
+        # The other recipe is retired (not deleted).
+        retired = Recipe.objects.filter(
+            product=prod, size='none', order_type_scope='all',
+            status=Recipe.STATUS_RETIRED,
+        )
+        self.assertEqual(retired.count(), 1,
+            'The previously approved recipe must be retired.')
+        # Both rows still exist.
         self.assertEqual(Recipe.objects.filter(product=prod).count(), 2)
 
     @_require_postgresql
@@ -546,13 +631,12 @@ class ConcurrentRecipeApprovalTests(TransactionTestCase):
         row-level Product lock until the first transaction commits.
 
         Scenario:
-          - Thread A (holder): acquires the Product lock, signals hold_event,
-            waits for the test to release it.
+          - Thread A (holder): acquires the Product lock, records its PG PID,
+            signals hold_event, waits for the test to release it.
           - Thread B (approver): calls approve_recipe() for a draft recipe on
             the same product and blocks at the Product lock.
-          - The test polls pg_stat_activity to confirm B has entered a
-            PostgreSQL Lock wait before releasing A.  This proves real DB-level
-            blocking, not just a Python scheduling race.
+          - The test uses pg_blocking_pids(waiter_pid) to confirm A is
+            actually blocking B at the PostgreSQL level before releasing A.
           - A commits and releases the lock.  B proceeds, acquires the lock,
             refreshes status, and approves the still-draft recipe successfully.
 
@@ -572,12 +656,14 @@ class ConcurrentRecipeApprovalTests(TransactionTestCase):
         barrier       = threading.Barrier(2, timeout=_BARRIER_TIMEOUT)
         hold_event    = threading.Event()
         release_event = threading.Event()
+        holder_pid    = [None]
         approver_pid  = [None]
 
         t_holder = threading.Thread(
             name='lock-holder',
             target=_worker_hold_product_lock,
             args=(prod.pk, barrier, hold_event, release_event, results, 0),
+            kwargs={'holder_pid_box': holder_pid},
             daemon=True,
         )
         t_approver = threading.Thread(
@@ -592,36 +678,39 @@ class ConcurrentRecipeApprovalTests(TransactionTestCase):
             t_holder.start()
             t_approver.start()
 
-            # Step 1: wait for the holder to acquire the Product lock.
+            # Step 1: wait for the holder to acquire the Product lock and
+            # record its PID.
             held = hold_event.wait(timeout=_HOLD_TIMEOUT)
             self.assertTrue(held, 'Holder never signalled hold_event.')
 
-            # Step 2: wait for the approver's PID to be recorded.
+            # Step 2: wait for both PIDs to be populated.
             deadline = time.monotonic() + _HOLD_TIMEOUT
-            while approver_pid[0] is None and time.monotonic() < deadline:
+            while (holder_pid[0] is None or approver_pid[0] is None) \
+                    and time.monotonic() < deadline:
                 time.sleep(0.05)
-            self.assertIsNotNone(
-                approver_pid[0],
-                'Approver did not record its PG backend PID in time.',
-            )
+            self.assertIsNotNone(holder_pid[0],
+                'Holder did not record its PG backend PID in time.')
+            self.assertIsNotNone(approver_pid[0],
+                'Approver did not record its PG backend PID in time.')
 
-            # Step 3: confirm the approver is genuinely waiting on the Product
-            # lock at the PostgreSQL level before releasing the holder.
-            # This is the key correctness check that distinguishes real blocking
-            # from a Python-level timing coincidence.
-            in_lock_wait = _wait_for_pg_lock_wait(approver_pid[0])
+            # Step 3: confirm the holder is actually blocking the approver at
+            # the PostgreSQL level using pg_blocking_pids().
+            # This is immune to scheduler latency: it is True only when the
+            # approver has reached its SELECT FOR UPDATE and is blocked by the
+            # holder's transaction.
+            blocking = _wait_for_blocker(holder_pid[0], approver_pid[0])
             self.assertTrue(
-                in_lock_wait,
-                f'Approver (PID {approver_pid[0]}) did not enter a PostgreSQL '
-                f'Lock wait within {_PG_WAIT_TIMEOUT} s.  '
-                'The Product lock may not be blocking it as expected.',
+                blocking,
+                f'Holder (PID {holder_pid[0]}) is not blocking '
+                f'approver (PID {approver_pid[0]}) within 30 s.\n'
+                + _blocker_diagnostic(holder_pid[0], approver_pid[0]),
             )
 
             # Step 4: release the holder - it commits and releases the lock.
             release_event.set()
 
         finally:
-            release_event.set()   # always unblock the holder on test failure
+            release_event.set()
             t_holder.join(timeout=_JOIN_TIMEOUT)
             t_approver.join(timeout=_JOIN_TIMEOUT)
 
@@ -631,8 +720,6 @@ class ConcurrentRecipeApprovalTests(TransactionTestCase):
         _assert_no_unexpected(self, results)
         self.assertEqual(results[0][0], 'ok',
             f'Holder had unexpected result: {results[0]}')
-        # The holder made no configuration changes, so rec1 is still draft when
-        # the approver acquires the lock.  Approval should succeed.
         self.assertEqual(results[1][0], 'ok',
             f'Approver should have succeeded but got: {results[1]}')
 
@@ -877,11 +964,14 @@ class ConcurrentApprovalAndRetirementTests(TransactionTestCase):
         release_event = threading.Event()
         approver_pid  = [None]
 
+        holder_pid = [None]
+
         t_holder = threading.Thread(
             name='retire-holder',
             target=_worker_hold_product_lock_then_retire,
             args=(prod.pk, rec_approved.pk,
                   barrier, hold_event, release_event, results, 0),
+            kwargs={'holder_pid_box': holder_pid},
             daemon=True,
         )
         t_approver = threading.Thread(
@@ -896,27 +986,29 @@ class ConcurrentApprovalAndRetirementTests(TransactionTestCase):
             t_holder.start()
             t_approver.start()
 
-            # Step 1: wait for the holder to acquire the Product lock.
+            # Step 1: wait for the holder to acquire the Product lock and
+            # record its PID.
             held = hold_event.wait(timeout=_HOLD_TIMEOUT)
             self.assertTrue(held,
                 'Holder never signalled hold_event - did not acquire Product lock.')
 
-            # Step 2: wait for the approver's PID to be recorded.
+            # Step 2: wait for both PIDs to be populated.
             deadline = time.monotonic() + _HOLD_TIMEOUT
-            while approver_pid[0] is None and time.monotonic() < deadline:
+            while (holder_pid[0] is None or approver_pid[0] is None) \
+                    and time.monotonic() < deadline:
                 time.sleep(0.05)
-            self.assertIsNotNone(
-                approver_pid[0],
-                'Approver did not record its PG backend PID in time.',
-            )
+            self.assertIsNotNone(holder_pid[0],
+                'Holder did not record its PG backend PID in time.')
+            self.assertIsNotNone(approver_pid[0],
+                'Approver did not record its PG backend PID in time.')
 
-            # Step 3: confirm the approver is genuinely waiting on the Product
-            # lock at the PostgreSQL level.
-            in_lock_wait = _wait_for_pg_lock_wait(approver_pid[0])
+            # Step 3: confirm the holder is actually blocking the approver.
+            blocking = _wait_for_blocker(holder_pid[0], approver_pid[0])
             self.assertTrue(
-                in_lock_wait,
-                f'Approver (PID {approver_pid[0]}) did not enter a PostgreSQL '
-                f'Lock wait within {_PG_WAIT_TIMEOUT} s.',
+                blocking,
+                f'Holder (PID {holder_pid[0]}) is not blocking '
+                f'approver (PID {approver_pid[0]}) within 30 s.\n'
+                + _blocker_diagnostic(holder_pid[0], approver_pid[0]),
             )
 
             # Step 4: release the holder - it retires rec_approved and commits.
@@ -1177,14 +1269,15 @@ class ProfileLockTests(TransactionTestCase):
         release_event = threading.Event()
         barrier       = threading.Barrier(2, timeout=_BARRIER_TIMEOUT)
         retirer_pid   = [None]
+        saver_pid     = [None]
 
         def _save_rule_then_hold(prod_id, prof_id, user_pk,
                                  barrier_, hold_ev, release_ev,
-                                 results_, idx):
+                                 results_, idx, saver_pid_box):
             """
             Inside one atomic transaction: lock Product + Profile, create the
-            rule, signal hold_event, hold the locks until released.
-            This exercises the actual H.9 lock order (Product -> Profile).
+            rule, record the saver's PG PID, signal hold_event, hold the
+            locks until released.  Exercises H.9 lock order (Product -> Profile).
             """
             from django.db import connection as c, transaction as tx
             from apps.inventory.models import PackagingProfile, ProductPackagingRule
@@ -1206,6 +1299,10 @@ class ProfileLockTests(TransactionTestCase):
                         no_packaging=False,
                         confirmed_by=CustomUser.objects.get(pk=user_pk),
                     )
+                    # Record PID *after* both locks are held.
+                    with c.cursor() as cur:
+                        cur.execute('SELECT pg_backend_pid()')
+                        saver_pid_box[0] = cur.fetchone()[0]
                     hold_ev.set()
                     released = release_ev.wait(timeout=30)
                     if not released:
@@ -1222,7 +1319,7 @@ class ProfileLockTests(TransactionTestCase):
             name='saver',
             target=_save_rule_then_hold,
             args=(prod.pk, prof.pk, user.pk,
-                  barrier, hold_event, release_event, results, 0),
+                  barrier, hold_event, release_event, results, 0, saver_pid),
             daemon=True,
         )
         t_retirer = threading.Thread(
@@ -1237,26 +1334,31 @@ class ProfileLockTests(TransactionTestCase):
             t_saver.start()
             t_retirer.start()
 
-            # Wait for the saver to hold the profile lock.
+            # Step 1: wait for the saver to hold both locks and record its PID.
             held = hold_event.wait(timeout=_HOLD_TIMEOUT)
             self.assertTrue(held, 'Saver never signalled hold_event.')
 
-            # Wait for the retirer's PID to be recorded.
+            # Step 2: wait for both PIDs to be populated.
             deadline = time.monotonic() + _HOLD_TIMEOUT
-            while retirer_pid[0] is None and time.monotonic() < deadline:
+            while (saver_pid[0] is None or retirer_pid[0] is None) \
+                    and time.monotonic() < deadline:
                 time.sleep(0.05)
+            self.assertIsNotNone(saver_pid[0],
+                'Saver did not record its PG backend PID in time.')
             self.assertIsNotNone(retirer_pid[0],
                 'Retirer did not record its PG backend PID in time.')
 
-            # Confirm the retirer is genuinely blocked on the PackagingProfile lock.
-            in_lock_wait = _wait_for_pg_lock_wait(retirer_pid[0])
+            # Step 3: confirm the saver is actually blocking the retirer at
+            # the PostgreSQL level using pg_blocking_pids().
+            blocking = _wait_for_blocker(saver_pid[0], retirer_pid[0])
             self.assertTrue(
-                in_lock_wait,
-                f'Retirer (PID {retirer_pid[0]}) did not enter a PostgreSQL '
-                f'Lock wait within {_PG_WAIT_TIMEOUT} s.',
+                blocking,
+                f'Saver (PID {saver_pid[0]}) is not blocking '
+                f'retirer (PID {retirer_pid[0]}) within 30 s.\n'
+                + _blocker_diagnostic(saver_pid[0], retirer_pid[0]),
             )
 
-            # Release the saver - it commits (creates the rule and releases locks).
+            # Step 4: release the saver - it commits (creates the rule).
             release_event.set()
 
         finally:

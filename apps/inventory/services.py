@@ -1649,17 +1649,45 @@ def approve_packaging_profile(profile_id, approved_by, approval_note):
     """
     Approve a draft PackagingProfile.
 
-    Rev 3 §H.9: lock PackagingProfile (new row only — no Product lock because
-    approving a profile changes no resolution until rules are repointed).
+    Rev 3 §H.9: lock PackagingProfile.
+
+    Concurrent-approval serialisation:
+      Each profile has its own PK, so locking one profile row does not block
+      a concurrent transaction that is approving a *different* profile row
+      with the same name (a different revision).  To serialise concurrent
+      approvals of same-name revisions without introducing deadlocks, this
+      service:
+
+        1. Reads the target profile's name without a lock.
+        2. Within the transaction, locks ALL profiles sharing that name
+           (case-insensitive) in a single, ascending-PK-ordered query.
+           Both concurrent transactions will contend on the same lowest-PK
+           row in the set, so one blocks and the other proceeds first.
+        3. Re-validates the target profile's status from the locked result.
+           If the target is absent (its name was changed between steps 1 and
+           2), raises a retryable PackagingConfigError.  The caller must
+           retry the call in a fresh transaction — by that time the new name
+           will be returned in step 1 and the correct lock set acquired.
+           No additional profile locks are acquired in this error path.
+        4. Checks that no sibling revision is already approved.
+        5. Wraps the final save in a savepoint so that a concurrent commit
+           that slips past the sibling check (an extremely narrow window)
+           is caught as an IntegrityError and translated to PackagingConfigError.
+
+    Lock order: PackagingProfile rows (ascending pk) → InventoryItems (ascending pk).
+    No Product lock: approving a profile changes no resolution until rules are
+    repointed.
 
     Validation:
       - Profile must be draft.
+      - No other revision with the same name may be approved.
       - Profile must have at least one PackagingProfileItem.
       - All items must be active packaging items.
 
     Returns the approved profile.
     """
     from apps.inventory.models import PackagingProfile, PackagingProfileItem
+    from django.db import IntegrityError as _IntegrityError
     from django.utils import timezone
 
     if not approval_note or not approval_note.strip():
@@ -1668,14 +1696,84 @@ def approve_packaging_profile(profile_id, approved_by, approval_note):
         )
 
     with transaction.atomic():
-        profile = PackagingProfile.objects.select_for_update().get(pk=profile_id)
+        # ── Step 1: read the profile name without a lock ──────────────────────
+        # A plain read is safe here because we re-validate the profile's status
+        # under the ordered lock in step 3.  If the profile's name is changed
+        # concurrently between this read and the ordered lock query, the target
+        # will be absent from the locked set; step 3 raises a retryable error
+        # rather than acquiring any additional locks out of order.
+        try:
+            profile_name = (
+                PackagingProfile.objects
+                .values_list('name', flat=True)
+                .get(pk=profile_id)
+            )
+        except PackagingProfile.DoesNotExist:
+            raise PackagingConfigError(f'Packaging profile {profile_id} not found.')
 
+        # ── Step 2: lock all same-name profiles in ascending pk order ─────────
+        # Both concurrent transactions for the same name will contend on the
+        # lowest-pk row in the result, serialising their execution.
+        # filter uses iexact to match the pp_one_approved_per_name constraint's
+        # case-insensitive uniqueness scope.
+        same_name_locked = list(
+            PackagingProfile.objects
+            .filter(name__iexact=profile_name)
+            .select_for_update()
+            .order_by('pk')
+        )
+
+        # ── Step 3: find the target profile in the locked set ─────────────────
+        # If the target is absent, the profile's name changed between step 1
+        # and the ordered lock query — a concurrent rename overtook this
+        # approval attempt.  We MUST NOT acquire an additional lock outside
+        # the ordered set: doing so could invert the lock order and create a
+        # deadlock with another transaction that already holds a lock from the
+        # new name set.
+        #
+        # Safe resolution: abort this attempt with a retryable error.  The
+        # caller can retry approve_packaging_profile() immediately; the second
+        # call will read the profile's new name in step 1 and lock the correct
+        # same-name set in step 2.
+        #
+        # A bounded retry inside this function is not safe while locks from
+        # step 2 are still held by the current transaction.  Releasing those
+        # locks requires the enclosing transaction.atomic() to commit or
+        # roll back, which cannot happen in the middle of this function body.
+        # The caller's retry starts a fresh transaction and acquires the right
+        # locks from scratch.
+        profile = next(
+            (p for p in same_name_locked if p.pk == profile_id), None
+        )
+        if profile is None:
+            raise PackagingConfigError(
+                f'Packaging profile {profile_id} was not found under the '
+                'expected name lock. Its name may have been changed concurrently. '
+                'Please retry the approval.'
+            )
+
+        # ── Step 4: validate status under lock ────────────────────────────────
         if profile.status != PackagingProfile.STATUS_DRAFT:
             raise PackagingConfigError(
                 f'Only draft profiles can be approved. '
                 f'This profile has status="{profile.status}".'
             )
 
+        # ── Step 5: check for an already-approved sibling ─────────────────────
+        already_approved = next(
+            (p for p in same_name_locked
+             if p.pk != profile_id
+             and p.status == PackagingProfile.STATUS_APPROVED),
+            None,
+        )
+        if already_approved:
+            raise PackagingConfigError(
+                f'An approved packaging profile named "{profile.name}" '
+                f'(revision {already_approved.revision}) already exists. '
+                'Retire it before approving a new revision.'
+            )
+
+        # ── Step 6: validate items ────────────────────────────────────────────
         items_qs = list(
             PackagingProfileItem.objects
             .filter(profile=profile)
@@ -1707,11 +1805,32 @@ def approve_packaging_profile(profile_id, approved_by, approval_note):
                     'Packaging profile lines must reference packaging items only.'
                 )
 
+        # ── Step 7: approve with savepoint backstop ───────────────────────────
+        # The savepoint catches the narrow window where two transactions both
+        # pass the sibling check and attempt to commit approved status for the
+        # same name.  The pp_one_approved_per_name constraint fires for the
+        # second committer; the savepoint rolls back that INSERT/UPDATE only,
+        # leaving the outer transaction intact so we can raise cleanly.
         profile.status       = PackagingProfile.STATUS_APPROVED
         profile.approved_by  = approved_by
         profile.approved_at  = timezone.now()
         profile.approval_note = approval_note.strip()
-        profile.save(update_fields=['status', 'approved_by', 'approved_at', 'approval_note', 'updated_at'])
+        try:
+            with transaction.atomic(savepoint=True):
+                profile.save(update_fields=[
+                    'status', 'approved_by', 'approved_at', 'approval_note', 'updated_at',
+                ])
+        except _IntegrityError as exc:
+            # Translate only the expected constraint violation.  Any other
+            # IntegrityError (e.g. a NOT NULL violation) is re-raised so it
+            # surfaces as the real error rather than a misleading PackagingConfigError.
+            if 'pp_one_approved_per_name' in str(exc):
+                raise PackagingConfigError(
+                    f'An approved packaging profile named "{profile.name}" '
+                    'already exists. '
+                    '(Concurrent approval committed while this transaction was running.)'
+                ) from exc
+            raise
 
     return profile
 
@@ -1824,16 +1943,46 @@ def save_packaging_rule(product_id, size, order_type,
                 'updated_by', 'updated_at',
             ])
         else:
-            rule = ProductPackagingRule.objects.create(
-                product=product,
-                size=size,
-                order_type=order_type,
-                profile=profile,
-                no_packaging=no_packaging,
-                confirmed_by=confirmed_by,
-                confirmed_at=now,
-                updated_by=confirmed_by,
-                updated_at=now,
-            )
+            # ── TOCTOU guard (create path only) ───────────────────────────────
+            # The Product lock ensures no concurrent writer has committed a rule
+            # for this combination since we acquired the lock.  A plain check
+            # here is sufficient because the Product lock serialises all
+            # create() calls for this product.
+            if ProductPackagingRule.objects.filter(
+                product=product, size=size, order_type=order_type,
+            ).exists():
+                raise PackagingConfigError(
+                    f'A packaging rule for {product.name!r} '
+                    f'size={size!r} order_type={order_type!r} already exists.'
+                )
+            # Savepoint backstop: the TOCTOU check above handles the common case.
+            # The savepoint catches the extremely narrow window between the check
+            # and the INSERT where a concurrent transaction could commit first
+            # (both passed the check under the same Product lock, which cannot
+            # happen in practice because the Product lock serialises writers —
+            # but the savepoint protects against any future code path that
+            # bypasses the lock).
+            from django.db import IntegrityError as _IntegrityError
+            try:
+                with transaction.atomic(savepoint=True):
+                    rule = ProductPackagingRule.objects.create(
+                        product=product,
+                        size=size,
+                        order_type=order_type,
+                        profile=profile,
+                        no_packaging=no_packaging,
+                        confirmed_by=confirmed_by,
+                        confirmed_at=now,
+                        updated_by=confirmed_by,
+                        updated_at=now,
+                    )
+            except _IntegrityError as exc:
+                # Translate the expected unique-combination constraint only.
+                if 'ppr_unique_combination' in str(exc):
+                    raise PackagingConfigError(
+                        f'A packaging rule for {product.name!r} '
+                        f'size={size!r} order_type={order_type!r} already exists.'
+                    ) from exc
+                raise
 
     return rule

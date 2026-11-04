@@ -399,6 +399,54 @@ class ApprovePackagingProfileServiceTests(TestCase):
         with self.assertRaises(PackagingConfigError):
             approve_packaging_profile(prof.pk, self.admin, 'Wrong type')
 
+    def test_approve_profile_missing_from_locked_set_raises_retryable_error(self):
+        """
+        If the ordered same-name lock query returns a set that does not contain
+        the target profile PK (simulating a concurrent rename between step 1
+        and step 2), approve_packaging_profile() must raise PackagingConfigError
+        with a message directing the caller to retry.
+
+        No fallback lock should be attempted — acquiring an extra profile lock
+        outside the ordered set could invert the lock order and deadlock with
+        another concurrent transaction.
+
+        This test uses unittest.mock to make the step-2 filter return an empty
+        list, triggering the missing-target branch while step 1 (the
+        values_list name read) still returns a valid profile name.
+        """
+        from unittest.mock import patch, MagicMock
+
+        pkg  = _packaging_item()
+        prof = _draft_profile(name=f'MockProfile_{_uid()}')
+        PackagingProfileItem.objects.create(
+            profile=prof, inventory_item=pkg, quantity=Decimal('1.000'),
+        )
+
+        # Patch PackagingProfile at its source module so the deferred import
+        # inside approve_packaging_profile() picks up the mock.
+        # - Step 1: objects.values_list('name', flat=True).get(pk=...) → prof.name
+        # - Step 2: objects.filter(...).select_for_update().order_by('pk')
+        #           → [] (empty list, simulating the target not being found)
+        # DoesNotExist is preserved so the `except PackagingProfile.DoesNotExist`
+        # in step 1 of the service works correctly.
+        with patch('apps.inventory.models.PackagingProfile') as mock_cls:
+            mock_cls.objects.values_list.return_value.get.return_value = prof.name
+            mock_cls.objects.filter.return_value\
+                           .select_for_update.return_value\
+                           .order_by.return_value = []
+            mock_cls.DoesNotExist = PackagingProfile.DoesNotExist
+            mock_cls.STATUS_DRAFT    = PackagingProfile.STATUS_DRAFT
+            mock_cls.STATUS_APPROVED = PackagingProfile.STATUS_APPROVED
+
+            with self.assertRaises(PackagingConfigError) as ctx:
+                approve_packaging_profile(prof.pk, self.admin, 'Client confirmed')
+
+        self.assertIn(
+            'retry the approval',
+            str(ctx.exception),
+            'Error message must direct the caller to retry.',
+        )
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # Service tests — retire_packaging_profile
