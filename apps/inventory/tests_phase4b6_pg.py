@@ -180,11 +180,21 @@ def _make_profile_item(profile, inv_item, qty=Decimal('1.000')):
 
 
 # ── Worker timeout constants ──────────────────────────────────────────────────
-_BARRIER_TIMEOUT = 10   # seconds - wait for all threads to reach the barrier
-_HOLD_TIMEOUT    = 12   # seconds - wait for the holder to signal lock held
-_JOIN_TIMEOUT    = 35   # seconds - must exceed worker release_event.wait(30)
-_PG_WAIT_TIMEOUT = 10   # seconds - poll pg_stat_activity for lock-wait confirmation
-_PG_WAIT_POLL    = 0.05 # seconds - polling interval
+_BARRIER_TIMEOUT        = 10   # seconds — wait for all threads to reach the barrier
+_HOLD_TIMEOUT           = 12   # seconds — wait for the holder to signal lock held
+_BLOCKER_POLL_TIMEOUT   = 30   # seconds — _wait_for_blocker() polling window
+_HOLDER_RELEASE_TIMEOUT = 120  # seconds — holder's release_event.wait() safety net
+                                #   Must exceed _BLOCKER_POLL_TIMEOUT plus the time
+                                #   the test needs to call release_event.set() after
+                                #   _wait_for_blocker() returns.  Using 120 s gives
+                                #   a ~90 s buffer: the holder stays alive throughout
+                                #   the entire blocker-wait phase and well beyond.
+_JOIN_TIMEOUT           = 35   # seconds — join threads after release_event.set()
+                                #   Once the holder's release_event fires it exits
+                                #   its atomic block and closes its connection quickly.
+                                #   35 s is sufficient for that cleanup.
+_PG_WAIT_TIMEOUT        = 10   # seconds — legacy; kept for _wait_for_pg_lock_wait
+_PG_WAIT_POLL           = 0.05 # seconds — polling interval
 
 
 # ── PostgreSQL lock-wait confirmation ─────────────────────────────────────────
@@ -219,25 +229,24 @@ def _wait_for_pg_lock_wait(backend_pid, timeout=_PG_WAIT_TIMEOUT,
     return False
 
 
-def _wait_for_blocker(holder_pid, waiter_pid, timeout=30, poll=_PG_WAIT_POLL):
+def _wait_for_blocker(holder_pid, waiter_pid, timeout=_BLOCKER_POLL_TIMEOUT,
+                      poll=_PG_WAIT_POLL):
     """
     Poll until holder_pid appears in pg_blocking_pids(waiter_pid).
 
     Returns True when the holder is demonstrably blocking the waiter at the
     PostgreSQL row-lock level, or False if the timeout expires.
 
-    This is more reliable than polling pg_stat_activity alone because:
-      - pg_blocking_pids(waiter_pid) returns the set of backend PIDs that are
-        currently blocking waiter_pid from acquiring its requested lock.
-      - It is True only when the waiter is actually blocked AND the holder is
-        the specific transaction holding the conflicting lock.
-      - It is immune to scheduler starvation: even if the waiter thread is
-        delayed by the OS scheduler, the query correctly returns False until
-        the waiter actually reaches and blocks on its SELECT FOR UPDATE.
+    pg_blocking_pids(waiter_pid) returns False until the waiter's connection
+    has actually issued its SELECT FOR UPDATE and been placed on the lock wait
+    queue by PostgreSQL.  This is immune to Python-thread scheduling latency:
+    even if the waiter thread is not scheduled immediately after the barrier,
+    the query keeps returning False until the waiter genuinely blocks.
 
-    Diagnostic info on timeout:
-      Queries pg_stat_activity and pg_blocking_pids for both PIDs so the
-      failure message includes actionable context.
+    The holder must remain inside its transaction for the full duration of
+    this call.  Use _HOLDER_RELEASE_TIMEOUT (currently 120 s) for the
+    holder's release_event.wait() to guarantee it stays alive throughout
+    the _BLOCKER_POLL_TIMEOUT (30 s) polling window.
     """
     sql_check = "SELECT %s = ANY(pg_blocking_pids(%s))"
     deadline   = time.monotonic() + timeout
@@ -251,12 +260,20 @@ def _wait_for_blocker(holder_pid, waiter_pid, timeout=30, poll=_PG_WAIT_POLL):
     return False
 
 
-def _blocker_diagnostic(holder_pid, waiter_pid):
+def _blocker_diagnostic(holder_pid, waiter_pid, results=None,
+                        threads=None):
     """
-    Return a diagnostic string describing the current pg_stat_activity and
-    pg_blocking_pids state for both PIDs.  Used only in assertion failure
-    messages when _wait_for_blocker() times out.
+    Return a diagnostic string for use in assertion failure messages when
+    _wait_for_blocker() times out.
+
+    Reports:
+      - pg_stat_activity rows for both PIDs (if still present).
+      - Each worker's current result tuple, if results[] is provided.
+      - Whether each worker thread is still alive, if threads[] is provided.
     """
+    lines = [f'holder_pid={holder_pid}, waiter_pid={waiter_pid}']
+
+    # --- pg_stat_activity ---
     sql = """
         SELECT pid,
                state,
@@ -271,11 +288,31 @@ def _blocker_diagnostic(holder_pid, waiter_pid):
         with connection.cursor() as cur:
             cur.execute(sql, [holder_pid, waiter_pid])
             rows = cur.fetchall()
-        lines = [f'  pid={r[0]}: state={r[1]}, wait_type={r[2]}, '
-                 f'wait_event={r[3]}, blocking={r[4]}' for r in rows]
-        return '\n'.join(lines) if lines else '  (no rows found for these PIDs)'
+        if rows:
+            for r in rows:
+                lines.append(
+                    f'  pg_stat pid={r[0]}: state={r[1]}, '
+                    f'wait_type={r[2]}, wait_event={r[3]}, blocking={r[4]}'
+                )
+        else:
+            lines.append(
+                '  pg_stat: no rows found — both connections may have closed '
+                'before diagnosis ran (holder safety timeout too short?)'
+            )
     except Exception as exc:
-        return f'  (diagnostic query failed: {exc})'
+        lines.append(f'  pg_stat query failed: {exc}')
+
+    # --- worker results ---
+    if results is not None:
+        for i, r in enumerate(results):
+            lines.append(f'  results[{i}] = {r!r}')
+
+    # --- thread liveness ---
+    if threads is not None:
+        for t in threads:
+            lines.append(f'  thread {t.name!r}: alive={t.is_alive()}')
+
+    return '\n'.join(lines)
 
 
 # ── Worker functions ──────────────────────────────────────────────────────────
@@ -401,13 +438,15 @@ def _worker_hold_product_lock(product_id, barrier, hold_event, release_event,
     """
     Acquire the Product lock and hold it until signalled.
 
-    1. Reach barrier - synchronise with the other thread.
+    1. Reach barrier.
     2. SET LOCAL lock_timeout='15s' so a stalled lock times out cleanly.
     3. SELECT ... FOR UPDATE on the Product row.
     4. Record this thread's PG backend PID in holder_pid_box[0] if provided.
-    5. Set hold_event - signal that the lock is held.
-    6. Wait on release_event (bounded 30 s safety net).
-    7. Exit atomic() - commit, release the lock.
+    5. Set hold_event — signal that the lock is held.
+    6. Wait on release_event (bounded _HOLDER_RELEASE_TIMEOUT seconds).
+       This must be longer than _BLOCKER_POLL_TIMEOUT so the holder stays
+       alive throughout the entire blocker-detection polling window.
+    7. Exit atomic() — commit, release the lock.
     """
     from django.db import connection as c, transaction as tx
     from apps.menu.models import Product
@@ -424,9 +463,10 @@ def _worker_hold_product_lock(product_id, barrier, hold_event, release_event,
                     cur.execute('SELECT pg_backend_pid()')
                     holder_pid_box[0] = cur.fetchone()[0]
             hold_event.set()
-            released = release_event.wait(timeout=30)
+            released = release_event.wait(timeout=_HOLDER_RELEASE_TIMEOUT)
             if not released:
-                results[idx] = ('timeout', 'release_event never set within 30s')
+                results[idx] = ('timeout',
+                    f'release_event never set within {_HOLDER_RELEASE_TIMEOUT}s')
                 return
         results[idx] = ('ok',)
     except Exception as exc:
@@ -464,9 +504,10 @@ def _worker_hold_product_lock_then_retire(product_id, recipe_id,
                     cur.execute('SELECT pg_backend_pid()')
                     holder_pid_box[0] = cur.fetchone()[0]
             hold_event.set()
-            released = release_event.wait(timeout=30)
+            released = release_event.wait(timeout=_HOLDER_RELEASE_TIMEOUT)
             if not released:
-                results[idx] = ('timeout', 'release_event never set')
+                results[idx] = ('timeout',
+                    f'release_event never set within {_HOLDER_RELEASE_TIMEOUT}s')
                 return
             # Retire the recipe while still holding the transaction/lock.
             retire_recipe(recipe_id)
@@ -493,9 +534,10 @@ def _worker_hold_profile_lock(profile_id, barrier, hold_event, release_event,
                 cur.execute("SET LOCAL lock_timeout = '15s'")
             PackagingProfile.objects.select_for_update().get(pk=profile_id)
             hold_event.set()
-            released = release_event.wait(timeout=30)
+            released = release_event.wait(timeout=_HOLDER_RELEASE_TIMEOUT)
             if not released:
-                results[idx] = ('timeout', 'release_event never set within 30s')
+                results[idx] = ('timeout',
+                    f'release_event never set within {_HOLDER_RELEASE_TIMEOUT}s')
                 return
         results[idx] = ('ok',)
     except Exception as exc:
@@ -697,13 +739,19 @@ class ConcurrentRecipeApprovalTests(TransactionTestCase):
             # the PostgreSQL level using pg_blocking_pids().
             # This is immune to scheduler latency: it is True only when the
             # approver has reached its SELECT FOR UPDATE and is blocked by the
-            # holder's transaction.
+            # holder's transaction.  The holder stays alive for
+            # _HOLDER_RELEASE_TIMEOUT (120 s), which far exceeds the
+            # _BLOCKER_POLL_TIMEOUT (30 s) polling window.
             blocking = _wait_for_blocker(holder_pid[0], approver_pid[0])
             self.assertTrue(
                 blocking,
-                f'Holder (PID {holder_pid[0]}) is not blocking '
-                f'approver (PID {approver_pid[0]}) within 30 s.\n'
-                + _blocker_diagnostic(holder_pid[0], approver_pid[0]),
+                'pg_blocking_pids() did not confirm holder is blocking approver '
+                f'within {_BLOCKER_POLL_TIMEOUT} s.\n'
+                + _blocker_diagnostic(
+                    holder_pid[0], approver_pid[0],
+                    results=results,
+                    threads=[t_holder, t_approver],
+                ),
             )
 
             # Step 4: release the holder - it commits and releases the lock.
@@ -1006,9 +1054,13 @@ class ConcurrentApprovalAndRetirementTests(TransactionTestCase):
             blocking = _wait_for_blocker(holder_pid[0], approver_pid[0])
             self.assertTrue(
                 blocking,
-                f'Holder (PID {holder_pid[0]}) is not blocking '
-                f'approver (PID {approver_pid[0]}) within 30 s.\n'
-                + _blocker_diagnostic(holder_pid[0], approver_pid[0]),
+                'pg_blocking_pids() did not confirm holder is blocking approver '
+                f'within {_BLOCKER_POLL_TIMEOUT} s.\n'
+                + _blocker_diagnostic(
+                    holder_pid[0], approver_pid[0],
+                    results=results,
+                    threads=[t_holder, t_approver],
+                ),
             )
 
             # Step 4: release the holder - it retires rec_approved and commits.
@@ -1304,9 +1356,10 @@ class ProfileLockTests(TransactionTestCase):
                         cur.execute('SELECT pg_backend_pid()')
                         saver_pid_box[0] = cur.fetchone()[0]
                     hold_ev.set()
-                    released = release_ev.wait(timeout=30)
+                    released = release_ev.wait(timeout=_HOLDER_RELEASE_TIMEOUT)
                     if not released:
-                        results_[idx] = ('timeout', 'release_event not set')
+                        results_[idx] = ('timeout',
+                            f'release_event not set within {_HOLDER_RELEASE_TIMEOUT}s')
                         return
                 results_[idx] = ('ok',)
             except Exception as exc:
@@ -1353,9 +1406,13 @@ class ProfileLockTests(TransactionTestCase):
             blocking = _wait_for_blocker(saver_pid[0], retirer_pid[0])
             self.assertTrue(
                 blocking,
-                f'Saver (PID {saver_pid[0]}) is not blocking '
-                f'retirer (PID {retirer_pid[0]}) within 30 s.\n'
-                + _blocker_diagnostic(saver_pid[0], retirer_pid[0]),
+                'pg_blocking_pids() did not confirm saver is blocking retirer '
+                f'within {_BLOCKER_POLL_TIMEOUT} s.\n'
+                + _blocker_diagnostic(
+                    saver_pid[0], retirer_pid[0],
+                    results=results,
+                    threads=[t_saver, t_retirer],
+                ),
             )
 
             # Step 4: release the saver - it commits (creates the rule).
