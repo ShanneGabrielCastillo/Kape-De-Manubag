@@ -114,6 +114,13 @@ jobs:
         # threading) and are skipped automatically on SQLite.
         run: python manage.py test apps.inventory.tests_phase4b6_pg --verbosity=2
 
+      - name: Run Phase 5B-7 PostgreSQL concurrency tests
+        # These tests verify Rev 3 §M.5 items 5–6: cancel racing mark-ready
+        # and duplicate mark-ready requests.  They use real concurrent
+        # PostgreSQL connections (TransactionTestCase + threading) and are
+        # skipped automatically on SQLite.
+        run: python manage.py test apps.orders.tests_phase5b7_pg --verbosity=2
+
       - name: Run full inventory test suite (PostgreSQL)
         run: python manage.py test apps.inventory --verbosity=2
 
