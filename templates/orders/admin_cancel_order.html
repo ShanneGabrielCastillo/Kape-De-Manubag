@@ -1,0 +1,147 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }} | {% trans "Site administration" %}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label='orders' %}">Orders</a>
+  &rsaquo; <a href="{% url 'admin:orders_order_changelist' %}">Orders</a>
+  &rsaquo; <a href="{% url 'admin:orders_order_change' order.pk %}">#{{ order.order_number }}</a>
+  &rsaquo; Cancel Order
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+
+<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:14px 18px;margin-bottom:20px">
+  <strong>⚠ You are about to cancel this order.</strong>
+  {% if status == 'awaiting_payment' %}
+  <p style="margin:6px 0 0">This order has not yet been accepted for preparation. All legacy stock quantities will be automatically restored. No further input is required.</p>
+  {% elif status == 'preparing' %}
+  <p style="margin:6px 0 0">This order is in preparation. Declare how many units of each item have already been prepared. Only <strong>unprepared</strong> units will be returned to stock. Prepared units remain deducted.</p>
+  {% elif status == 'ready' %}
+  <p style="margin:6px 0 0">This order is ready for collection. All units are treated as prepared and <strong>no stock will be automatically restored</strong>. Declare how many prepared units were discarded as waste.</p>
+  {% endif %}
+</div>
+
+{% if error %}
+<div style="background:#f8d7da;border:1px solid #f5c6cb;border-radius:6px;padding:12px 18px;margin-bottom:18px;color:#721c24">
+  <strong>Error:</strong> {{ error }}
+</div>
+{% endif %}
+
+<form method="post" action="">
+  {% csrf_token %}
+
+  {% if status == 'awaiting_payment' %}
+  {# No per-item inputs needed for awaiting_payment — system generates dispositions #}
+  <p style="color:#555;margin-bottom:20px">No disposition input is required for this order status.</p>
+
+  {% elif status == 'preparing' %}
+  <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+    <thead>
+      <tr style="background:#f8f9fa">
+        <th style="text-align:left;padding:10px 12px;border-bottom:2px solid #dee2e6">Item</th>
+        <th style="text-align:center;padding:10px 12px;border-bottom:2px solid #dee2e6">Ordered</th>
+        <th style="text-align:center;padding:10px 12px;border-bottom:2px solid #dee2e6">Prepared</th>
+        <th style="text-align:center;padding:10px 12px;border-bottom:2px solid #dee2e6">Discarded</th>
+        <th style="text-align:left;padding:10px 12px;border-bottom:2px solid #dee2e6">Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for item in order_items %}
+    <tr style="border-bottom:1px solid #dee2e6">
+      <td style="padding:10px 12px">
+        <strong>{{ item.product_name }}</strong>
+        {% if item.inventory_mode == 'ingredient' %}<small style="color:#6c757d;display:block">Ingredient-tracked</small>{% endif %}
+      </td>
+      <td style="text-align:center;padding:10px 12px">{{ item.quantity }}</td>
+      <td style="text-align:center;padding:10px 12px">
+        <input type="number"
+               name="prepared_{{ item.pk }}"
+               min="0"
+               max="{{ item.quantity }}"
+               value="0"
+               class="vIntegerField"
+               style="width:70px;text-align:center"
+               required>
+      </td>
+      <td style="text-align:center;padding:10px 12px">
+        <input type="number"
+               name="discarded_{{ item.pk }}"
+               min="0"
+               max="{{ item.quantity }}"
+               value="0"
+               class="vIntegerField"
+               style="width:70px;text-align:center"
+               required>
+      </td>
+      <td style="padding:10px 12px;color:#6c757d;font-size:0.85rem">
+        Unprepared = ordered &minus; prepared. Only unprepared units restored.
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  {% elif status == 'ready' %}
+  <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+    <thead>
+      <tr style="background:#f8f9fa">
+        <th style="text-align:left;padding:10px 12px;border-bottom:2px solid #dee2e6">Item</th>
+        <th style="text-align:center;padding:10px 12px;border-bottom:2px solid #dee2e6">Prepared (all)</th>
+        <th style="text-align:center;padding:10px 12px;border-bottom:2px solid #dee2e6">Discarded as waste</th>
+        <th style="text-align:left;padding:10px 12px;border-bottom:2px solid #dee2e6">Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for item in order_items %}
+    <tr style="border-bottom:1px solid #dee2e6">
+      <td style="padding:10px 12px">
+        <strong>{{ item.product_name }}</strong>
+        {% if item.inventory_mode == 'ingredient' %}<small style="color:#6c757d;display:block">Ingredient-tracked</small>{% endif %}
+      </td>
+      <td style="text-align:center;padding:10px 12px;color:#6c757d">{{ item.quantity }}</td>
+      <td style="text-align:center;padding:10px 12px">
+        {% if item.inventory_mode == 'legacy' %}
+        <input type="number"
+               name="discarded_{{ item.pk }}"
+               min="0"
+               max="{{ item.quantity }}"
+               value="0"
+               class="vIntegerField"
+               style="width:70px;text-align:center"
+               required>
+        {% else %}
+        <span style="color:#6c757d">—</span>
+        {% endif %}
+      </td>
+      <td style="padding:10px 12px;color:#6c757d;font-size:0.85rem">
+        {% if item.inventory_mode == 'legacy' %}
+          Enter 0 if no units were discarded. No stock is automatically restored.
+        {% else %}
+          Ingredient items: no legacy stock to restore.
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <div style="display:flex;gap:12px;align-items:center;margin-top:20px">
+    <input type="submit"
+           value="Confirm Cancellation"
+           class="button"
+           style="background:#dc3545;color:#fff;border:1px solid #dc3545;padding:8px 18px;cursor:pointer;border-radius:4px;font-size:0.95rem">
+    <a href="{% url 'admin:orders_order_change' order.pk %}"
+       class="button cancel-link"
+       style="padding:8px 18px;border-radius:4px;text-decoration:none">
+      Go Back
+    </a>
+  </div>
+</form>
+{% endblock %}

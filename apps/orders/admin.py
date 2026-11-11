@@ -1,8 +1,10 @@
 from django.contrib import admin
 from django.db import transaction
+from django.urls import path, reverse
 from django.utils import timezone
+from django.utils.html import format_html
 from .models import Order, OrderItem, Cart, CartItem
-from apps.orders.services import restore_inventory_for_order, validate_status_transition
+from apps.orders.services import validate_status_transition
 
 # Terminal statuses — orders in these states are permanent financial records
 # and must never be modified or deleted through the admin interface.
@@ -55,7 +57,35 @@ class OrderItemInline(admin.TabularInline):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ['order_number', 'customer_name', 'status', 'total', 'is_paid', 'created_at']
+    def get_urls(self):
+        """Add the admin intermediate cancellation page URL."""
+        from apps.orders import admin_views
+        urls = super().get_urls()
+        custom = [
+            path(
+                '<int:pk>/cancel/',
+                self.admin_site.admin_view(admin_views.admin_cancel_order),
+                name='orders_order_cancel',
+            ),
+        ]
+        return custom + urls
+
+    def cancel_order_link(self, obj):
+        """Render a 'Cancel Order' action link for non-terminal active orders."""
+        if obj and obj.status not in _TERMINAL_STATUSES:
+            url = reverse('admin:orders_order_cancel', args=[obj.pk])
+            return format_html(
+                '<a class="button" href="{}" style="'
+                'background:#dc3545;color:#fff;padding:4px 10px;'
+                'border-radius:4px;text-decoration:none;font-size:0.85rem">'
+                'Cancel Order</a>',
+                url,
+            )
+        return '—'
+
+    cancel_order_link.short_description = 'Cancel'
+
+    list_display = ['order_number', 'customer_name', 'status', 'total', 'is_paid', 'created_at', 'cancel_order_link']
     list_filter = ['status', 'is_paid', 'order_type']
     search_fields = ['order_number', 'customer_name']
     inlines = [OrderItemInline]
@@ -106,75 +136,87 @@ class OrderAdmin(admin.ModelAdmin):
         return _ORDER_READONLY_BASE
 
     def save_model(self, request, obj, form, change):
-        """Run the full cancellation business logic (inventory restore,
-        cancelled_at timestamp) when an admin changes status to 'cancelled',
-        and block all other status transitions that are invalid per
-        VALID_TRANSITIONS.
+        """Block direct status changes to 'cancelled' through the ordinary
+        Django Admin change form.  Cancellation must go through the dedicated
+        intermediate cancellation page, which collects the required disposition
+        data and calls the shared ``on_status_changed()`` service.
 
-        Without this override, a superuser editing an Order row in the admin
-        could bypass validate_status_transition, skip restore_inventory_for_order,
-        and leave stock_deducted=True on a cancelled order — dirty inventory
-        forever.
+        Without this override, an admin could bypass the disposition workflow
+        entirely by changing the status dropdown on the change form.
+
+        For all other valid status transitions (e.g. preparing → ready), the
+        override validates the transition, calls the inventory coordinator
+        (Phase 5B-3: no-op for non-cancel; Phase 6B will add consumption), and
+        saves normally.
+
+        Phase 5B-3: wrapped in transaction.atomic() with a locked read of the
+        Order row so the coordinator runs under the same lock hierarchy as the
+        view-based paths (Rev 7 §10.3).
         """
         if not change:
-            # New orders are always created via the normal views; admin
-            # creation is unusual but falls through to super().save_model().
-            super().save_model(request, obj, form, change)
-            return
-
-        # Re-fetch the stored status before this edit so we can compare.
-        try:
-            original = Order.objects.get(pk=obj.pk)
-            original_status = original.status
-        except Order.DoesNotExist:
             super().save_model(request, obj, form, change)
             return
 
         new_status = obj.status
+        error_message = None
 
-        # Validate the transition using the same rules as the view layer.
-        # If invalid, revert the status on the in-memory object and save the
-        # rest of the fields unchanged — the admin will see the record saved
-        # without the bad status change.
         try:
-            validate_status_transition(original_status, new_status)
-        except ValueError as e:
-            self.message_user(
-                request,
-                f"Status change blocked: {e} The status was not changed.",
-                level='error',
-            )
-            obj.status = original_status
-            super().save_model(request, obj, form, change)
-            return
-
-        if new_status == 'cancelled' and original_status != 'cancelled':
             with transaction.atomic():
-                # Lock the row to prevent a concurrent view-layer cancel
-                # racing this admin save.
-                locked = Order.objects.select_for_update().get(pk=obj.pk)
-                # Re-validate against the freshly locked status.
+                # Lock the existing Order row so we read the authoritative
+                # status and no concurrent transition can race us.
                 try:
-                    validate_status_transition(locked.status, new_status)
-                except ValueError as e:
-                    self.message_user(request, f"Status change blocked: {e}", level='error')
-                    obj.status = locked.status
+                    locked = Order.objects.select_for_update().get(pk=obj.pk)
+                except Order.DoesNotExist:
                     super().save_model(request, obj, form, change)
                     return
 
-                # Restore inventory — idempotent, safe to call even if
-                # stock_deducted is already False.
-                restore_inventory_for_order(locked, performed_by=request.user)
+                original_status = locked.status
 
-                # Sync the in-memory obj with what the lock read so the
-                # subsequent save writes a consistent row.
-                obj.stock_deducted = locked.stock_deducted
-                if not obj.cancelled_at:
-                    obj.cancelled_at = timezone.now()
+                # No status change — just save the non-status edits normally.
+                if original_status == new_status:
+                    super().save_model(request, obj, form, change)
+                    return
+
+                # ── Block direct cancellation ─────────────────────────────
+                if new_status == 'cancelled' and original_status != 'cancelled':
+                    # Revert the in-memory change so super().save_model() below
+                    # writes back the original status, not 'cancelled'.
+                    obj.status = original_status
+                    error_message = (
+                        'Direct cancellation is not permitted from the Admin change '
+                        'form.  Use the "Cancel Order" button to open the cancellation '
+                        'workflow, which collects the required disposition data.'
+                    )
+                    super().save_model(request, obj, form, change)
+                    return
+
+                # ── Validate non-cancel transition ────────────────────────
+                try:
+                    validate_status_transition(original_status, new_status, order=locked)
+                except ValueError as e:
+                    obj.status = original_status
+                    error_message = (
+                        f'Status change blocked: {e} The status was not changed.'
+                    )
+                    super().save_model(request, obj, form, change)
+                    return
+
+                # ── Call coordinator before saving ────────────────────────
+                # Phase 5B-3: no-op for non-cancel.  Phase 6B will add
+                # consumption on preparing → ready.
+                from apps.orders.services import on_status_changed
+                on_status_changed(obj.pk, new_status, actor=request.user)
+
                 super().save_model(request, obj, form, change)
-            return
 
-        super().save_model(request, obj, form, change)
+        except Exception as e:
+            error_message = (
+                f'Status change failed due to an inventory error: {e} '
+                'The status was not changed.'
+            )
+
+        if error_message:
+            self.message_user(request, error_message, level='error')
 
 
 @admin.register(Cart)

@@ -36,6 +36,41 @@ class CheckoutForm(forms.Form):
     )
 
 
+# ── Phase 6A: Cancellation Disposition Forms ────────────────────────────────
+
+
+class CancellationDispositionForm(forms.Form):
+    """Per-order-item disposition input for cancellation from ``preparing``
+    or ``ready`` status.
+
+    For ``preparing``: both ``prepared_units`` and ``discarded_units`` are
+    required.  For ``ready``: only ``discarded_units`` is required (the
+    service derives ``prepared_units = quantity``).
+
+    An explicitly submitted ``0`` is valid.  A missing field produces a
+    validation error — the form does NOT silently default to zero.
+    """
+
+    prepared_units = forms.IntegerField(
+        required=False,  # required only for preparing; set dynamically
+        min_value=0,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'min': '0',
+            'style': 'width: 80px',
+        }),
+    )
+    discarded_units = forms.IntegerField(
+        required=False,  # required only when staff input is needed; set dynamically
+        min_value=0,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'min': '0',
+            'style': 'width: 80px',
+        }),
+    )
+
+
 class GCashSubmissionForm(forms.Form):
     """Submitted by the customer to provide GCash payment evidence.
 

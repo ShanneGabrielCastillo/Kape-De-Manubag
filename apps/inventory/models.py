@@ -416,6 +416,25 @@ class IngredientMovementLog(models.Model):
         help_text="Snapshot of order.order_number at write time.",
     )
 
+    # ── Optional reservation item link (Phase 5B) ─────────────────────────────
+    # Links reservation and release movements to the specific
+    # OrderIngredientReservationItem that caused them.  SET_NULL so movement
+    # rows survive if a reservation item is deleted (not expected in production
+    # but guards against edge cases).  Nullable for all non-reservation movement
+    # types (purchase, wastage, adjustment).
+    # Rev 3 §D.8.
+    reservation_item = models.ForeignKey(
+        'orders.OrderIngredientReservationItem',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='movements',
+        help_text=(
+            'The reservation line item that caused this movement, if any. '
+            'Set for reservation and reservation_release movements; null for all others.'
+        ),
+    )
+
     # ── Optional purchase link (Phase 3) ──────────────────────────────────────
     # Links purchase movements to the specific StockPurchaseItem that caused
     # them. SET_NULL so movement rows survive if a purchase record is corrected
@@ -588,6 +607,7 @@ class IngredientMovementLog(models.Model):
         note='',
         order=None,
         purchase_item=None,
+        reservation_item=None,
         idempotency_key=None,
         performed_by=None,
     ):
@@ -598,6 +618,11 @@ class IngredientMovementLog(models.Model):
 
         Idempotency: if idempotency_key is set and a row with that key already
         exists, the existing row is returned without creating a duplicate.
+
+        ``reservation_item`` — optional FK to the OrderIngredientReservationItem
+        that caused this movement (Rev 7 Q4).  Set for consumption and release
+        movements produced by settle(); null for aggregated reservation movements
+        produced by place_order_inventory() (many-to-one, no 1:1 correspondence).
         """
         if idempotency_key:
             existing = cls.objects.filter(idempotency_key=idempotency_key).first()
@@ -625,6 +650,7 @@ class IngredientMovementLog(models.Model):
             order=order,
             order_number=order.order_number if order is not None else '',
             purchase_item=purchase_item,
+            reservation_item=reservation_item,
             idempotency_key=idempotency_key,
             performed_by=performed_by,
         )

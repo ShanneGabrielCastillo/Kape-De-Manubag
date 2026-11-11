@@ -488,6 +488,566 @@ class DailyOrderSequence(models.Model):
         return seq_obj.last_sequence
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Phase 6A — Order Cancellation Disposition
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Rev 3 §D.13.  Append-only record of what was declared prepared when an
+# order was cancelled, for both ledgers (legacy and ingredient).
+#
+# One row per (order, order_item).  Written in the same transaction as
+# the cancellation and never edited.
+#
+# Q6d extension: the `discarded_units` field is an additive extension to
+# §D.13 that records how many of the prepared units were discarded as
+# waste (Q6d: YES — owner confirmed 2026-11-06).
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class OrderCancellationDisposition(models.Model):
+    """
+    Append-only record of what was declared prepared when an order was
+    cancelled, for **both** ledgers (legacy and ingredient).
+
+    Rev 3 §D.13 + Q6d extension.
+
+    A disposition belongs to one order and one order item.  The service
+    layer must validate that ``order_item.order_id == order.pk`` — the
+    database's separate foreign keys and uniqueness constraint do not
+    automatically guarantee this relationship.
+
+    Written in the same transaction as the cancellation and never edited.
+    Cancelling from ``awaiting_payment`` writes ``system_unpaid`` rows
+    (all unprepared); from ``ready`` writes ``system_ready`` rows (all
+    prepared); from ``preparing`` writes ``staff_declared`` rows.
+
+    Ingredient consumption and release are derived from these rows
+    (prepared units consume, unprepared units release); the legacy
+    restore quantity is ``unprepared_units``.  Prepared legacy units
+    change no stock and write no ``InventoryLog`` row; the fact lives
+    here.
+
+    The ``discarded_units`` field (Q6d extension) records how many of
+    the prepared units were discarded as waste.  Not all prepared units
+    are necessarily discarded; the disposition captures the distinction.
+    """
+
+    LEDGER_LEGACY     = 'legacy'
+    LEDGER_INGREDIENT = 'ingredient'
+    LEDGER_CHOICES = [
+        (LEDGER_LEGACY,     'Legacy'),
+        (LEDGER_INGREDIENT, 'Ingredient'),
+    ]
+
+    SOURCE_STAFF_DECLARED = 'staff_declared'
+    SOURCE_SYSTEM_READY   = 'system_ready'
+    SOURCE_SYSTEM_UNPAID  = 'system_unpaid'
+    SOURCE_CHOICES = [
+        (SOURCE_STAFF_DECLARED, 'Staff declared'),
+        (SOURCE_SYSTEM_READY,   'System (ready)'),
+        (SOURCE_SYSTEM_UNPAID,  'System (unpaid)'),
+    ]
+
+    # ── Foreign keys ──────────────────────────────────────────────────────────
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.PROTECT,
+        related_name='cancellation_dispositions',
+        help_text='The order this disposition belongs to.',
+    )
+    order_item = models.ForeignKey(
+        OrderItem,
+        on_delete=models.PROTECT,
+        related_name='cancellation_dispositions',
+        help_text='The order line this disposition covers.',
+    )
+
+    # ── Ledger snapshot (copied from order_item.inventory_mode) ───────────────
+    ledger = models.CharField(
+        max_length=10,
+        choices=LEDGER_CHOICES,
+        help_text='Which ledger this line belongs to (copied from the line snapshot).',
+    )
+
+    # ── Quantity snapshots ────────────────────────────────────────────────────
+    order_item_quantity = models.PositiveIntegerField(
+        help_text='Snapshot of order_item.quantity at cancellation time.',
+    )
+    prepared_units = models.PositiveIntegerField(
+        default=0,
+        help_text='Units declared prepared by staff or system.',
+    )
+    unprepared_units = models.PositiveIntegerField(
+        default=0,
+        help_text='Units not prepared (restored to stock for legacy).',
+    )
+    discarded_units = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            'Q6d extension. Of the prepared units, how many were '
+            'discarded as waste. Must be <= prepared_units.'
+        ),
+    )
+
+    # ── Disposition source ────────────────────────────────────────────────────
+    source = models.CharField(
+        max_length=20,
+        choices=SOURCE_CHOICES,
+        help_text='Who/what determined the disposition.',
+    )
+
+    # ── Audit fields ───────────────────────────────────────────────────────────
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='cancellation_dispositions_decided',
+        help_text='Staff member who entered the disposition.',
+    )
+    decided_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='When the disposition was recorded.',
+    )
+    note = models.TextField(
+        blank=True, default='',
+        help_text='Staff note.',
+    )
+
+    class Meta:
+        ordering = ['order', 'order_item']
+        constraints = [
+            # ── ocd_unique_item ───────────────────────────────────────────────
+            # One row per (order, order_item). A repeated cancellation
+            # cannot declare twice or restore twice.
+            models.UniqueConstraint(
+                fields=['order', 'order_item'],
+                name='ocd_unique_item',
+                violation_error_message=(
+                    'A cancellation disposition already exists for this order item.'
+                ),
+            ),
+            # ── ocd_units_non_negative ────────────────────────────────────────
+            # PositiveIntegerField enforces >= 0 at the form level but the DB
+            # column is a plain integer. This CHECK provides the DB backstop.
+            models.CheckConstraint(
+                **_orders_check(condition=models.Q(
+                    prepared_units__gte=0,
+                    unprepared_units__gte=0,
+                    discarded_units__gte=0,
+                )),
+                name='ocd_units_non_negative',
+            ),
+            # ── ocd_units_sum_to_quantity ────────────────────────────────────
+            # prepared + unprepared = order_item_quantity.
+            # Expressed as: unprepared = order_item_quantity - prepared.
+            # If prepared > quantity, the RHS is negative and the constraint
+            # fails (unprepared cannot be negative) — which is correct.
+            models.CheckConstraint(
+                **_orders_check(condition=models.Q(
+                    unprepared_units=models.F('order_item_quantity') - models.F('prepared_units'),
+                )),
+                name='ocd_units_sum_to_quantity',
+            ),
+            # ── ocd_discarded_within_prepared ────────────────────────────────
+            # Q6d extension. discarded <= prepared.
+            models.CheckConstraint(
+                **_orders_check(condition=models.Q(
+                    discarded_units__lte=models.F('prepared_units'),
+                )),
+                name='ocd_discarded_within_prepared',
+            ),
+            # ── ocd_source_valid ─────────────────────────────────────────────
+            models.CheckConstraint(
+                **_orders_check(condition=models.Q(
+                    source__in=['staff_declared', 'system_ready', 'system_unpaid']
+                )),
+                name='ocd_source_valid',
+            ),
+            # ── ocd_ledger_valid ──────────────────────────────────────────────
+            models.CheckConstraint(
+                **_orders_check(condition=models.Q(
+                    ledger__in=['legacy', 'ingredient']
+                )),
+                name='ocd_ledger_valid',
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f'Disposition(order={self.order_id}, item={self.order_item_id}, '
+            f'ledger={self.ledger}, prepared={self.prepared_units}, '
+            f'unprepared={self.unprepared_units}, discarded={self.discarded_units})'
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Phase 5B — Ingredient Reservation Models
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Rev 3 §D.9 (OrderIngredientReservation) and §D.10
+# (OrderIngredientReservationItem).
+#
+# These two models record the reserved ingredient and packaging quantities for
+# orders that contain at least one ingredient-tracked product line.  They are
+# additive — legacy-only orders have no reservation row.
+#
+# The reservation lifecycle mirrors the order lifecycle:
+#   reserved  → order placed, ingredients reserved
+#   consumed  → all reserved quantities consumed on preparing → ready
+#   released  → all reserved quantities released on cancel before consumption
+#   settled   → partial — mix of consumed and released lines
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class OrderIngredientReservation(models.Model):
+    """
+    Header record for the ingredient reservation of one order.
+
+    Rev 3 §D.9.  Exists only when the order has at least one
+    ingredient-tracked line.  Legacy-only orders have none.
+
+    Status lifecycle:
+      reserved  — order placed; all lines fully outstanding.
+      consumed  — all lines fully consumed (order went through ready).
+      released  — all lines fully released (cancelled before consumption).
+      settled   — partial: some lines consumed, some released.
+    """
+
+    STATUS_RESERVED = 'reserved'
+    STATUS_CONSUMED = 'consumed'
+    STATUS_RELEASED = 'released'
+    STATUS_SETTLED  = 'settled'
+    STATUS_CHOICES = [
+        (STATUS_RESERVED, 'Reserved'),
+        (STATUS_CONSUMED, 'Consumed'),
+        (STATUS_RELEASED, 'Released'),
+        (STATUS_SETTLED,  'Settled'),
+    ]
+
+    # Rev 3 §D.9: OneToOneField enforces res_one_per_order (one reservation
+    # per order — DB unique constraint).
+    order = models.OneToOneField(
+        Order,
+        on_delete=models.PROTECT,
+        related_name='ingredient_reservation',
+        help_text='The order this reservation belongs to. One reservation per order.',
+    )
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default=STATUS_RESERVED,
+        help_text=(
+            'Lifecycle state of this reservation. '
+            '"reserved" = fully outstanding; "consumed" = all consumed; '
+            '"released" = all released; "settled" = mix of consumed and released.'
+        ),
+    )
+    # Snapshot of Order.order_type at reservation creation time.
+    # Immutable: the order type is fixed at placement and the resolution
+    # (resolve_plan) depends on it, so we record it here for traceability.
+    order_type_snapshot = models.CharField(
+        max_length=20,
+        help_text='Snapshot of Order.order_type at reservation creation time.',
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='When this reservation was created.',
+    )
+    settled_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            'When this reservation was fully settled (all lines consumed or '
+            'released). Null while status is "reserved".'
+        ),
+    )
+
+    class Meta:
+        # res_one_per_order is provided by the OneToOneField itself.
+        constraints = [
+            # ── res_status_valid ─────────────────────────────────────────────
+            models.CheckConstraint(
+                **_orders_check(condition=models.Q(
+                    status__in=[
+                        'reserved', 'consumed', 'released', 'settled',
+                    ]
+                )),
+                name='res_status_valid',
+            ),
+            # ── res_settled_at_consistent ────────────────────────────────────
+            # status='reserved' <=> settled_at IS NULL.
+            # An open reservation has no close time; every closed reservation
+            # (consumed/released/settled) must have one.
+            models.CheckConstraint(
+                **_orders_check(condition=(
+                    # Open: status=reserved AND settled_at IS NULL
+                    models.Q(status='reserved', settled_at__isnull=True)
+                    |
+                    # Closed: status != reserved AND settled_at IS NOT NULL
+                    models.Q(settled_at__isnull=False) & ~models.Q(status='reserved')
+                )),
+                name='res_settled_at_consistent',
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f'Reservation(order={self.order_id}, status={self.status})'
+        )
+
+
+class OrderIngredientReservationItem(models.Model):
+    """
+    One row per (reservation, order item, inventory item).
+
+    Rev 3 §D.10.  Snapshots every value needed to settle the line without
+    re-reading any configuration.  Counters track how much has been consumed
+    and released so that outstanding = reserved − consumed − released.
+    """
+
+    COMPONENT_SOURCE_RECIPE    = 'recipe'
+    COMPONENT_SOURCE_PACKAGING = 'packaging'
+    COMPONENT_SOURCE_CHOICES = [
+        (COMPONENT_SOURCE_RECIPE,    'Recipe ingredient'),
+        (COMPONENT_SOURCE_PACKAGING, 'Packaging material'),
+    ]
+
+    CONSUME_REASON_ORDER_READY       = 'order_ready'
+    CONSUME_REASON_CANCELLED_PREP    = 'cancelled_prepared'
+    CONSUME_REASON_CHOICES = [
+        (CONSUME_REASON_ORDER_READY,    'Order marked ready'),
+        (CONSUME_REASON_CANCELLED_PREP, 'Cancelled — prepared units'),
+    ]
+
+    RELEASE_REASON_CANCELLED_NOT_PREP   = 'cancelled_not_prepared'
+    RELEASE_REASON_CANCELLED_BEFORE_PAY = 'cancelled_before_payment'
+    RELEASE_REASON_CHOICES = [
+        (RELEASE_REASON_CANCELLED_NOT_PREP,   'Cancelled — unprepared units'),
+        (RELEASE_REASON_CANCELLED_BEFORE_PAY, 'Cancelled before payment'),
+    ]
+
+    # ── Foreign keys ──────────────────────────────────────────────────────────
+    reservation = models.ForeignKey(
+        OrderIngredientReservation,
+        on_delete=models.CASCADE,
+        related_name='items',
+        help_text='The parent reservation.',
+    )
+    order_item = models.ForeignKey(
+        OrderItem,
+        on_delete=models.PROTECT,
+        related_name='ingredient_reservation_items',
+        help_text='The order line that caused this reservation.',
+    )
+    inventory_item = models.ForeignKey(
+        # Deferred string reference to avoid a circular import — InventoryItem
+        # is in the inventory app; this model is in the orders app.
+        'inventory.InventoryItem',
+        on_delete=models.PROTECT,
+        related_name='reservation_items',
+        help_text='The ingredient or packaging item that was reserved.',
+    )
+
+    # ── Snapshots (immutable after creation) ─────────────────────────────────
+    item_name = models.CharField(
+        max_length=120,
+        help_text="Snapshot of inventory_item.name at reservation time.",
+    )
+    base_unit = models.CharField(
+        max_length=3,
+        help_text="Snapshot of inventory_item.base_unit at reservation time.",
+    )
+    component_source = models.CharField(
+        max_length=10,
+        choices=COMPONENT_SOURCE_CHOICES,
+        help_text='Whether this component came from the recipe or the packaging profile.',
+    )
+    # Source recipe FK — null for packaging components.
+    source_recipe = models.ForeignKey(
+        'inventory.Recipe',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='reservation_items',
+        help_text='The recipe this line was derived from. Null for packaging components.',
+    )
+    # Source packaging profile FK — null for recipe/ingredient components.
+    source_packaging_profile = models.ForeignKey(
+        'inventory.PackagingProfile',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='reservation_items',
+        help_text=(
+            'The packaging profile this line was derived from. '
+            'Null for recipe/ingredient components.'
+        ),
+    )
+    source_revision = models.PositiveIntegerField(
+        help_text=(
+            'Snapshot of the recipe or packaging profile revision at reservation '
+            'time. The coordinator never re-reads configuration for an open '
+            'reservation.'
+        ),
+    )
+    quantity_per_unit = models.DecimalField(
+        max_digits=14,
+        decimal_places=3,
+        help_text=(
+            'Snapshot: how many base units of inventory_item are consumed per '
+            'product unit, from the resolved plan at placement time.'
+        ),
+    )
+    order_item_quantity = models.PositiveIntegerField(
+        help_text='Snapshot of order_item.quantity at reservation time.',
+    )
+
+    # ── Settlement counters (accumulate as lines are settled) ─────────────────
+    reserved_quantity = models.DecimalField(
+        max_digits=14,
+        decimal_places=3,
+        help_text=(
+            'Total reserved = quantity_per_unit × order_item_quantity. '
+            'Immutable after creation.'
+        ),
+    )
+    consumed_quantity = models.DecimalField(
+        max_digits=14,
+        decimal_places=3,
+        default=0,
+        help_text='Units consumed so far. Increases to reserved_quantity at most.',
+    )
+    released_quantity = models.DecimalField(
+        max_digits=14,
+        decimal_places=3,
+        default=0,
+        help_text='Units released so far. Increases to reserved_quantity at most.',
+    )
+
+    # ── Settlement reason and timestamps ─────────────────────────────────────
+    consume_reason = models.CharField(
+        max_length=25,
+        blank=True,
+        default='',
+        choices=CONSUME_REASON_CHOICES,
+        help_text=(
+            'Why units were consumed. Must be set when consumed_quantity > 0.'
+        ),
+    )
+    release_reason = models.CharField(
+        max_length=30,
+        blank=True,
+        default='',
+        choices=RELEASE_REASON_CHOICES,
+        help_text=(
+            'Why units were released. Must be set when released_quantity > 0.'
+        ),
+    )
+    consumed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='When consumption was recorded for this line.',
+    )
+    released_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='When release was recorded for this line.',
+    )
+
+    class Meta:
+        constraints = [
+            # ── rli_unique_line_item ──────────────────────────────────────────
+            # One row per (reservation, order_item, inventory_item).
+            models.UniqueConstraint(
+                fields=['reservation', 'order_item', 'inventory_item'],
+                name='rli_unique_line_item',
+            ),
+            # ── rli_reserved_positive ─────────────────────────────────────────
+            # Reserved quantity must be positive — a zero-reservation line is
+            # meaningless and indicates a logic error.
+            models.CheckConstraint(
+                **_orders_check(condition=models.Q(
+                    reserved_quantity__gt=0,
+                )),
+                name='rli_reserved_positive',
+            ),
+            # ── rli_consumed_non_negative ─────────────────────────────────────
+            models.CheckConstraint(
+                **_orders_check(condition=models.Q(
+                    consumed_quantity__gte=0,
+                )),
+                name='rli_consumed_non_negative',
+            ),
+            # ── rli_released_non_negative ─────────────────────────────────────
+            models.CheckConstraint(
+                **_orders_check(condition=models.Q(
+                    released_quantity__gte=0,
+                )),
+                name='rli_released_non_negative',
+            ),
+            # ── rli_settled_within_reserved ───────────────────────────────────
+            # consumed + released <= reserved.
+            # Ensures outstanding (reserved − consumed − released) is always ≥ 0.
+            models.CheckConstraint(
+                **_orders_check(condition=models.Q(
+                    consumed_quantity__lte=(
+                        models.F('reserved_quantity') - models.F('released_quantity')
+                    ),
+                )),
+                name='rli_settled_within_reserved',
+            ),
+            # ── rli_reserved_matches_basis ────────────────────────────────────
+            # reserved = quantity_per_unit × order_item_quantity.
+            # Proves the stored reservation matches the snapshot it was derived
+            # from; catches service bugs where the quantity was computed wrong.
+            models.CheckConstraint(
+                **_orders_check(condition=models.Q(
+                    reserved_quantity=(
+                        models.F('quantity_per_unit') * models.F('order_item_quantity')
+                    ),
+                )),
+                name='rli_reserved_matches_basis',
+            ),
+            # ── rli_reason_present ────────────────────────────────────────────
+            # consumed > 0 => consume_reason set.
+            # released > 0 => release_reason set.
+            # Enforced as two separate constraints for clearer error messages.
+            models.CheckConstraint(
+                **_orders_check(condition=(
+                    # consumed_quantity = 0 OR consume_reason != ''
+                    models.Q(consumed_quantity=0)
+                    | ~models.Q(consume_reason='')
+                )),
+                name='rli_consume_reason_present',
+            ),
+            models.CheckConstraint(
+                **_orders_check(condition=(
+                    # released_quantity = 0 OR release_reason != ''
+                    models.Q(released_quantity=0)
+                    | ~models.Q(release_reason='')
+                )),
+                name='rli_release_reason_present',
+            ),
+        ]
+        indexes = [
+            # Fast "open reservations for this inventory item" lookup.
+            # Partial index: only rows where consumed + released < reserved
+            # (i.e. there is still outstanding stock).
+            # Rev 3 §D.10: "Partial index on rows where consumed + released < reserved".
+            # Django does not support partial indexes via Meta.indexes directly
+            # on all backends; we create it as a raw-SQL index in the migration.
+        ]
+
+    def __str__(self):
+        return (
+            f'ReservationItem(res={self.reservation_id}, '
+            f'item={self.item_name}, '
+            f'reserved={self.reserved_quantity}, '
+            f'consumed={self.consumed_quantity}, '
+            f'released={self.released_quantity})'
+        )
+
+
 # ── Historical-data protection ────────────────────────────────────────────────
 # Orders are permanent financial records.  Hard-deleting an order would corrupt
 # finance totals, inventory audit trails, and customer order history.  The same

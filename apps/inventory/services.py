@@ -40,20 +40,58 @@ class InventoryServiceError(ValueError):
 
 class InsufficientStockError(InventoryServiceError):
     """
-    Raised when a requested quantity exceeds available stock.
+    Raised when one or more requested quantities exceed available stock.
 
-    Carries the item, the requested quantity, and the available quantity so
-    callers can construct precise error messages.
+    Supports two calling conventions:
+
+    **Single-item form (existing callers — unchanged):**
+        raise InsufficientStockError(item=inv_item, requested=qty, available=avail)
+
+    **Multi-item form (Rev3 §H.2 placement coordinator):**
+        raise InsufficientStockError(shortages=[
+            ('ingredient', inv_pk, name, required, available),
+            ('legacy', product_pk, name, required, available),
+        ])
+
+    Both forms subclass ValueError so the existing view-level
+    ``except ValueError`` handlers catch them without any view changes.
     """
-    def __init__(self, item, requested, available):
-        self.item      = item
-        self.requested = requested
-        self.available = available
-        super().__init__(
-            f'Insufficient stock for "{item.name}": '
-            f'requested {requested} {item.base_unit}, '
-            f'available {available} {item.base_unit}.'
-        )
+
+    def __init__(self, item=None, requested=None, available=None, shortages=None):
+        if item is not None:
+            # ── Single-item form — existing callers unchanged ─────────────────
+            self.item      = item
+            self.requested = requested
+            self.available = available
+            self.shortages = None
+            msg = (
+                f'Insufficient stock for "{item.name}": '
+                f'requested {requested} {item.base_unit}, '
+                f'available {available} {item.base_unit}.'
+            )
+        else:
+            # ── Multi-item form — placement coordinator (Rev3 §H.2 step 5) ───
+            self.item      = None
+            self.requested = None
+            self.available = None
+            self.shortages = shortages or []
+            # Legacy shortages use the classic "Available: N, Requested: N"
+            # format so that existing error-message tests remain valid.
+            # Ingredient shortages use the structured "(required N, available N)"
+            # format for clarity.
+            parts = []
+            for kind, pk, name, req, avail in self.shortages:
+                if kind == 'legacy':
+                    parts.append(
+                        f'Insufficient stock for \'{name}\'. '
+                        f'Available: {avail}, Requested: {req}'
+                    )
+                else:
+                    parts.append(
+                        f'{name} (required {req}, available {avail})'
+                    )
+            msg = '; '.join(parts) if parts else 'Insufficient stock'
+        super().__init__(msg)
 
 
 class StaleExpectedQuantityError(InventoryServiceError):

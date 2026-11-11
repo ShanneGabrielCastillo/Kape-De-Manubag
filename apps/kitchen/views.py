@@ -30,44 +30,54 @@ def kitchen_orders(request):
 @kitchen_staff_required
 @require_POST
 def mark_order_ready(request, pk):
-    with transaction.atomic():
-        order = get_object_or_404(Order.objects.select_for_update(), pk=pk)
-        try:
-            validate_status_transition(order.status, 'ready', order=order)
-        except ValueError as e:
-            return JsonResponse({'success': False, 'error': str(e)}, status=400)
+    # Phase 6B: wrap the atomic block in try/except so coordinator
+    # ValueError exceptions (e.g. InconsistentInventoryStateError) are caught
+    # outside the transaction, after rollback, and returned as JSON errors.
+    try:
+        with transaction.atomic():
+            order = get_object_or_404(Order.objects.select_for_update(), pk=pk)
+            try:
+                validate_status_transition(order.status, 'ready', order=order)
+            except ValueError as e:
+                return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
-        order.status = 'ready'
-        order.ready_at = timezone.now()
-        # Suppress the post_save signal's in-transaction broadcast so we can
-        # publish only after the transaction commits successfully.
-        order._skip_realtime = True
-        order.save()
+            # Phase 6B: coordinator now consumes ingredients on preparing → ready.
+            from apps.orders.services import on_status_changed as _osc
+            _osc(order.pk, 'ready', actor=request.user)
 
-        log_action(request.user, 'order.mark_ready', order,
-                   detail='Kitchen staff marked order as ready.')
+            order.status = 'ready'
+            order.ready_at = timezone.now()
+            # Suppress the post_save signal's in-transaction broadcast so we can
+            # publish only after the transaction commits successfully.
+            order._skip_realtime = True
+            order.save()
 
-        # Capture the values we need inside the closure before the atomic
-        # block exits (order.pk is stable; the other fields are already set).
-        _order_id    = order.pk
-        _order_num   = order.order_number
-        _queue_num   = order.queue_number
-        _status      = order.status            # 'ready'
-        _status_disp = order.get_status_display()
-        _is_paid     = order.is_paid
+            log_action(request.user, 'order.mark_ready', order,
+                       detail='Kitchen staff marked order as ready.')
 
-        def _broadcast():
-            from apps.realtime.broker import publish
-            publish('status_changed', {
-                'order_id':           _order_id,
-                'order_number':       _order_num,
-                'queue_number':       _queue_num,
-                'new_status':         _status,
-                'new_status_display': _status_disp,
-                'is_paid':            _is_paid,
-            })
+            # Capture the values we need inside the closure before the atomic
+            # block exits (order.pk is stable; the other fields are already set).
+            _order_id    = order.pk
+            _order_num   = order.order_number
+            _queue_num   = order.queue_number
+            _status      = order.status            # 'ready'
+            _status_disp = order.get_status_display()
+            _is_paid     = order.is_paid
 
-        transaction.on_commit(_broadcast)
+            def _broadcast():
+                from apps.realtime.broker import publish
+                publish('status_changed', {
+                    'order_id':           _order_id,
+                    'order_number':       _order_num,
+                    'queue_number':       _queue_num,
+                    'new_status':         _status,
+                    'new_status_display': _status_disp,
+                    'is_paid':            _is_paid,
+                })
+
+            transaction.on_commit(_broadcast)
+    except ValueError as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
     return JsonResponse({
         'success': True,

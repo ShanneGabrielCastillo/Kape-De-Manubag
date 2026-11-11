@@ -23,13 +23,15 @@ from .forms import CheckoutForm
 from apps.menu.models import Category, Product
 from apps.accounts.decorators import cashier_or_admin_required, admin_required
 from apps.orders.services import (
-    deduct_inventory_for_order,
     restore_inventory_for_order,
     validate_status_transition,
     calculate_packaging_fee,
     calculate_packaging_fee_for_items,
     get_packaging_fee_per_item,
     create_order_item,
+    place_order_inventory,
+    on_status_changed,
+    DispositionRequired,
     VALID_TRANSITIONS,
 )
 from apps.audit.services import log_action
@@ -446,12 +448,16 @@ def checkout_view(request):
                                 f'"{product.name}". Please review your cart.'
                             )
 
-                        # 2. Re-validate product status inside the transaction using
-                        #    select_for_update() so a deactivation or availability
-                        #    change that raced past the outer pre-flight is caught.
+                        # 2. Re-validate product status inside the transaction.
+                        #    The coordinator (place_order_inventory) will
+                        #    acquire Product row locks in ascending pk order
+                        #    below, so we use a plain .get() here rather than
+                        #    select_for_update() to avoid acquiring per-item
+                        #    locks in cart-iteration order (U3 deadlock risk).
+                        #    The final authoritative stock check runs under
+                        #    the coordinator's ordered lock.
                         live_product = (
                             Product.objects
-                            .select_for_update()
                             .select_related('category')
                             .get(pk=product.pk)
                         )
@@ -496,7 +502,14 @@ def checkout_view(request):
 
                     order.calculate_total()
 
-                    deduct_inventory_for_order(order, performed_by=None)
+                    # Phase 5A Stage B: call the coordinator instead of the
+                    # legacy-only deduction helper.  place_order_inventory()
+                    # acquires Product locks in ascending pk order (level 2,
+                    # one ordered SELECT FOR UPDATE), snapshots inventory_mode
+                    # on every line, and routes each line to the correct ledger.
+                    # ValueError / RecipeIncompleteError propagate to the outer
+                    # except-ValueError handler exactly as before.
+                    place_order_inventory(order.pk, actor=None)
 
                     # Clear cart
                     cart.cart_items.all().delete()
@@ -873,6 +886,97 @@ def order_detail(request, pk):
     })
 
 
+# ── Phase 6A: Disposition POST parsing helper ───────────────────────────────
+
+
+def _parse_disposition_post(request, order, previous_status):
+    """
+    Parse per-order-item disposition data from the POST body.
+
+    For ``preparing``: expects ``prepared_<item_pk>`` and ``discarded_<item_pk>``
+    for every order item.
+
+    For ``ready``: expects ``discarded_<item_pk>`` for every applicable legacy
+    order item.  Ingredient items do not require staff input in Phase 6A.
+
+    Returns ``(disposition_dict, None)`` on success, ``(None, error_message)``
+    on validation failure.  Missing required fields produce errors — they do
+    NOT silently default to zero.  An explicitly submitted ``0`` is valid.
+    """
+    from apps.orders.models import OrderItem
+
+    disposition = {}
+    order_items = list(order.items.all().select_related('product'))
+
+    for item in order_items:
+        item_pk = item.pk
+        entry = {}
+
+        if previous_status == 'preparing':
+            # Staff must provide prepared_units and discarded_units.
+            prepared_key = f'prepared_{item_pk}'
+            discarded_key = f'discarded_{item_pk}'
+
+            if prepared_key not in request.POST:
+                return None, (
+                    f'Missing prepared quantity for "{item.product_name}". '
+                    'Please enter how many units were prepared.'
+                )
+            if discarded_key not in request.POST:
+                return None, (
+                    f'Missing discarded quantity for "{item.product_name}". '
+                    'Please enter how many prepared units were discarded.'
+                )
+
+            try:
+                prepared = int(request.POST.get(prepared_key))
+            except (TypeError, ValueError):
+                return None, (
+                    f'Invalid prepared quantity for "{item.product_name}". '
+                    'Must be a whole number.'
+                )
+
+            try:
+                discarded = int(request.POST.get(discarded_key))
+            except (TypeError, ValueError):
+                return None, (
+                    f'Invalid discarded quantity for "{item.product_name}". '
+                    'Must be a whole number.'
+                )
+
+            entry['prepared_units'] = prepared
+            entry['discarded_units'] = discarded
+
+        elif previous_status == 'ready':
+            # All units are prepared. Staff provides discarded_units for
+            # legacy items only. Ingredient items need no staff input.
+            if item.inventory_mode == OrderItem.INVENTORY_MODE_LEGACY:
+                discarded_key = f'discarded_{item_pk}'
+
+                if discarded_key not in request.POST:
+                    return None, (
+                        f'Missing discarded quantity for "{item.product_name}". '
+                        'Please enter how many prepared units were discarded '
+                        '(enter 0 if none were discarded).'
+                    )
+
+                try:
+                    discarded = int(request.POST.get(discarded_key))
+                except (TypeError, ValueError):
+                    return None, (
+                        f'Invalid discarded quantity for "{item.product_name}". '
+                        'Must be a whole number.'
+                    )
+
+                entry['discarded_units'] = discarded
+            else:
+                entry['discarded_units'] = 0
+
+        disposition[item_pk] = entry
+
+    return disposition, None
+
+
 @login_required
 @cashier_or_admin_required
 def update_order_status(request, pk):
@@ -887,58 +991,92 @@ def update_order_status(request, pk):
             except ValueError as e:
                 return JsonResponse({'success': False, 'error': str(e)})
 
-            # The status transition and its inventory side-effect (restoring
-            # stock on cancellation) commit or roll back together, so a failed
-            # save can never leave stock restored on an order that is still
-            # active (which would allow the same stock to be deducted twice).
-            with transaction.atomic():
-                # Re-read the order inside the transaction with a row-level
-                # lock so a concurrent transition cannot race this one.
-                order = get_object_or_404(Order.objects.select_for_update(), pk=pk)
+            # -- Phase 6A: disposition input parsing (before atomic) ---------
+            # Parse disposition POST data before entering the atomic block so
+            # that a missing-field error never touches the database.
+            cancellation_disposition = None
+            if new_status == 'cancelled' and order.status in ('preparing', 'ready'):
+                cancellation_disposition, disp_error = _parse_disposition_post(
+                    request, order, order.status
+                )
+                if cancellation_disposition is None:
+                    return JsonResponse({'success': False, 'error': disp_error})
 
-                # Capture the previous status now, after the lock is acquired,
-                # so the audit entry records the accurate before/after transition.
-                previous_status = order.status
+            # -- Errors from on_status_changed() must escape the atomic block --
+            # Catching ValueError *inside* transaction.atomic() lets Django
+            # commit partial writes.  Let the exception propagate out of the
+            # atomic block so Django rolls back everything, then catch it here.
+            try:
+                with transaction.atomic():
+                    # Re-read the order inside the transaction with a row-level
+                    # lock so a concurrent transition cannot race this one.
+                    order = get_object_or_404(Order.objects.select_for_update(), pk=pk)
+                    # Capture the previous status now, after the lock is acquired.
+                    previous_status = order.status
+                    # Re-validate inside the lock.
+                    try:
+                        validate_status_transition(order.status, new_status, order=order)
+                    except ValueError as e:
+                        return JsonResponse({'success': False, 'error': str(e)})
 
-                # Re-validate inside the lock: the status may have changed
-                # between the pre-check above and acquiring the lock.
-                try:
-                    validate_status_transition(order.status, new_status, order=order)
-                except ValueError as e:
-                    return JsonResponse({'success': False, 'error': str(e)})
+                    # -- Phase 6A: disposition-based cancellation ---------------
+                    if new_status == 'cancelled':
+                        if previous_status in ('preparing', 'ready'):
+                            if cancellation_disposition is None:
+                                cancellation_disposition, disp_error = _parse_disposition_post(
+                                    request, order, previous_status
+                                )
+                                if cancellation_disposition is None:
+                                    return JsonResponse({
+                                        'success': False,
+                                        'error': disp_error,
+                                    })
 
-                # Restore inventory if cancelling
-                if new_status == 'cancelled':
-                    restore_inventory_for_order(order, performed_by=request.user)
+                        # Call the coordinator.  Any ValueError or
+                        # DispositionRequired it raises propagates out of this
+                        # atomic block so Django rolls back all writes.
+                        on_status_changed(
+                            order.pk, 'cancelled',
+                            actor=request.user,
+                            disposition=cancellation_disposition,
+                        )
 
-                # Timestamp logic
-                now = timezone.now()
-                if new_status == 'ready' and not order.ready_at:
-                    order.ready_at = now
-                elif new_status == 'completed':
-                    order.completed_at = now
-                    order.cashier = request.user
-                elif new_status == 'cancelled' and not order.cancelled_at:
-                    order.cancelled_at = now
+                        # Refresh to pick up coordinator's stock_deducted update.
+                        order.refresh_from_db()
 
-                order.status = new_status
-                order.save()
+                    # Timestamp logic
+                    now = timezone.now()
+                    if new_status == 'ready' and not order.ready_at:
+                        order.ready_at = now
+                    elif new_status == 'completed':
+                        order.completed_at = now
+                        order.cashier = request.user
+                    elif new_status == 'cancelled' and not order.cancelled_at:
+                        order.cancelled_at = now
 
-                # ── Audit log ────────────────────────────────────────────────
-                # Placed inside the transaction so a rolled-back save never
-                # leaves a false "success" entry in the audit trail.
-                # Cancellation gets its own distinct action so admins can
-                # filter/search for cancellations specifically.
-                if new_status == 'cancelled':
-                    log_action(
-                        request.user, 'order.cancel', order,
-                        detail=f'Cancelled — was {previous_status}',
-                    )
-                else:
-                    log_action(
-                        request.user, 'order.status_changed', order,
-                        detail=f'{previous_status} → {new_status}',
-                    )
+                    # Phase 5B-3: for non-cancel transitions, call coordinator
+                    # before persisting the new status.  No-op in Phase 5B-3;
+                    # Phase 6B will add consumption on ready and completion.
+                    if new_status != 'cancelled':
+                        on_status_changed(order.pk, new_status, actor=request.user)
+
+                    order.status = new_status
+                    order.save()
+
+                    if new_status == 'cancelled':
+                        log_action(
+                            request.user, 'order.cancel', order,
+                            detail=f'Cancelled -- was {previous_status}',
+                        )
+                    else:
+                        log_action(
+                            request.user, 'order.status_changed', order,
+                            detail=f'{previous_status} -> {new_status}',
+                        )
+
+            except (DispositionRequired, ValueError) as e:
+                # Atomic block has rolled back all partial writes before here.
+                return JsonResponse({'success': False, 'error': str(e)})
 
             return JsonResponse({'success': True, 'status': order.get_status_display()})
     return JsonResponse({'success': False})
@@ -1061,6 +1199,16 @@ def process_payment(request, pk):
         if order.status == 'awaiting_payment':
             # Payment confirmed → automatically move to preparing.
             # Applies to both customer checkout orders and POS orders.
+            # Phase 5B-3: call coordinator before persisting the new status.
+            # This is a no-op in Phase 5B-3 (non-cancel); Phase 6B will add
+            # consumption here.  Must be called before order.save().
+            # Persist payment fields first so the coordinator's locked read
+            # sees is_paid=True (the transition guard requires it).
+            order.save(update_fields=[
+                'is_paid', 'paid_at', 'payment_method',
+                'amount_paid', 'change_amount',
+            ])
+            on_status_changed(order.pk, 'preparing', actor=request.user)
             order.status = 'preparing'
             order.cashier = request.user
             order.save()
@@ -1163,6 +1311,9 @@ def accept_order(request, pk):
             }, status=400)
 
         # All checks pass — accept the order and move it into the prep queue.
+        # Phase 5B-3: call coordinator before persisting the new status.
+        # No-op for non-cancel in Phase 5B-3; Phase 6B will add consumption.
+        on_status_changed(order.pk, 'preparing', actor=request.user)
         order.status = 'preparing'
         order.cashier = request.user
         order.queued_at = timezone.now()
@@ -1271,6 +1422,15 @@ def verify_gcash_payment(request, pk):
         order.cashier = request.user
 
         # Advance order into preparation queue (same as process_payment for Cash).
+        # Phase 5B-3: call coordinator before persisting the new status.
+        # No-op for non-cancel in Phase 5B-3; Phase 6B will add consumption.
+        # Persist payment fields first so the coordinator's locked read
+        # sees is_paid=True (the transition guard requires it).
+        order.save(update_fields=[
+            'gcash_status', 'gcash_verified_at', 'gcash_verified_by',
+            'is_paid', 'paid_at', 'amount_paid', 'change_amount', 'cashier',
+        ])
+        on_status_changed(order.pk, 'preparing', actor=request.user)
         order.status = 'preparing'
 
         order.save()
@@ -1509,6 +1669,24 @@ def create_pos_order(request):
     # ONE transaction: any failure (missing/inactive product, insufficient
     # stock) rolls everything back, so a rejected POS order can never
     # leave a half-created order or a partial deduction behind.
+
+    # Validate order_type before opening the transaction — no DB work has
+    # been done yet, so there is nothing to roll back on a bad payload.
+    # Django does not enforce choices= at the ORM level, so an invalid
+    # value would silently store bad data if we did not check here.
+    # Missing field defaults to 'dine_in' for backward compatibility with
+    # existing POS clients that do not send the field.
+    VALID_ORDER_TYPES = {'dine_in', 'takeout'}
+    raw_order_type = data.get('order_type', 'dine_in')
+    if not isinstance(raw_order_type, str) or raw_order_type not in VALID_ORDER_TYPES:
+        return JsonResponse({
+            'success': False,
+            'error': (
+                f"Invalid order_type: {raw_order_type!r}. "
+                "Must be 'dine_in' or 'takeout'."
+            ),
+        })
+
     try:
         with transaction.atomic():
             # Accept payment_method from the POS payload.  Validate it
@@ -1522,7 +1700,7 @@ def create_pos_order(request):
             order = Order.objects.create(
                 customer_name=data.get('customer_name', 'Walk-in Customer'),
                 table_number=data.get('table_number', ''),
-                order_type=data.get('order_type', 'dine_in'),
+                order_type=raw_order_type,
                 notes=data.get('notes', ''),
                 cashier=request.user,
                 request_token=request_token,
@@ -1580,23 +1758,27 @@ def create_pos_order(request):
                     quantity=entry['quantity'],
                 )
 
-            # OPT-3: compute totals into the order object in memory here,
-            # then pass the three fields to deduct_inventory_for_order so
-            # it can include them in its own final order.save() call.
-            # This merges what was previously two separate UPDATEs
-            # (calculate_total → save #2, stock_deducted → save #3)
-            # into a single UPDATE, saving one DB round-trip per order.
+            # OPT-3: compute totals into the order object in memory, then
+            # save them to the DB before calling the coordinator.  The
+            # coordinator writes stock_deducted internally, so we separate
+            # the two writes.  A future optimisation (Phase 5B+) can merge
+            # them back if the coordinator gains an extra_update_fields
+            # parameter; for now the extra round-trip is acceptable.
             order.subtotal = sum(
                 item.subtotal for item in order.items.all()
             )
             order.packaging_fee = calculate_packaging_fee(order)
             order.total = order.subtotal + order.packaging_fee - order.discount
+            order.save(update_fields=['subtotal', 'packaging_fee', 'total'])
 
-            deduct_inventory_for_order(
-                order,
-                performed_by=request.user,
-                extra_order_update_fields=['subtotal', 'packaging_fee', 'total'],
-            )
+            # Phase 5A Stage B: call the coordinator instead of the
+            # legacy-only deduction helper.  place_order_inventory()
+            # acquires Product locks in ascending pk order (level 2,
+            # one ordered SELECT FOR UPDATE), snapshots inventory_mode
+            # on every line, and routes each line to the correct ledger.
+            # ValueError / RecipeIncompleteError propagate to the outer
+            # except-ValueError handler exactly as before.
+            place_order_inventory(order.pk, actor=request.user)
 
             # Broadcast new_order after totals are committed so the
             # cashier list always shows the correct amount.
@@ -1868,45 +2050,56 @@ def quick_status_advance(request, pk):
     # and either advances it to the correct next step (if one exists) or
     # returns 'Already final state'. Both outcomes are correct; neither
     # applies the same transition twice.
-    with transaction.atomic():
-        order = get_object_or_404(Order.objects.select_for_update(), pk=pk)
-        next_status = order.next_status
+    #
+    # Phase 6B: wrap in try/except so coordinator ValueError exceptions
+    # (e.g. InconsistentInventoryStateError from consumption) are caught
+    # outside the transaction, after rollback, and returned as JSON errors.
+    try:
+        with transaction.atomic():
+            order = get_object_or_404(Order.objects.select_for_update(), pk=pk)
+            next_status = order.next_status
 
-        if not next_status:
-            return JsonResponse({'success': False, 'error': 'Already final state'})
+            if not next_status:
+                return JsonResponse({'success': False, 'error': 'Already final state'})
 
-        # Confirm the computed next step is still a valid transition given the
-        # locked status (belt-and-suspenders: next_status already encodes the
-        # forward-only flow, but validate_status_transition() is the single
-        # authoritative check for the whole module).  Pass the full order so
-        # the payment-gate rule is also enforced here.
-        try:
-            validate_status_transition(order.status, next_status, order=order)
-        except ValueError as e:
-            return JsonResponse({'success': False, 'error': str(e)})
+            # Confirm the computed next step is still a valid transition given the
+            # locked status (belt-and-suspenders: next_status already encodes the
+            # forward-only flow, but validate_status_transition() is the single
+            # authoritative check for the whole module).  Pass the full order so
+            # the payment-gate rule is also enforced here.
+            try:
+                validate_status_transition(order.status, next_status, order=order)
+            except ValueError as e:
+                return JsonResponse({'success': False, 'error': str(e)})
 
-        # Capture the current status before advancing so the audit entry
-        # records the accurate before/after transition.
-        prev_status = order.status
+            # Capture the current status before advancing so the audit entry
+            # records the accurate before/after transition.
+            prev_status = order.status
 
-        now = timezone.now()
-        if next_status == 'ready':
-            order.ready_at = now
-        if next_status == 'completed':
-            order.completed_at = now
-            order.cashier = request.user
+            now = timezone.now()
+            if next_status == 'ready':
+                order.ready_at = now
+            if next_status == 'completed':
+                order.completed_at = now
+                order.cashier = request.user
 
-        order.status = next_status
-        order.save()
+            # Phase 6B: coordinator now consumes ingredients on preparing → ready
+            # and asserts settlement on ready → completed.
+            on_status_changed(order.pk, next_status, actor=request.user)
 
-        # ── Audit log ────────────────────────────────────────────────────────
-        # Placed inside the transaction so the audit entry rolls back if the
-        # save fails. quick_status_advance only moves forward (never cancels),
-        # so order.status_changed is always the correct action here.
-        log_action(
-            request.user, 'order.status_changed', order,
-            detail=f'{prev_status} → {next_status}',
-        )
+            order.status = next_status
+            order.save()
+
+            # ── Audit log ────────────────────────────────────────────────────
+            # Placed inside the transaction so the audit entry rolls back if the
+            # save fails. quick_status_advance only moves forward (never cancels),
+            # so order.status_changed is always the correct action here.
+            log_action(
+                request.user, 'order.status_changed', order,
+                detail=f'{prev_status} → {next_status}',
+            )
+    except ValueError as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
     return JsonResponse({
         'success':          True,
