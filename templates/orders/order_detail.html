@@ -472,9 +472,117 @@ async function quickAdvanceDetail(orderId, url, nextLabel) {
   }
 }
 
-// ── Cancel order ──────────────────────────────────────────────────────────
+// ── Phase 6A: Cancel order with disposition ────────────────────────────────
+
 async function cancelOrder(orderId, url) {
+  const orderStatus = '{{ order.status }}';
+  // awaiting_payment: no disposition needed
+  if (orderStatus === 'awaiting_payment') {
+    if (!confirm('Cancel this order? This cannot be undone.')) return;
+    return _submitCancel(url, 'status=cancelled');
+  }
+  // preparing or ready: need disposition input
+  if (orderStatus === 'preparing' || orderStatus === 'ready') {
+    return _openDispositionModal(orderId, url, orderStatus);
+  }
+  // Fallback
   if (!confirm('Cancel this order? This cannot be undone.')) return;
+  return _submitCancel(url, 'status=cancelled');
+}
+
+function _openDispositionModal(orderId, url, orderStatus) {
+  // Build disposition form HTML
+  const items = [
+    {% for item in order.items.all %}
+    {
+      pk: {{ item.pk }},
+      name: '{{ item.product_name|escapejs }}',
+      quantity: {{ item.quantity }},
+      isLegacy: {% if item.inventory_mode == 'legacy' %}true{% else %}false{% endif %},
+    },
+    {% endfor %}
+  ];
+  let formHtml = '<div style="display:flex;flex-direction:column;gap:16px;max-height:60vh;overflow-y:auto">';
+  formHtml += '<p style="color:#aaa;font-size:0.85rem">';
+  if (orderStatus === 'preparing') {
+    formHtml += 'Declare how many units were already prepared for each order item. Only unprepared units will be returned to stock.';
+  } else {
+    formHtml += 'All units are treated as prepared. Enter how many prepared units were discarded for each applicable legacy item (enter 0 if none were discarded).';
+  }
+  formHtml += '</p>';
+  for (const item of items) {
+    formHtml += `<div style="border:1px solid #eee;border-radius:8px;padding:12px">`;
+    formHtml += `<div style="font-weight:600;margin-bottom:8px">${item.name} (qty: ${item.quantity})</div>`;
+    if (orderStatus === 'preparing') {
+      formHtml += `<div style="display:flex;gap:12px;align-items:center">`;
+      formHtml += `<label style="font-size:0.85rem;min-width:100px">Prepared:</label>`;
+      formHtml += `<input type="number" name="prepared_${item.pk}" min="0" max="${item.quantity}" value="0" class="form-control" style="width:80px" required>`;
+      formHtml += `<label style="font-size:0.85rem;min-width:100px">Discarded:</label>`;
+      formHtml += `<input type="number" name="discarded_${item.pk}" min="0" max="${item.quantity}" value="0" class="form-control" style="width:80px" required>`;
+      formHtml += `</div>`;
+    } else if (item.isLegacy) {
+      formHtml += `<div style="display:flex;gap:12px;align-items:center">`;
+      formHtml += `<label style="font-size:0.85rem;min-width:100px">Discarded:</label>`;
+      formHtml += `<input type="number" name="discarded_${item.pk}" min="0" max="${item.quantity}" value="0" class="form-control" style="width:80px" required>`;
+      formHtml += `<span style="font-size:0.8rem;color:#aaa">All ${item.quantity} prepared (0 = none discarded)</span>`;
+      formHtml += `</div>`;
+    } else {
+      formHtml += `<div style="font-size:0.85rem;color:#aaa">Ingredient-tracked — no disposition input required</div>`;
+    }
+    formHtml += `</div>`;
+  }
+  formHtml += '</div>';
+  const backdrop = document.getElementById('kdm-confirm-backdrop');
+  const modal = document.getElementById('kdm-confirm-modal');
+  const titleEl = document.getElementById('kdm-confirm-title');
+  const messageEl = document.getElementById('kdm-confirm-message');
+  const okBtn = document.getElementById('kdm-confirm-ok');
+  const cancelBtn = document.getElementById('kdm-confirm-cancel');
+  if (!backdrop || !modal) {
+    if (!confirm('Cancel this order? This cannot be undone.')) return;
+    return _submitCancel(url, 'status=cancelled');
+  }
+  titleEl.textContent = 'Cancel Order — Disposition';
+  titleEl.style.color = '#fff';
+  modal.querySelector('.modal-header').style.background = '#dc3545';
+  messageEl.innerHTML = formHtml;
+  okBtn.textContent = 'Confirm Cancellation';
+  okBtn.className = 'btn btn-danger';
+  cancelBtn.style.display = '';
+  modal.style.maxWidth = '600px';
+  modal.style.maxHeight = '80vh';
+  modal.style.overflow = 'auto';
+  backdrop.style.display = 'flex';
+  setTimeout(() => (cancelBtn || okBtn).focus(), 30);
+  const onConfirm = async () => {
+    cleanup();
+    const formData = new FormData();
+    formData.append('status', 'cancelled');
+    const inputs = messageEl.querySelectorAll('input[type="number"]');
+    for (const input of inputs) {
+      formData.append(input.name, input.value);
+    }
+    const params = new URLSearchParams(formData);
+    await _submitCancel(url, params.toString());
+  };
+  const onCancel = () => { cleanup(); };
+  const onBackdrop = (e) => { if (e.target === backdrop) cleanup(); };
+  function cleanup() {
+    okBtn.removeEventListener('click', onConfirm);
+    cancelBtn.removeEventListener('click', onCancel);
+    backdrop.removeEventListener('click', onBackdrop);
+    backdrop.style.display = 'none';
+    modal.style.maxWidth = '';
+    modal.style.maxHeight = '';
+    modal.style.overflow = '';
+    cancelBtn.style.display = '';
+  }
+  okBtn.addEventListener('click', onConfirm);
+  cancelBtn.addEventListener('click', onCancel);
+  backdrop.addEventListener('click', onBackdrop);
+}
+
+async function _submitCancel(url, body) {
   try {
     const res = await fetch(url, {
       method: 'POST',
@@ -482,7 +590,7 @@ async function cancelOrder(orderId, url) {
         'X-CSRFToken': getCookie('csrftoken'),
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: 'status=cancelled',
+      body: body,
     });
     const data = await res.json();
     if (data.success) {

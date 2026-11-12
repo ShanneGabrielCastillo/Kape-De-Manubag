@@ -292,7 +292,7 @@ class InvalidLedgerTests(TestCase):
         with self.assertRaises(IntegrityError):
             OrderCancellationDisposition.objects.create(
                 order=order, order_item=item,
-                ledger='invalid_ledger', order_item_quantity=2,
+                ledger='bogus', order_item_quantity=2,
                 prepared_units=0, unprepared_units=2,
                 discarded_units=0, source='system_unpaid',
             )
