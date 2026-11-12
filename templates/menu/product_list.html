@@ -67,20 +67,24 @@
     color: var(--brown-mid);
   }
 
-  /* Filter + Clear as a 2-column row */
+  /* Filter button: full width on mobile (no-JS fallback) */
   .pfb-btn-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    width: 100%;
   }
-  .pfb-btn-filter,
-  .pfb-btn-clear {
+  .pfb-btn-filter {
     min-height: 46px;
     justify-content: center;
     border-radius: 12px !important;
     font-size: 0.9rem;
+    width: 100%;
   }
 }
+
+/* ── Product mobile cards: desktop-first visibility control ────────── */
+/* Default: hidden at all widths (mirrors .table-mobile-cards behaviour).
+   This is the single rule that prevents .pm-cards from appearing on desktop.
+   The mobile media query below re-enables it at ≤767.98px. */
+.pm-cards { display: none; }
 
 /* ── Desktop: hide mobile-only icon spans, reset input padding ──────── */
 @media (min-width: 768px) {
@@ -100,9 +104,7 @@
   }
   .pfb-search    { flex: 1; min-width: 160px; }
   .pfb-select-wrap { flex: 0 0 200px; }
-  .pfb-btn-row   { display: flex; gap: 8px; flex-shrink: 0; }
-  .pfb-btn-filter,
-  .pfb-btn-clear { min-height: unset; border-radius: var(--radius-sm) !important; font-size: 0.9rem; }
+  .pfb-btn-filter { min-height: unset; border-radius: var(--radius-sm) !important; font-size: 0.9rem; flex-shrink: 0; }
 }
 
 /* ── Product mobile cards (scoped — desktop table unchanged) ────────── */
@@ -245,13 +247,12 @@
 
   /* Hide the generic table-mobile-cards output for this page;
      our custom .pm-cards container replaces it */
-  .pm-cards {
-    display: block;   /* explicit — never inherit display:none from global rules */
-  }
   .pm-cards ~ .table-mobile-cards,
   .table-mobile-cards:not(.pm-cards) {
     display: none !important;
   }
+  /* Show our custom cards container at mobile widths */
+  .pm-cards { display: block; }
 }
 </style>
 {% endblock %}
@@ -279,7 +280,6 @@
     </div>
     <div class="pfb-btn-row">
       <button type="submit" class="btn btn-primary pfb-btn-filter"><i data-lucide="list-filter" class="btn-icon" aria-hidden="true"></i> Filter</button>
-      <a href="{% url 'menu:product_list' %}" class="btn btn-outline pfb-btn-clear"><i data-lucide="rotate-ccw" class="btn-icon" aria-hidden="true"></i> Clear</a>
     </div>
   </form>
 </div>
@@ -634,15 +634,14 @@ document.addEventListener('click', function(e) {
   window.addEventListener('resize', function () {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(function () {
-      const cards = document.querySelector('.pm-cards');
-      if (window.innerWidth > 767) {
-        // Back to desktop — remove the mobile cards so table shows
-        if (cards) cards.remove();
-        const generic = document.querySelector('.table-mobile-cards');
-        if (generic) generic.style.display = '';
-      } else {
-        // Mobile width — build if not already present
-        if (!cards) buildProductCards();
+      // CSS now controls visibility of .pm-cards and the desktop table
+      // via media queries (display:none default, display:block at ≤767.98px).
+      // We only need to ensure cards exist when resizing into mobile —
+      // build them if missing (e.g. the user opened the page on desktop
+      // where buildProductCards() still runs for later use, but if for
+      // any reason the container was removed we rebuild it here).
+      if (window.innerWidth <= 767 && !document.querySelector('.pm-cards')) {
+        buildProductCards();
       }
     }, 150);
   });

@@ -16,29 +16,31 @@
 .dot-completed { background:#198754; }
 .dot-cancelled { background:#dc3545; }
 
-/* Orders button pending badge — two variants, mobile vs desktop.
-   .dash-orders-pill  = the existing "N pending" pill (desktop default: shown).
-   .dash-orders-dot   = the small red circular counter (mobile only: hidden by default).
-   The mobile media query below swaps them. */
-.dash-orders-pill { display: inline-flex; }   /* default: visible on desktop */
-.dash-orders-dot  {                            /* default: hidden on desktop */
-  display: none;
-  position: absolute;
-  top: -7px;
-  right: -7px;
+/* Orders button pending badge — single red circular badge shown on all screen sizes.
+   Replaces the old two-variant approach (.dash-orders-pill desktop pill +
+   .dash-orders-dot mobile-only dot). The badge sits inline to the right of
+   the "Orders" label; it is never absolutely positioned so it does not
+   overlap the button border on any layout. */
+.dash-orders-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 20px;
   height: 20px;
   padding: 0 5px;
   border-radius: 50px;
-  background: #dc3545;
+  background: var(--red-accent, #dc3545);
   color: #fff;
   font-size: 0.7rem;
   font-weight: 700;
-  align-items: center;
-  justify-content: center;
+  font-family: 'DM Sans', sans-serif;
   line-height: 1;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   pointer-events: none;
+  flex-shrink: 0;
+  margin-left: 6px;
+  vertical-align: middle;
 }
 
 /* ── Dashboard loading skeletons ────────────────────────────────────────────
@@ -195,9 +197,7 @@
     font-size: 0.88rem;
   }
 
-  /* Orders button — mobile: hide the pill badge, show the dot badge */
-  .dash-orders-pill { display: none !important; }
-  .dash-orders-dot  { display: flex; }
+  /* Orders button — mobile: .dash-orders-badge is always inline-flex; no swap needed */
   /* Stat values: long peso amounts (₱1,234,567.89) must never overflow the
      ~110px content column of a 2-column card on a 320px phone. Scale the
      clamp down slightly vs. responsive.css and allow an emergency wrap so
@@ -318,13 +318,13 @@
 <!-- Quick Actions (always visible — they are navigation, not data) -->
 <div class="dashboard-quick-actions" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px">
   <a href="{% url 'orders:pos' %}" class="btn btn-caramel"><i data-lucide="monitor" class="btn-icon" aria-hidden="true"></i> Open POS</a>
-  <a href="{% url 'orders:order_list' %}" class="btn btn-primary" style="position:relative">
+  <a href="{% url 'orders:order_list' %}" class="btn btn-primary">
     <i data-lucide="clipboard-list" class="btn-icon" aria-hidden="true"></i> Orders
     {% if pending_count %}
-    {# Desktop: existing pill badge — unchanged #}
-    <span class="badge badge-awaiting-payment dash-orders-pill" id="pending-count-value" style="margin-left:4px">{{ pending_count }} awaiting payment</span>
-    {# Mobile only: small circular counter badge top-right of the button #}
-    <span class="dash-orders-dot" aria-label="{{ pending_count }} pending orders">{{ pending_count }}</span>
+    {# Red circular notification badge — shown on all screen sizes when count > 0 #}
+    <span class="dash-orders-badge"
+          id="pending-count-value"
+          aria-label="{{ pending_count }} order{{ pending_count|pluralize }} awaiting payment">{{ pending_count }}</span>
     {% endif %}
   </a>
   {% if user.is_admin_user %}
@@ -832,30 +832,18 @@
     if (count > 0) {
       if (!badge && btn) {
         badge = document.createElement('span');
-        badge.className = 'badge badge-awaiting-payment dash-orders-pill';
+        badge.className = 'dash-orders-badge';
         badge.id = 'pending-count-value';
-        badge.style.marginLeft = '4px';
         btn.appendChild(badge);
       }
-      if (badge) badge.textContent = count + ' awaiting payment';
+      if (badge) {
+        badge.textContent = count;
+        badge.setAttribute('aria-label', count + ' order' + (count === 1 ? '' : 's') + ' awaiting payment');
+      }
     } else if (badge) {
       badge.remove();
     }
-    // Mobile dot badge: update or create/remove alongside the pill badge.
-    let dot = btn && btn.querySelector('.dash-orders-dot');
-    if (count > 0) {
-      if (!dot && btn) {
-        dot = document.createElement('span');
-        dot.className = 'dash-orders-dot';
-        btn.appendChild(dot);
-      }
-      if (dot) {
-        dot.textContent = count;
-        dot.setAttribute('aria-label', count + ' orders awaiting payment');
-      }
-    } else if (dot) {
-      dot.remove();
-    }
+    // Mobile dot badge: no longer a separate element — dash-orders-badge handles all sizes.
     // Sidebar badge on every staff page (only when the page rendered one)
     const side = document.getElementById('sidebar-pending-count');
     if (side) {

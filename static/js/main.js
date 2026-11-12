@@ -1513,3 +1513,94 @@ document.addEventListener('DOMContentLoaded', () => {
 
 })();
 // END Desktop Sidebar Collapse ─────────────────────────────────────────────────
+
+// ── Collapsed Sidebar Tooltip Positioning ────────────────────────────────────
+// DESKTOP ONLY (≥768px).  The .sidebar-tooltip spans use position:fixed so
+// they escape the sidebar's overflow:hidden.  Fixed positioning makes `top:50%`
+// mean 50% of the *viewport*, not the parent link, so we must set the correct
+// viewport Y coordinate ourselves via an inline style.
+//
+// BUG FIX — "tooltip jumps to center on mouse-leave":
+//   The previous version cleared tooltip.style.top immediately on mouseleave.
+//   That snapped `top` back to the CSS fallback `50%` (= 50% of the viewport)
+//   while the opacity transition was still running, making the tooltip jump to
+//   the centre of the screen and remain visible there for ~150 ms.
+//
+//   Fix: never clear the inline `top` until the opacity fade-out transition
+//   has fully completed.  We listen for `transitionend` (filtered to the
+//   `opacity` property) and only then remove the style.  A cancellation flag
+//   prevents the stale handler from firing if the pointer re-enters before the
+//   transition ends.
+//
+// No changes to routing, permissions, or any other behaviour.
+
+(function () {
+  const DESKTOP_MIN_PX = 768;
+
+  function positionTooltip(link) {
+    var tooltip = link.querySelector('.sidebar-tooltip');
+    if (!tooltip) return;
+
+    // Cancel any pending post-transition cleanup so it cannot clear the
+    // position we are about to set.
+    tooltip._cancelClear = true;
+
+    var rect = link.getBoundingClientRect();
+    tooltip.style.top = (rect.top + rect.height / 2) + 'px';
+  }
+
+  function schedulePositionClear(tooltip) {
+    // Allow the current cleanup to run (reset the cancel flag first).
+    tooltip._cancelClear = false;
+
+    function onTransitionEnd(e) {
+      // Only act on the opacity transition, not transform or others.
+      if (e.propertyName !== 'opacity') return;
+      tooltip.removeEventListener('transitionend', onTransitionEnd);
+      // If the pointer re-entered before we got here, _cancelClear will be
+      // true — leave the inline style in place.
+      if (!tooltip._cancelClear) {
+        tooltip.style.top = '';
+      }
+    }
+
+    tooltip.addEventListener('transitionend', onTransitionEnd);
+
+    // Safety net: if transitionend never fires (e.g. transitions disabled
+    // via prefers-reduced-motion or the element is hidden before it ends),
+    // clear after a generous timeout so we don't leak the inline style.
+    setTimeout(function () {
+      tooltip.removeEventListener('transitionend', onTransitionEnd);
+      if (!tooltip._cancelClear) {
+        tooltip.style.top = '';
+      }
+    }, 400);
+  }
+
+  function attachListeners() {
+    document.querySelectorAll('.sidebar-link').forEach(function (link) {
+      // Avoid double-binding if this function is ever called again.
+      if (link._tooltipBound) return;
+      link._tooltipBound = true;
+
+      link.addEventListener('mouseenter', function () {
+        if (window.innerWidth >= DESKTOP_MIN_PX) positionTooltip(link);
+      });
+      link.addEventListener('focusin', function () {
+        if (window.innerWidth >= DESKTOP_MIN_PX) positionTooltip(link);
+      });
+      link.addEventListener('mouseleave', function () {
+        var tooltip = link.querySelector('.sidebar-tooltip');
+        if (tooltip) schedulePositionClear(tooltip);
+      });
+      link.addEventListener('focusout', function () {
+        var tooltip = link.querySelector('.sidebar-tooltip');
+        if (tooltip) schedulePositionClear(tooltip);
+      });
+    });
+  }
+
+  // Attach immediately for links already in the DOM.
+  attachListeners();
+})();
+// END Collapsed Sidebar Tooltip Positioning ───────────────────────────────────

@@ -1,136 +1,396 @@
 {% extends "base_admin.html" %}
+{% load static %}
 {% block page_title %}{{ title }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/product-form.css' %}">
+<link rel="stylesheet" href="{% static 'css/staff-form.css' %}">
+{% endblock %}
+
 {% block content %}
-<div class="page-header">
-  <div><h1 class="page-title">{{ title }}</h1></div>
-  <a href="{% url 'accounts:staff_list' %}" class="btn btn-outline">← Back</a>
-</div>
-<div class="card" style="max-width:560px">
-  <div class="card-body">
-    <form method="post" id="staff-create-form">
-      {% csrf_token %}
 
-      {# ── Username ── #}
-      <div class="form-group">
-        <label class="form-label">{{ form.username.label }}</label>
-        {{ form.username }}
-        {% if form.username.errors %}<small style="color:var(--red-accent)">{{ form.username.errors.0 }}</small>{% endif %}
-      </div>
-
-      {# ── First Name ── #}
-      <div class="form-group">
-        <label class="form-label">{{ form.first_name.label }}</label>
-        {{ form.first_name }}
-        {% if form.first_name.errors %}<small style="color:var(--red-accent)">{{ form.first_name.errors.0 }}</small>{% endif %}
-      </div>
-
-      {# ── Last Name ── #}
-      <div class="form-group">
-        <label class="form-label">{{ form.last_name.label }}</label>
-        {{ form.last_name }}
-        {% if form.last_name.errors %}<small style="color:var(--red-accent)">{{ form.last_name.errors.0 }}</small>{% endif %}
-      </div>
-
-      {# ── Email ── #}
-      <div class="form-group">
-        <label class="form-label">{{ form.email.label }}</label>
-        {{ form.email }}
-        {% if form.email.errors %}<small style="color:var(--red-accent)">{{ form.email.errors.0 }}</small>{% endif %}
-      </div>
-
-      {# ── Role ── #}
-      <div class="form-group">
-        <label class="form-label">{{ form.role.label }}</label>
-        {{ form.role }}
-        {% if form.role.errors %}<small style="color:var(--red-accent)">{{ form.role.errors.0 }}</small>{% endif %}
-      </div>
-
-      {# ── Password ── #}
-      <div class="form-group">
-        <label class="form-label">{{ form.password1.label }}</label>
-        <div style="position:relative">
-          {{ form.password1 }}
-          <button type="button" class="pw-toggle" data-target="id_password1"
-                  aria-label="Show password"
-                  style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;color:#aaa;display:flex;align-items:center">
-            {% include "partials/eye_icon.html" %}
-          </button>
-        </div>
-        {% if form.password1.errors %}<small style="color:var(--red-accent)">{{ form.password1.errors.0 }}</small>{% endif %}
-      </div>
-
-      {# ── Confirm Password ── #}
-      <div class="form-group">
-        <label class="form-label">{{ form.password2.label }}</label>
-        <div style="position:relative">
-          {{ form.password2 }}
-          <button type="button" class="pw-toggle" data-target="id_password2"
-                  aria-label="Show confirm password"
-                  style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;color:#aaa;display:flex;align-items:center">
-            {% include "partials/eye_icon.html" %}
-          </button>
-        </div>
-        {# Live match indicator — populated by JS, empty until the user types #}
-        <div id="staff-pw-match" aria-live="polite"></div>
-        {% if form.password2.errors %}<small style="color:var(--red-accent)">{{ form.password2.errors.0 }}</small>{% endif %}
-      </div>
-
-      {# Non-field errors (e.g. password mismatch from Django) #}
-      {% if form.non_field_errors %}
-      <div class="alert alert-error" style="margin-bottom:1rem">
-        {{ form.non_field_errors.0 }}
-      </div>
-      {% endif %}
-
-      <button type="submit" class="btn btn-primary">Save Staff</button>
-    </form>
+{# ── Page Header ───────────────────────────────────────────────────────── #}
+<div class="pf-page-header">
+  <div class="pf-page-header__left">
+    <h1 class="pf-page-header__title">
+      {% if form.instance.pk %}Edit Staff{% else %}Add New Staff{% endif %}
+    </h1>
+    <p class="pf-page-header__subtitle">
+      Create a staff account and assign its role in your management system.
+    </p>
   </div>
+  <a href="{% url 'accounts:staff_list' %}" class="btn btn-outline pf-back-btn">
+    <i data-lucide="arrow-left" aria-hidden="true"></i>
+    Back to Staff Accounts
+  </a>
 </div>
 
-<script>
-// ── Show/hide password toggle ─────────────────────────────────────────────────
-document.querySelectorAll('.pw-toggle').forEach(function(btn) {
-  btn.addEventListener('click', function() {
-    var input = document.getElementById(btn.dataset.target);
-    if (!input) return;
-    var isHidden = input.type === 'password';
-    input.type = isHidden ? 'text' : 'password';
-    btn.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
-    var open   = btn.querySelector('.eye-open');
-    var closed = btn.querySelector('.eye-closed');
-    if (open)   open.style.display   = isHidden ? 'none' : '';
-    if (closed) closed.style.display = isHidden ? ''     : 'none';
-    input.focus();
-  });
-});
+{# ── Non-field errors ──────────────────────────────────────────────────── #}
+{% if form.non_field_errors %}
+<div class="alert alert-danger" style="margin-bottom:24px">
+  {% for error in form.non_field_errors %}
+    <span>{{ error }}</span>
+  {% endfor %}
+</div>
+{% endif %}
 
-// ── Live password-confirmation match indicator ────────────────────────────────
-// Calculation is local — passwords are never sent anywhere except the normal
-// form POST. Nothing is stored in localStorage/sessionStorage/cookies.
-(function() {
+{# ── Main form ─────────────────────────────────────────────────────────── #}
+<form id="staff-create-form"
+      method="post"
+      novalidate
+      autocomplete="off"
+      aria-label="Staff account creation form">
+  {% csrf_token %}
+  <div class="pf-layout sf-layout">
+
+    {# ══════════════════════════════════════════════════════════════════════ #}
+    {# Section 01 — Personal Information                                    #}
+    {# ══════════════════════════════════════════════════════════════════════ #}
+    <section class="pf-section" aria-labelledby="sf-section-personal-heading">
+      <div class="pf-section__header">
+        <span class="pf-section__number" aria-hidden="true">01</span>
+        <div>
+          <h2 class="pf-section__title" id="sf-section-personal-heading">Personal Information</h2>
+          <p class="pf-section__desc">The staff member's name and contact details.</p>
+        </div>
+      </div>
+
+      <div class="pf-section__body">
+
+        {# Row: First Name + Last Name ──────────────────────────────────── #}
+        <div class="pf-row pf-row--2col">
+
+          <div class="form-group{% if form.first_name.errors %} has-error{% endif %}">
+            <label class="form-label" for="{{ form.first_name.id_for_label }}">
+              First Name <span class="pf-required" aria-hidden="true">*</span>
+            </label>
+            {{ form.first_name }}
+            {% if form.first_name.errors %}
+              <p class="pf-field-error" role="alert">{{ form.first_name.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group{% if form.last_name.errors %} has-error{% endif %}">
+            <label class="form-label" for="{{ form.last_name.id_for_label }}">
+              Last Name <span class="pf-required" aria-hidden="true">*</span>
+            </label>
+            {{ form.last_name }}
+            {% if form.last_name.errors %}
+              <p class="pf-field-error" role="alert">{{ form.last_name.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+        </div>
+
+        {# Email ──────────────────────────────────────────────────────────── #}
+        <div class="form-group{% if form.email.errors %} has-error{% endif %}">
+          <label class="form-label" for="{{ form.email.id_for_label }}">
+            Email Address <span class="pf-required" aria-hidden="true">*</span>
+          </label>
+          {{ form.email }}
+          {% if form.email.errors %}
+            <p class="pf-field-error" role="alert">{{ form.email.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+      </div>{# /.pf-section__body #}
+    </section>
+
+    {# ══════════════════════════════════════════════════════════════════════ #}
+    {# Section 02 — Account Details                                         #}
+    {# ══════════════════════════════════════════════════════════════════════ #}
+    <section class="pf-section" aria-labelledby="sf-section-account-heading">
+      <div class="pf-section__header">
+        <span class="pf-section__number" aria-hidden="true">02</span>
+        <div>
+          <h2 class="pf-section__title" id="sf-section-account-heading">Account Details</h2>
+          <p class="pf-section__desc">The login username and system role for this staff member.</p>
+        </div>
+      </div>
+
+      <div class="pf-section__body">
+        <div class="pf-row pf-row--2col">
+
+          {# Username ─────────────────────────────────────────────────────── #}
+          <div class="form-group{% if form.username.errors %} has-error{% endif %}">
+            <label class="form-label" for="{{ form.username.id_for_label }}">
+              Username <span class="pf-required" aria-hidden="true">*</span>
+            </label>
+            {{ form.username }}
+            {% if form.username.errors %}
+              <p class="pf-field-error" role="alert">{{ form.username.errors.0 }}</p>
+            {% endif %}
+            <p class="pf-help-text">
+              Letters, digits, and @/./+/-/_ only. Used to log in.
+            </p>
+          </div>
+
+          {# Role ──────────────────────────────────────────────────────────── #}
+          <div class="form-group{% if form.role.errors %} has-error{% endif %}">
+            <label class="form-label" for="{{ form.role.id_for_label }}">
+              Role <span class="pf-required" aria-hidden="true">*</span>
+            </label>
+            {{ form.role }}
+            {% if form.role.errors %}
+              <p class="pf-field-error" role="alert">{{ form.role.errors.0 }}</p>
+            {% endif %}
+            {# Role descriptions — updated by JS to match the selected value #}
+            <p class="pf-help-text sf-role-desc" id="sf-role-desc" aria-live="polite"></p>
+          </div>
+
+        </div>
+      </div>{# /.pf-section__body #}
+    </section>
+
+    {# ══════════════════════════════════════════════════════════════════════ #}
+    {# Section 03 — Security Credentials                                    #}
+    {# ══════════════════════════════════════════════════════════════════════ #}
+    <section class="pf-section" aria-labelledby="sf-section-password-heading">
+      <div class="pf-section__header">
+        <span class="pf-section__number" aria-hidden="true">03</span>
+        <div>
+          <h2 class="pf-section__title" id="sf-section-password-heading">Security Credentials</h2>
+          <p class="pf-section__desc">Set a strong password for this account.</p>
+        </div>
+      </div>
+
+      <div class="pf-section__body">
+        <div class="pf-row pf-row--2col">
+
+          {# Password ──────────────────────────────────────────────────────── #}
+          <div class="form-group{% if form.password1.errors %} has-error{% endif %}">
+            <label class="form-label" for="{{ form.password1.id_for_label }}">
+              Password <span class="pf-required" aria-hidden="true">*</span>
+            </label>
+            <div class="sf-pw-wrapper">
+              {{ form.password1 }}
+              <button type="button"
+                      class="pw-toggle sf-pw-toggle"
+                      data-target="id_password1"
+                      aria-label="Show password">
+                {% include "partials/eye_icon.html" %}
+              </button>
+            </div>
+            {# Strength indicator — populated by JS #}
+            <div id="pw-strength-indicator" aria-live="polite" aria-atomic="true"></div>
+            {% if form.password1.errors %}
+              {% for error in form.password1.errors %}
+                <p class="pf-field-error" role="alert">{{ error }}</p>
+              {% endfor %}
+            {% endif %}
+          </div>
+
+          {# Confirm Password ──────────────────────────────────────────────── #}
+          <div class="form-group{% if form.password2.errors %} has-error{% endif %}">
+            <label class="form-label" for="{{ form.password2.id_for_label }}">
+              Confirm Password <span class="pf-required" aria-hidden="true">*</span>
+            </label>
+            <div class="sf-pw-wrapper">
+              {{ form.password2 }}
+              <button type="button"
+                      class="pw-toggle sf-pw-toggle"
+                      data-target="id_password2"
+                      aria-label="Show confirm password">
+                {% include "partials/eye_icon.html" %}
+              </button>
+            </div>
+            {# Live match indicator — populated by JS, empty until user types #}
+            <div id="pw-match-indicator" aria-live="polite"></div>
+            {% if form.password2.errors %}
+              <p class="pf-field-error" role="alert">{{ form.password2.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+        </div>{# /.pf-row--2col #}
+      </div>{# /.pf-section__body #}
+    </section>
+
+    {# ── Form actions ──────────────────────────────────────────────────── #}
+    <div class="pf-actions">
+      <a href="{% url 'accounts:staff_list' %}" class="btn btn-outline pf-actions__cancel">Cancel</a>
+      <button type="submit"
+              id="sf-submit-btn"
+              class="btn btn-primary pf-actions__submit">
+        <i data-lucide="user-plus" aria-hidden="true"></i>
+        <span id="sf-submit-label">Save Staff</span>
+        <span id="sf-submit-spinner" class="pf-spinner" aria-hidden="true" hidden></span>
+      </button>
+    </div>
+
+  </div>{# /.pf-layout #}
+</form>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  'use strict';
+
+  /* ── Role descriptions ──────────────────────────────────────────────────
+     Accurate descriptions sourced directly from the model/view behaviour.
+     cashier:       can access POS and order management but not admin config.
+     kitchen_staff: restricted to the kitchen orders queue only.
+     admin:         full management system access including staff and settings.
+  ────────────────────────────────────────────────────────────────────── */
+  var ROLE_DESCS = {
+    'cashier':       'Access to Order Management and POS Terminal. Cannot manage staff, categories, or system settings.',
+    'kitchen_staff': 'Restricted to the Kitchen Orders queue only. Cannot access sales, POS, or management pages.',
+    'admin':         'Full access to all management pages: orders, POS, products, categories, inventory, reports, finance, staff, and settings.',
+  };
+
+  var roleSelect = document.getElementById('id_role');
+  var roleDesc   = document.getElementById('sf-role-desc');
+
+  function updateRoleDesc () {
+    if (!roleSelect || !roleDesc) return;
+    var val  = roleSelect.value;
+    var desc = ROLE_DESCS[val] || '';
+    roleDesc.textContent = desc;
+  }
+
+  if (roleSelect) {
+    roleSelect.addEventListener('change', updateRoleDesc);
+    updateRoleDesc(); // set on page load (handles edit page pre-filled value)
+  }
+
+  /* ── Password show/hide toggle ──────────────────────────────────────────
+     Reuses the same .pw-toggle / data-target / .eye-open/.eye-closed
+     pattern as change_password.html and staff_form (original).
+  ────────────────────────────────────────────────────────────────────── */
+  document.querySelectorAll('.pw-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var input = document.getElementById(btn.dataset.target);
+      if (!input) return;
+      var isHidden = input.type === 'password';
+      input.type = isHidden ? 'text' : 'password';
+      btn.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+      var open   = btn.querySelector('.eye-open');
+      var closed = btn.querySelector('.eye-closed');
+      if (open)   open.style.display   = isHidden ? 'inline-flex' : 'none';
+      if (closed) closed.style.display = isHidden ? 'none'        : 'inline-flex';
+      input.focus();
+    });
+  });
+
+  /* ── Password strength indicator ────────────────────────────────────────
+     Mirrors change_password.html exactly, adapted for id_password1.
+     All computation is local — the password is never sent anywhere,
+     never stored in localStorage/sessionStorage/cookies, never logged.
+  ────────────────────────────────────────────────────────────────────── */
   var pw1 = document.getElementById('id_password1');
   var pw2 = document.getElementById('id_password2');
-  var mi  = document.getElementById('staff-pw-match');
+  var si  = document.getElementById('pw-strength-indicator');
+  var mi  = document.getElementById('pw-match-indicator');
 
-  if (!pw1 || !pw2 || !mi) return;
+  var REQS = [
+    { label: 'At least 8 characters',      test: function (v) { return v.length >= 8; } },
+    { label: 'Lowercase letter (a\u2013z)', test: function (v) { return /[a-z]/.test(v); } },
+    { label: 'Uppercase letter (A\u2013Z)', test: function (v) { return /[A-Z]/.test(v); } },
+    { label: 'Contains a number',          test: function (v) { return /[0-9]/.test(v); } },
+    { label: 'Special character',          test: function (v) { return /[^a-zA-Z0-9]/.test(v); } },
+  ];
 
-  function renderMatch() {
-    var v2 = pw2.value;
-    // Show nothing while the confirmation field is still empty
-    if (!v2) {
-      mi.innerHTML = '';
+  var LEVELS = [
+    null,
+    { label: 'Very Weak', color: 'var(--red-accent)',    cls: 'very-weak', segs: 1 },
+    { label: 'Weak',      color: '#e67e22',              cls: 'weak',      segs: 2 },
+    { label: 'Fair',      color: 'var(--gold)',          cls: 'fair',      segs: 3 },
+    { label: 'Strong',    color: 'var(--green-success)', cls: 'strong',    segs: 4 },
+    { label: 'Strong',    color: 'var(--green-success)', cls: 'strong',    segs: 4 },
+  ];
+
+  function calcScore (val) {
+    return REQS.reduce(function (s, r) { return s + (r.test(val) ? 1 : 0); }, 0);
+  }
+
+  function renderStrength (val) {
+    if (!si) return;
+    if (!val) {
+      si.innerHTML =
+        '<p class="pw-strength-label">Password Strength: ' +
+        '<span style="color:#aaa;font-weight:400">Enter a password</span></p>';
       return;
     }
-    if (pw1.value === v2) {
+    var score = calcScore(val);
+    var level = LEVELS[Math.min(score, LEVELS.length - 1)] || LEVELS[1];
+
+    var barHTML = '<div class="pw-strength-bar" role="presentation" aria-hidden="true">';
+    for (var i = 0; i < 4; i++) {
+      barHTML += '<div class="pw-strength-seg' + (i < level.segs ? ' ' + level.cls : '') + '"></div>';
+    }
+    barHTML += '</div>';
+
+    var listHTML = '<ul class="pw-req-list" aria-label="Password requirements">';
+    REQS.forEach(function (r) {
+      var met  = r.test(val);
+      var cls  = met ? 'met' : 'unmet';
+      var icon = met ? '\u2713' : '\u2717';
+      listHTML += '<li class="pw-req-item ' + cls + '">' +
+                  '<span class="pw-req-icon" aria-hidden="true">' + icon + '</span>' +
+                  '<span>' + r.label + '</span></li>';
+    });
+    listHTML += '</ul>';
+
+    si.innerHTML =
+      '<p class="pw-strength-label">Password Strength: ' +
+      '<span class="pw-strength-level" style="color:' + level.color + '">' + level.label + '</span></p>' +
+      barHTML +
+      listHTML;
+  }
+
+  function renderMatch () {
+    if (!mi || !pw2) return;
+    var v2 = pw2.value;
+    if (!v2) { mi.innerHTML = ''; return; }
+    if (pw1 && pw1.value === v2) {
       mi.innerHTML = '<span class="pw-match-ok">\u2713 Passwords match</span>';
     } else {
       mi.innerHTML = '<span class="pw-match-err">\u2717 Passwords do not match</span>';
     }
   }
 
-  // Update whenever either password field changes
-  pw1.addEventListener('input', renderMatch);
-  pw2.addEventListener('input', renderMatch);
+  if (pw1) {
+    pw1.addEventListener('input', function () {
+      renderStrength(pw1.value);
+      renderMatch();
+    });
+    renderStrength(''); // initial neutral state
+  }
+
+  if (pw2) {
+    pw2.addEventListener('input', renderMatch);
+  }
+
+  /* ── Submit guard ───────────────────────────────────────────────────────
+     Disables the submit button after the first valid submission.
+     Re-enables after 15 s as a safety net.
+     Server-side Django validation handles all actual rule enforcement.
+  ────────────────────────────────────────────────────────────────────── */
+  var form      = document.getElementById('staff-create-form');
+  var submitBtn = document.getElementById('sf-submit-btn');
+  var submitLbl = document.getElementById('sf-submit-label');
+  var spinner   = document.getElementById('sf-submit-spinner');
+
+  if (form && submitBtn) {
+    form.addEventListener('submit', function () {
+      if (!form.checkValidity()) return;
+      submitBtn.disabled = true;
+      if (submitLbl)  submitLbl.textContent  = 'Saving\u2026';
+      if (spinner)    spinner.hidden         = false;
+      setTimeout(function () {
+        submitBtn.disabled = false;
+        if (submitLbl)  submitLbl.textContent  = 'Save Staff';
+        if (spinner)    spinner.hidden         = true;
+      }, 15000);
+    });
+  }
+
+  /* Re-run Lucide so the user-plus icon renders */
+  if (window.lucide && typeof window.lucide.createIcons === 'function') {
+    window.lucide.createIcons();
+  }
+
 })();
 </script>
 {% endblock %}

@@ -1,12 +1,36 @@
 {% extends "base_admin.html" %}
+{% load static %}
 {% block page_title %}{{ title }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/product-form.css' %}">
+{% endblock %}
+
 {% block content %}
-<div class="page-header">
-  <div><h1 class="page-title">{{ title }}</h1></div>
-  <a href="{% url 'menu:product_list' %}" class="btn btn-outline">← Back</a>
+
+{# ── Page Header ───────────────────────────────────────────────────────── #}
+<div class="pf-page-header">
+  <div class="pf-page-header__left">
+    <h1 class="pf-page-header__title">
+      {% if product %}Edit Product{% else %}Add New Product{% endif %}
+    </h1>
+    <p class="pf-page-header__subtitle">
+      {% if product %}
+        Update the details, pricing, and inventory for this menu item.
+      {% else %}
+        Add a new item to your menu and manage its pricing and inventory.
+      {% endif %}
+    </p>
+  </div>
+  <a href="{% url 'menu:product_list' %}" class="btn btn-outline pf-back-btn">
+    <i data-lucide="arrow-left" aria-hidden="true"></i>
+    Back to Products
+  </a>
 </div>
+
+{# ── Active-order warning (edit page only) ─────────────────────────────── #}
 {% if product and active_order_count %}
-<div class="alert alert-warning">
+<div class="alert alert-warning" style="margin-bottom:24px">
   ⚠️ <strong>{{ product.name }}</strong> is currently in
   <strong>{{ active_order_count }} active order{{ active_order_count|pluralize }}</strong>
   {% if total_order_count %}(and appears in {{ total_order_count }} order{{ total_order_count|pluralize }} overall){% endif %}.
@@ -14,25 +38,362 @@
   order line items keep their saved name and price, so no order in progress is altered.
 </div>
 {% endif %}
-<div class="card" style="max-width:680px">
-  <div class="card-body">
-    <form method="post" enctype="multipart/form-data">
-      {% csrf_token %}
-      <div class="product-form-grid">
-        {% for field in form %}
-        <div class="form-group {% if field.name in 'description,image' %}full-col{% endif %}" style="{% if field.name in 'description,image,has_sizes,is_available,is_featured' %}grid-column:1/-1{% endif %}">
-          <label class="form-label">{{ field.label }}</label>
-          {{ field }}
-          {% if field.errors %}<small style="color:var(--red-accent)">{{ field.errors.0 }}</small>{% endif %}
-          {% if field.help_text %}<small style="color:#aaa">{{ field.help_text }}</small>{% endif %}
-        </div>
-        {% endfor %}
-      </div>
-      <div style="display:flex;gap:12px;margin-top:8px">
-        <button type="submit" class="btn btn-primary">Save Product</button>
-        <a href="{% url 'menu:product_list' %}" class="btn btn-outline">Cancel</a>
-      </div>
-    </form>
-  </div>
+
+{# ── Non-field errors (e.g. duplicate-name validation) ────────────────── #}
+{% if form.non_field_errors %}
+<div class="alert alert-danger" style="margin-bottom:24px">
+  {% for error in form.non_field_errors %}
+    <span>{{ error }}</span>
+  {% endfor %}
 </div>
+{% endif %}
+
+{# ── Main form ─────────────────────────────────────────────────────────── #}
+<form id="product-form"
+      method="post"
+      enctype="multipart/form-data"
+      novalidate
+      aria-label="Product creation form">
+  {% csrf_token %}
+  <div class="pf-layout">
+
+    {# ══════════════════════════════════════════════════════════════════════ #}
+    {# Section 01 — Product Information                                     #}
+    {# ══════════════════════════════════════════════════════════════════════ #}
+    <section class="pf-section" aria-labelledby="section-info-heading">
+      <div class="pf-section__header">
+        <span class="pf-section__number" aria-hidden="true">01</span>
+        <div>
+          <h2 class="pf-section__title" id="section-info-heading">Product Information</h2>
+          <p class="pf-section__desc">Basic details that identify this menu item.</p>
+        </div>
+      </div>
+
+      <div class="pf-section__body">
+
+        {# Row: Category + Name ────────────────────────────────────────── #}
+        <div class="pf-row pf-row--2col">
+
+          <div class="form-group{% if form.category.errors %} has-error{% endif %}">
+            <label class="form-label" for="{{ form.category.id_for_label }}">
+              Category <span class="pf-required" aria-hidden="true">*</span>
+            </label>
+            {{ form.category }}
+            {% if form.category.errors %}
+              <p class="pf-field-error" role="alert">{{ form.category.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group{% if form.name.errors %} has-error{% endif %}">
+            <label class="form-label" for="{{ form.name.id_for_label }}">
+              Product Name <span class="pf-required" aria-hidden="true">*</span>
+            </label>
+            {{ form.name }}
+            {% if form.name.errors %}
+              <p class="pf-field-error" role="alert">{{ form.name.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+        </div>
+
+        {# Description ────────────────────────────────────────────────── #}
+        <div class="form-group{% if form.description.errors %} has-error{% endif %}">
+          <label class="form-label" for="{{ form.description.id_for_label }}">Description</label>
+          {{ form.description }}
+          {% if form.description.errors %}
+            <p class="pf-field-error" role="alert">{{ form.description.errors.0 }}</p>
+          {% endif %}
+          <p class="pf-help-text">Optional — shown on the customer menu below the product name.</p>
+        </div>
+
+        {# Product Image ──────────────────────────────────────────────── #}
+        <div class="form-group{% if form.image.errors %} has-error{% endif %}">
+          <label class="form-label" id="pf-image-label">Product Image</label>
+
+
+          {# Hidden real file input — static positioning to prevent overflow #}
+          <input type="file"
+                 id="{{ form.image.id_for_label }}"
+                 name="{{ form.image.html_name }}"
+                 accept="image/*"
+                 class="pf-file-input-hidden"
+                 aria-labelledby="pf-image-label"
+                 aria-describedby="pf-image-help">
+
+          <div class="pf-upload-cols" id="pf-upload-cols">
+
+            {# Left: clickable upload trigger ─────────────────────────── #}
+            <div class="pf-upload-area pf-upload-trigger" id="pf-upload-area"
+                 role="button" tabindex="0"
+                 aria-label="Upload product image — click or drag and drop">
+              <div class="pf-upload-empty">
+                <div class="pf-upload-icon" aria-hidden="true">
+                  <i data-lucide="image-plus"></i>
+                </div>
+                <p class="pf-upload-main-text">Upload Product Image</p>
+                <p class="pf-upload-sub-text">Click to browse, or drag &amp; drop here</p>
+              </div>
+            </div>
+
+            {# Right: preview panel ────────────────────────────────────── #}
+            <div class="pf-preview-panel" id="pf-upload-area-preview">
+
+              {# Placeholder shown when no image is selected #}
+              <div class="pf-preview-placeholder" id="pf-upload-empty" aria-hidden="false">
+                <div class="pf-preview-placeholder__icon" aria-hidden="true">
+                  <i data-lucide="image"></i>
+                </div>
+                <p class="pf-preview-placeholder__text">No image selected</p>
+              </div>
+
+              {# Preview shown after image is selected; hidden on load #}
+              <div class="pf-upload-preview" id="pf-upload-preview" hidden aria-hidden="true">
+                <img id="pf-preview-img" src="" alt="">
+                <div class="pf-upload-preview-overlay" aria-hidden="true">
+                  <i data-lucide="refresh-cw"></i>
+                  <span>Replace image</span>
+                </div>
+              </div>
+
+            </div>
+
+          </div>{# /.pf-upload-cols #}
+
+          {# Remove button (shown after selection) #}
+          <button type="button"
+                  class="pf-upload-remove-btn"
+                  id="pf-upload-remove-btn"
+                  hidden
+                  aria-label="Remove selected image">
+            <i data-lucide="x" aria-hidden="true"></i> Remove image
+          </button>
+
+          {% if form.image.errors %}
+            <p class="pf-field-error" role="alert">{{ form.image.errors.0 }}</p>
+          {% endif %}
+
+          {# Existing image on edit pages #}
+          {% if form.instance.image %}
+            <p class="pf-help-text" id="pf-current-image-note">
+              Current image:
+              <a href="{{ form.instance.image.url }}" target="_blank" rel="noopener">
+                {{ form.instance.image.name|cut:"products/" }}
+              </a>
+              — select a new file above to replace it.
+            </p>
+          {% endif %}
+
+          <p class="pf-help-text" id="pf-image-help">
+            Accepted formats: JPG, PNG, WEBP. Recommended size: 800 × 800 px or larger.
+          </p>
+        </div>
+
+      </div>{# /.pf-section__body #}
+    </section>
+
+    {# ══════════════════════════════════════════════════════════════════════ #}
+    {# Section 02 — Pricing                                                 #}
+    {# ══════════════════════════════════════════════════════════════════════ #}
+    <section class="pf-section" aria-labelledby="section-pricing-heading">
+      <div class="pf-section__header">
+        <span class="pf-section__number" aria-hidden="true">02</span>
+        <div>
+          <h2 class="pf-section__title" id="section-pricing-heading">Pricing</h2>
+          <p class="pf-section__desc">Set the selling price for this product. Enable sizes below to unlock medium and large prices.</p>
+        </div>
+      </div>
+
+      <div class="pf-section__body">
+
+        {# Price grid #}
+        <div class="pf-price-grid">
+
+          {# Base price — always visible #}
+          <div class="form-group{% if form.price.errors %} has-error{% endif %}">
+            <label class="form-label" for="{{ form.price.id_for_label }}">
+              <span id="pf-base-price-label">Regular Price</span>
+              <span class="pf-required" aria-hidden="true">*</span>
+            </label>
+            <div class="pf-peso-input">
+              <span class="pf-peso-symbol" aria-hidden="true">₱</span>
+              {{ form.price }}
+            </div>
+            <p class="pf-help-text" id="pf-base-price-help">
+              Base selling price. Used when sizes are disabled.
+            </p>
+            {% if form.price.errors %}
+              <p class="pf-field-error" role="alert">{{ form.price.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          {# Medium price — shown when has_sizes is checked #}
+          <div class="form-group pf-size-price" id="pf-price-medium-group"
+               {% if not form.instance.has_sizes %}hidden aria-hidden="true"{% endif %}>
+            <label class="form-label" for="{{ form.price_medium.id_for_label }}">Medium Price</label>
+            <div class="pf-peso-input">
+              <span class="pf-peso-symbol" aria-hidden="true">₱</span>
+              {{ form.price_medium }}
+            </div>
+            <p class="pf-help-text">Leave blank to use the regular price.</p>
+            {% if form.price_medium.errors %}
+              <p class="pf-field-error" role="alert">{{ form.price_medium.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          {# Large price — shown when has_sizes is checked #}
+          <div class="form-group pf-size-price" id="pf-price-large-group"
+               {% if not form.instance.has_sizes %}hidden aria-hidden="true"{% endif %}>
+            <label class="form-label" for="{{ form.price_large.id_for_label }}">Large Price</label>
+            <div class="pf-peso-input">
+              <span class="pf-peso-symbol" aria-hidden="true">₱</span>
+              {{ form.price_large }}
+            </div>
+            <p class="pf-help-text">Leave blank to use the regular price.</p>
+            {% if form.price_large.errors %}
+              <p class="pf-field-error" role="alert">{{ form.price_large.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          {# Hot price — always visible (separate variant, not a size) #}
+          <div class="form-group{% if form.price_hot.errors %} has-error{% endif %}">
+            <label class="form-label" for="{{ form.price_hot.id_for_label }}">Hot Price</label>
+            <div class="pf-peso-input">
+              <span class="pf-peso-symbol" aria-hidden="true">₱</span>
+              {{ form.price_hot }}
+            </div>
+            <p class="pf-help-text">Separate hot-drink variant. Leave blank if not applicable.</p>
+            {% if form.price_hot.errors %}
+              <p class="pf-field-error" role="alert">{{ form.price_hot.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+        </div>{# /.pf-price-grid #}
+
+      </div>{# /.pf-section__body #}
+    </section>
+
+    {# ══════════════════════════════════════════════════════════════════════ #}
+    {# Section 03 — Product Options                                         #}
+    {# ══════════════════════════════════════════════════════════════════════ #}
+    <section class="pf-section" aria-labelledby="section-options-heading">
+      <div class="pf-section__header">
+        <span class="pf-section__number" aria-hidden="true">03</span>
+        <div>
+          <h2 class="pf-section__title" id="section-options-heading">Product Options</h2>
+          <p class="pf-section__desc">Control how this product behaves on the menu and POS.</p>
+        </div>
+      </div>
+
+      <div class="pf-section__body">
+        <div class="pf-toggles-list">
+
+          {# Has Sizes ─────────────────────────────────────────────────── #}
+          <div class="pf-toggle-row">
+            <div class="pf-toggle-info">
+              <span class="pf-toggle-title">Has Sizes</span>
+              <span class="pf-toggle-desc">Offer Small, Medium, and Large variants on the customer menu and POS. Enables the medium and large price fields above.</span>
+            </div>
+            <label class="pf-toggle-switch" for="{{ form.has_sizes.id_for_label }}"
+                   aria-label="Has Sizes">
+              {{ form.has_sizes }}
+              <span class="pf-toggle-track" aria-hidden="true">
+                <span class="pf-toggle-thumb"></span>
+              </span>
+            </label>
+          </div>
+
+          {# Is Available ──────────────────────────────────────────────── #}
+          <div class="pf-toggle-row">
+            <div class="pf-toggle-info">
+              <span class="pf-toggle-title">Is Available</span>
+              <span class="pf-toggle-desc">When enabled, this product is visible and orderable on the customer menu and POS. Disable to temporarily hide it without deactivating the product.</span>
+            </div>
+            <label class="pf-toggle-switch" for="{{ form.is_available.id_for_label }}"
+                   aria-label="Is Available">
+              {{ form.is_available }}
+              <span class="pf-toggle-track" aria-hidden="true">
+                <span class="pf-toggle-thumb"></span>
+              </span>
+            </label>
+          </div>
+
+          {# Is Featured ───────────────────────────────────────────────── #}
+          <div class="pf-toggle-row">
+            <div class="pf-toggle-info">
+              <span class="pf-toggle-title">Is Featured</span>
+              <span class="pf-toggle-desc">Featured products are highlighted in the customer menu and may appear in promotional displays.</span>
+            </div>
+            <label class="pf-toggle-switch" for="{{ form.is_featured.id_for_label }}"
+                   aria-label="Is Featured">
+              {{ form.is_featured }}
+              <span class="pf-toggle-track" aria-hidden="true">
+                <span class="pf-toggle-thumb"></span>
+              </span>
+            </label>
+          </div>
+
+        </div>{# /.pf-toggles-list #}
+      </div>{# /.pf-section__body #}
+    </section>
+
+    {# ══════════════════════════════════════════════════════════════════════ #}
+    {# Section 04 — Inventory Management                                    #}
+    {# ══════════════════════════════════════════════════════════════════════ #}
+    <section class="pf-section" aria-labelledby="section-inventory-heading">
+      <div class="pf-section__header">
+        <span class="pf-section__number" aria-hidden="true">04</span>
+        <div>
+          <h2 class="pf-section__title" id="section-inventory-heading">Inventory Management</h2>
+          <p class="pf-section__desc">Set the initial stock level and the threshold that triggers a low-stock alert.</p>
+        </div>
+      </div>
+
+      <div class="pf-section__body">
+        <div class="pf-row pf-row--2col">
+
+          <div class="form-group{% if form.stock_quantity.errors %} has-error{% endif %}">
+            <label class="form-label" for="{{ form.stock_quantity.id_for_label }}">
+              Stock Quantity <span class="pf-required" aria-hidden="true">*</span>
+            </label>
+            {{ form.stock_quantity }}
+            <p class="pf-help-text">Current available inventory when the product is created.</p>
+            {% if form.stock_quantity.errors %}
+              <p class="pf-field-error" role="alert">{{ form.stock_quantity.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group{% if form.low_stock_threshold.errors %} has-error{% endif %}">
+            <label class="form-label" for="{{ form.low_stock_threshold.id_for_label }}">
+              Low Stock Threshold <span class="pf-required" aria-hidden="true">*</span>
+            </label>
+            {{ form.low_stock_threshold }}
+            <p class="pf-help-text">Stock level at which the system flags this product as low in stock.</p>
+            {% if form.low_stock_threshold.errors %}
+              <p class="pf-field-error" role="alert">{{ form.low_stock_threshold.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+        </div>
+      </div>{# /.pf-section__body #}
+    </section>
+
+    {# ── Form actions ──────────────────────────────────────────────────── #}
+    <div class="pf-actions">
+      <a href="{% url 'menu:product_list' %}" class="btn btn-outline pf-actions__cancel">Cancel</a>
+      <button type="submit"
+              id="pf-submit-btn"
+              class="btn btn-primary pf-actions__submit">
+        <i data-lucide="save" aria-hidden="true"></i>
+        <span id="pf-submit-label">Save Product</span>
+        <span id="pf-submit-spinner" class="pf-spinner" aria-hidden="true" hidden></span>
+      </button>
+    </div>
+
+  </div>{# /.pf-layout #}
+</form>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/product-form.js' %}"></script>
 {% endblock %}

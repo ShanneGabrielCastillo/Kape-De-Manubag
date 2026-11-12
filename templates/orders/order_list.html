@@ -88,12 +88,9 @@
     min-height: 46px;
     font-size: 0.9rem;
   }
-  .order-filter-btns {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-  }
-  .order-filter-btns .btn {
+  /* No-JS fallback: Filter button spans full width on mobile */
+  .order-filter-submit {
+    width: 100%;
     min-height: 44px;
     justify-content: center;
     border-radius: 12px !important;
@@ -109,9 +106,8 @@
   }
 }
 
-/* Desktop: keep filter-btns as flex row */
+/* Desktop: search input fills available width */
 @media (min-width: 768px) {
-  .order-filter-btns { display: flex; gap: 8px; }
   .om-footer-hint { display: none; }
   #order-search-form { display: flex !important; gap: 10px; flex-wrap: wrap; }
   .order-search-wrap { flex: 1; min-width: 200px; margin-bottom: 0; position: static; }
@@ -357,10 +353,7 @@
       <i data-lucide="search" class="order-search-icon" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);pointer-events:none;z-index:1;width:1rem;height:1rem;color:#aaa" aria-hidden="true"></i>
       <input type="text" name="q" id="order-search" value="{{ search }}" placeholder="Search order # or customer..." class="form-control order-search-input">
     </div>
-    <div class="order-filter-btns">
-      <button type="submit" class="btn btn-primary"><i data-lucide="list-filter" class="btn-icon" aria-hidden="true"></i> Filter</button>
-      <a href="{% url 'orders:order_list' %}" class="btn btn-outline"><i data-lucide="rotate-ccw" class="btn-icon" aria-hidden="true"></i> Clear</a>
-    </div>
+    <button type="submit" class="btn btn-primary order-filter-submit"><i data-lucide="list-filter" class="btn-icon" aria-hidden="true"></i> Filter</button>
   </form>
 </div>
 

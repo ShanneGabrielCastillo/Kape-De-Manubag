@@ -3,6 +3,22 @@
 {% load product_images %}
 {% block title %}Menu — Kape De Manubag{% endblock %}
 
+{% block extra_css %}
+{# Inject the banner background-image via Django's static tag so the URL resolves correctly. #}
+{# All other .menu-hero styles live in main.css.                                              #}
+<style>
+  .menu-hero {
+    background-image: url("{% static 'images/hero/kape-de-manubag-banner.png' %}");
+  }
+  /* Tighten background position on small screens so the cup side stays visible */
+  @media (max-width: 575px) {
+    .menu-hero {
+      background-position: 60% center;
+    }
+  }
+</style>
+{% endblock %}
+
 {% block body %}
 <!-- Navigation -->
 <nav style="background:var(--cream-white);padding:0 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid var(--cream);position:sticky;top:0;z-index:50;height:56px">

@@ -1,0 +1,733 @@
+/* =========================================================
+   product-form.css
+   Scoped styles for the Add / Edit Product page only.
+   All selectors use the .pf- prefix (product-form) so
+   nothing here bleeds into other pages.
+   ========================================================= */
+
+/* ── Page header ─────────────────────────────────────────── */
+.pf-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+}
+
+.pf-page-header__title {
+  font-size: 1.75rem;
+  color: var(--brown-dark);
+  margin-bottom: 4px;
+}
+
+.pf-page-header__subtitle {
+  font-size: 0.875rem;
+  color: #888;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 400;
+  margin: 0;
+}
+
+.pf-back-btn {
+  align-self: flex-start;
+  flex-shrink: 0;
+}
+
+/* ── Form layout container ───────────────────────────────── */
+.pf-layout {
+  max-width: 980px;
+  /* width + box-sizing guarantee the layout never pushes past the
+     available content area, regardless of viewport width or zoom level. */
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  /* Safety-net: clip any child that overflows this container without
+     creating a new scroll container (clip ≠ hidden for scroll purposes). */
+  overflow-x: clip;
+}
+
+/* ── Section card ────────────────────────────────────────── */
+.pf-section {
+  background: var(--cream-white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  /* Flex child of .pf-layout (column direction): min-width:0 lets it
+     shrink below any child's intrinsic minimum width. */
+  min-width: 0;
+  /* Never protrude past .pf-layout's width. */
+  max-width: 100%;
+}
+
+.pf-section__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px 28px;
+  border-bottom: 2px solid var(--cream);
+  background: var(--cream-white);
+  /* Never wider than the section card. */
+  max-width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.pf-section__number {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--caramel);
+  line-height: 1.2;
+  flex-shrink: 0;
+  padding-top: 1px;
+  min-width: 28px;
+}
+
+.pf-section__title {
+  font-size: 1rem;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 700;
+  color: var(--brown-dark);
+  margin-bottom: 2px;
+  line-height: 1.3;
+}
+
+.pf-section__desc {
+  font-size: 0.825rem;
+  color: #999;
+  margin: 0;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 400;
+}
+
+.pf-section__body {
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /* Contain children; box-sizing ensures padding is inside the section width. */
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* Override global form-group bottom margin inside sections */
+.pf-section__body .form-group {
+  margin-bottom: 20px;
+  /* Flex-column children need min-width:0 so they can shrink below their
+     content's intrinsic minimum width (e.g. a <textarea cols="40"> has a
+     browser-assigned intrinsic width that would otherwise prevent shrinking
+     on narrow viewports). */
+  min-width: 0;
+  /* Ensure the group never protrudes past the section body's content area. */
+  max-width: 100%;
+}
+.pf-section__body .form-group:last-child {
+  margin-bottom: 0;
+}
+
+/* .pf-row is also a direct flex child of .pf-section__body */
+.pf-section__body .pf-row {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* form-control elements (inputs, selects, textareas) must never exceed
+   their container even when a cols/size attribute sets an intrinsic width. */
+.pf-section__body .form-control {
+  max-width: 100%;
+  /* width:100% is already on .form-control globally; restate it here so
+     it wins over the browser UA stylesheet's cols-attribute mapping. */
+  width: 100%;
+}
+
+/* ── Two-column row ──────────────────────────────────────── */
+.pf-row {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pf-row--2col {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* ── Required indicator ──────────────────────────────────── */
+.pf-required {
+  color: var(--red-accent);
+  margin-left: 2px;
+}
+
+/* ── Help text ───────────────────────────────────────────── */
+.pf-help-text {
+  font-size: 0.8rem;
+  color: #aaa;
+  margin-top: 5px;
+  margin-bottom: 0;
+  font-family: 'DM Sans', sans-serif;
+}
+
+/* ── Field error ─────────────────────────────────────────── */
+.pf-field-error {
+  font-size: 0.8rem;
+  color: var(--red-accent);
+  margin-top: 5px;
+  margin-bottom: 0;
+}
+
+/* Field error state: red border */
+.form-group.has-error .form-control,
+.form-group.has-error .form-select,
+.form-group.has-error .pf-peso-input .form-control {
+  border-color: var(--red-accent);
+}
+
+/* ── Peso currency input wrapper ──────────────────────────── */
+.pf-peso-input {
+  position: relative;
+}
+
+.pf-peso-symbol {
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--brown-warm);
+  font-weight: 600;
+  font-size: 0.9rem;
+  pointer-events: none;
+  line-height: 1;
+  z-index: 1;
+}
+
+.pf-peso-input .form-control {
+  padding-left: 30px;
+}
+
+/* ── Price grid ───────────────────────────────────────────── */
+.pf-price-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* ── Image upload area ───────────────────────────────────── */
+
+/* ── Two-column wrapper: upload trigger (left) + preview (right) ──
+   Both columns are always in the layout — no toggling of flex
+   containers with display:flex that would override [hidden].
+   ────────────────────────────────────────────────────────────── */
+.pf-upload-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: stretch;
+  /* Contain children so nothing escapes the section body width */
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pf-file-input-hidden {
+  /* ── THE FIX ──────────────────────────────────────────────────────────
+     The original rule used position:absolute with no positioned ancestor.
+     The browser resolved its containing block all the way up to the initial
+     containing block (document root), placed the element at left=32px
+     (= page-content padding), and its layout box spanned the full document
+     width — producing exactly 32px of horizontal overflow at every mobile
+     viewport. The topbar (position:fixed; right:0) anchored to that expanded
+     layout viewport, pushing the Order Management icon off-screen.
+
+     Fix: keep the input in normal flow (position:static) and use clip-path
+     to collapse it visually to nothing.  A static 1px element cannot push
+     the document wider than its parent container.
+     ─────────────────────────────────────────────────────────────────── */
+  position: static;   /* stay in normal flow — no containing-block lookup */
+  display: block;
+  width: 1px;
+  height: 1px;
+  clip-path: inset(50%); /* modern zero-area clip — replaces legacy clip:rect() */
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pf-upload-area {
+  border: 2px dashed #d0c4b0;
+  border-radius: var(--radius-sm);
+  background: var(--cream-light);
+  cursor: pointer;
+  transition: var(--transition);
+  overflow: hidden;
+  min-height: 148px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  /* Fill the grid cell height so it matches the preview panel */
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.pf-upload-area:hover,
+.pf-upload-area:focus-visible,
+.pf-upload-area.is-dragging {
+  border-color: var(--caramel);
+  background: #fdf5ea;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(193, 122, 59, 0.15);
+}
+
+/* ── Upload empty state ────────────────────────────────────── */
+.pf-upload-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 16px 12px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.pf-upload-icon {
+  width: 48px;
+  height: 48px;
+  background: rgba(193, 122, 59, 0.12);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+  color: var(--caramel);
+}
+
+.pf-upload-icon svg {
+  width: 22px;
+  height: 22px;
+  stroke: currentColor;
+}
+
+.pf-upload-main-text {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--brown-mid);
+  margin: 0;
+}
+
+.pf-upload-sub-text {
+  font-size: 0.8rem;
+  color: #aaa;
+  margin: 0;
+}
+
+/* ── Upload preview state ─────────────────────────────────── */
+.pf-upload-preview {
+  width: 100%;
+  height: 100%;
+  min-height: 164px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pf-upload-preview img {
+  width: 100%;
+  height: 220px;
+  object-fit: contain;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: var(--cream);
+  display: block;
+}
+
+.pf-upload-preview-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(44, 24, 16, 0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 0.2s;
+  border-radius: calc(var(--radius-sm) - 2px);
+}
+
+.pf-upload-preview-overlay svg {
+  width: 22px;
+  height: 22px;
+  stroke: currentColor;
+}
+
+.pf-upload-area:hover .pf-upload-preview-overlay {
+  opacity: 1;
+}
+
+/* ── Preview panel (right column) ──────────────────────────── */
+/* Permanent right column — contains either the placeholder
+   or the selected-image preview. Never toggled via display. */
+.pf-preview-panel {
+  border: 2px solid var(--cream);
+  border-radius: var(--radius-sm);
+  background: var(--cream-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 148px;
+  overflow: hidden;
+  position: relative;
+  box-sizing: border-box;
+}
+
+/* Placeholder: icon + text when nothing is selected */
+.pf-preview-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px 12px;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* [hidden] must win over display:flex on the placeholder */
+.pf-preview-placeholder[hidden] {
+  display: none;
+}
+
+.pf-preview-placeholder__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(193, 122, 59, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #c8b8a8;
+}
+
+.pf-preview-placeholder__icon svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+}
+
+.pf-preview-placeholder__text {
+  font-size: 0.78rem;
+  color: #bbb;
+  margin: 0;
+  font-family: 'DM Sans', sans-serif;
+}
+
+/* ── [hidden] fixes for upload state divs ──────────────────────
+   Both .pf-upload-preview and .pf-upload-empty have CSS
+   display:flex rules. Without an explicit [hidden] override,
+   the author stylesheet wins over the UA [hidden]{display:none}
+   rule, keeping these elements visible on page load and causing
+   the broken-image alt text to flash.
+   ────────────────────────────────────────────────────────── */
+.pf-upload-preview[hidden] {
+  display: none;
+}
+
+.pf-upload-empty[hidden] {
+  display: none;
+}
+
+/* The upload-preview fills the preview panel completely */
+.pf-preview-panel .pf-upload-preview {
+  width: 100%;
+  height: 100%;
+  min-height: 148px;
+  position: absolute;
+  inset: 0;
+}
+
+.pf-preview-panel .pf-upload-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 0;
+  background: var(--cream);
+  display: block;
+}
+
+/* Override the old standalone preview image height */
+.pf-upload-preview img {
+  height: 100%;
+}
+
+/* Remove image button */
+.pf-upload-remove-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 600;
+  color: var(--red-accent);
+  background: transparent;
+  border: 1px solid var(--red-accent);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+/* [hidden] must win over display:inline-flex */
+.pf-upload-remove-btn[hidden] {
+  display: none;
+}
+
+.pf-upload-remove-btn:hover {
+  background: var(--red-accent);
+  color: #fff;
+}
+
+.pf-upload-remove-btn svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  flex-shrink: 0;
+}
+
+/* ── Toggle switches (Section 03) ────────────────────────── */
+.pf-toggles-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.pf-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--cream);
+}
+
+.pf-toggle-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.pf-toggle-row:first-child {
+  padding-top: 0;
+}
+
+.pf-toggle-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pf-toggle-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--brown-dark);
+}
+
+.pf-toggle-desc {
+  font-size: 0.8rem;
+  color: #999;
+  font-family: 'DM Sans', sans-serif;
+  line-height: 1.45;
+}
+
+/* The <label> wrapping the checkbox + visual track */
+.pf-toggle-switch {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+}
+
+/* Hide the real checkbox visually but keep it in the accessibility tree */
+.pf-toggle-switch input[type="checkbox"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.pf-toggle-track {
+  display: inline-block;
+  width: 46px;
+  height: 26px;
+  background: #d0c4b0;
+  border-radius: 13px;
+  position: relative;
+  transition: background 0.22s ease;
+  flex-shrink: 0;
+}
+
+.pf-toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+  transition: transform 0.22s ease;
+}
+
+/* Checked state */
+.pf-toggle-switch input[type="checkbox"]:checked + .pf-toggle-track {
+  background: var(--caramel);
+}
+
+.pf-toggle-switch input[type="checkbox"]:checked + .pf-toggle-track .pf-toggle-thumb {
+  transform: translateX(20px);
+}
+
+/* Keyboard focus ring */
+.pf-toggle-switch input[type="checkbox"]:focus-visible + .pf-toggle-track {
+  outline: 3px solid var(--caramel);
+  outline-offset: 2px;
+}
+
+/* ── Form actions bar ────────────────────────────────────── */
+.pf-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 20px 0 8px;
+}
+
+.pf-actions__submit {
+  min-width: 148px;
+  justify-content: center;
+  position: relative;
+}
+
+.pf-actions__submit:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* ── Loading spinner ────────────────────────────────────── */
+.pf-spinner {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: pf-spin 0.7s linear infinite;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+/* The HTML `hidden` attribute must always hide the spinner.
+   Without this rule, the author-stylesheet `display: inline-block`
+   above overrides the browser UA stylesheet's `[hidden]{display:none}`,
+   making the spinner permanently visible on page load.              */
+.pf-spinner[hidden] {
+  display: none;
+}
+
+@keyframes pf-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Responsive: Tablet (≤ 768px) ───────────────────────── */
+@media (max-width: 768px) {
+
+  .pf-page-header {
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+
+  .pf-back-btn {
+    align-self: flex-start;
+  }
+
+  .pf-page-header__title { font-size: 1.5rem; }
+
+  .pf-section__header {
+    padding: 16px 20px;
+  }
+
+  .pf-section__body {
+    padding: 18px 20px;
+  }
+
+  .pf-row--2col {
+    grid-template-columns: 1fr;
+  }
+
+  .pf-price-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .pf-actions {
+    flex-direction: row;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .pf-actions__cancel,
+  .pf-actions__submit {
+    flex: 1;
+    justify-content: center;
+    text-align: center;
+    /* min-width:0 lets flex items shrink below their content width so
+       long labels (e.g. "Save Product") don't overflow on narrow phones */
+    min-width: 0;
+    /* Override the desktop floor so both buttons share width equally */
+    width: auto;
+  }
+}
+
+/* ── Responsive: Mobile (≤ 540px) ───────────────────────── */
+@media (max-width: 540px) {
+
+  .pf-page-header__title { font-size: 1.35rem; }
+
+  .pf-section__header {
+    padding: 14px 16px;
+    gap: 12px;
+  }
+
+  .pf-section__body {
+    padding: 16px;
+  }
+
+  .pf-price-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Keep upload two-column but reduce gap on very narrow screens */
+  .pf-upload-cols {
+    gap: 8px;
+  }
+
+  .pf-toggle-row {
+    gap: 16px;
+  }
+}

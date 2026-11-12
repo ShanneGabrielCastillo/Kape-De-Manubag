@@ -298,9 +298,11 @@
 
           {# User — mobile: label-value row showing first name (falls back to username) #}
           <td style="font-weight:600;font-size:0.88rem">
-            {{ log.user.first_name|default:log.user.username|default:"System" }}
             {% if log.user %}
-            <div style="font-size:0.75rem;color:#aaa;font-weight:400">{{ log.user.get_role_display }}</div>
+              {{ log.user.first_name|default:log.user.username }}
+              <div style="font-size:0.75rem;color:#aaa;font-weight:400">{{ log.user.get_role_display }}</div>
+            {% else %}
+              System
             {% endif %}
           </td>
 
@@ -333,8 +335,8 @@
 </div>
 
 {# ── Pagination ── #}
-{# data-page attributes are read by the JS IIFE to rewrite hrefs with URLSearchParams.
-   The hand-built href strings are a no-JS fallback — they work for ASCII-only queries. #}
+{# data-page attributes are read by the JS IIFE to rewrite hrefs with URLSearchParams. #}
+{# The hand-built href strings are a no-JS fallback — they work for ASCII-only queries. #}
 {% if logs.has_other_pages %}
 <div class="pagination">
   {% if logs.has_previous %}

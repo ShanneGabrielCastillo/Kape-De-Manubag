@@ -1,0 +1,102 @@
+/* =========================================================
+   staff-form.css
+   Scoped styles for the Add / Edit Staff page only.
+   Uses the sf- prefix (staff-form) to avoid collisions.
+
+   The bulk of the layout — sections, toggles, actions,
+   helpers, errors, responsive breakpoints — is handled by
+   the already-loaded product-form.css (.pf-*).
+   This file adds only elements unique to the staff form.
+   ========================================================= */
+
+/* ── Layout: slightly narrower than the product form ──────
+   Staff has fewer fields; 880 px keeps it balanced.         */
+.sf-layout {
+  max-width: 880px;
+}
+
+/* ── Password input wrapper ─────────────────────────────────
+   Positions the show/hide eye button inside the input box.
+   Uses position:relative here (not on the input itself) so
+   the eye button cannot escape the wrapper or cause overflow.
+   ────────────────────────────────────────────────────────── */
+.sf-pw-wrapper {
+  position: relative;
+}
+
+.sf-pw-wrapper .form-control {
+  /* Leave room on the right so text is never hidden under the eye */
+  padding-right: 44px;
+}
+
+/* Eye toggle button — centered vertically inside the wrapper */
+.sf-pw-toggle {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: #bbb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: color 0.2s;
+  /* Do not push layout wider */
+  flex-shrink: 0;
+}
+
+.sf-pw-toggle:hover {
+  color: var(--brown-warm);
+}
+
+/* Keep the eye icons the same size as in change_password.html */
+.sf-pw-toggle .eye-open,
+.sf-pw-toggle .eye-closed {
+  width: 20px;
+  height: 20px;
+}
+
+/* ── Role description text ───────────────────────────────── */
+/* Inherits .pf-help-text styles; just ensure it has a
+   minimum visible height so the layout doesn't jump when
+   the description appears.                                   */
+.sf-role-desc {
+  min-height: 1.2em;
+  transition: color 0.15s;
+}
+
+/* ── Password strength indicator spacing inside the section  */
+#pw-strength-indicator {
+  margin-top: 10px;
+}
+
+/* ── Responsive: Tablet + Mobile (≤ 768px) ─────────────────
+   The pf-row--2col rule in product-form.css already collapses
+   to 1-col at ≤768px, so both the Name/Last-name row and the
+   Username/Role row stack correctly without extra rules here.
+
+   The password row also collapses, so the strength indicator
+   is shown directly beneath Password and the match indicator
+   is directly beneath Confirm — exactly where the user types.
+   ────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* On mobile the two password fields are stacked: give the
+     strength indicator a bit more breathing room.            */
+  #pw-strength-indicator {
+    margin-top: 8px;
+    margin-bottom: 4px;
+  }
+}
+
+@media (max-width: 540px) {
+  /* Very narrow screens: single-column requirement list is
+     more readable than two columns. Rule already in main.css
+     at ≤360px; bring it in a bit earlier here.              */
+  .pw-req-list {
+    grid-template-columns: 1fr;
+  }
+}

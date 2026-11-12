@@ -279,21 +279,12 @@
   #sidebar-toggle { display: flex; }
 
   /* ── Topbar ── */
-  /* Use position:fixed on mobile so it always stays at the top regardless
-     of scroll container. Add padding-top to page-content to compensate
-     so content is not hidden behind the fixed bar. */
+  /* NOTE: position:fixed, left/right anchoring, height, and the matching
+     padding-top on .main-content are declared in the wider
+     @media (max-width: 767.98px) block below so they cover BOTH XS and SM
+     widths.  The XS-only overrides (padding tweak) remain here. */
   .topbar {
     padding: 0 12px;
-    height: 56px;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 200;
-  }
-  /* Push page content down to clear the fixed topbar */
-  .main-content {
-    padding-top: 56px;
   }
   .topbar-actions {
     gap: 8px;
@@ -330,7 +321,7 @@
   }
 
   /* ── Hero compact ── */
-  .menu-hero   { padding: 30px 16px; }
+  .menu-hero   { padding: 30px 16px; background-position: 60% center; }
   .menu-hero h1 { font-size: clamp(1.5rem, 7vw, 2.5rem); }
   .menu-hero p  { font-size: 0.85rem; }
 
@@ -570,6 +561,27 @@
    TABLE SCROLL + SIDEBAR — applies from 0 to 767px
    ========================================================================== */
 @media (max-width: 767.98px) {
+
+  /* ── Topbar: fixed positioning for ALL mobile widths (XS + SM) ──────────
+     The topbar must be position:fixed with explicit left:0 and right:0 on
+     every mobile width (0–767px), not just XS (0–575px).  Without this,
+     the SM range (576–767px) inherits the desktop sticky+margin-left:224px
+     layout: the topbar sits inside .main-content at 224px from the left,
+     has only the remaining ~350px of width at a typical 600px viewport, and
+     the .topbar-actions (Order Management icon) overflows off the right edge.
+     Moving the rule here covers both ranges in one declaration.             */
+  .topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    z-index: 200;
+  }
+  /* Push page content below the fixed bar on both XS and SM */
+  .main-content {
+    padding-top: 56px;
+  }
 
   /* ── Card overflow: visible so JS-generated .table-mobile-cards render outside ── */
   .card {
@@ -2387,27 +2399,12 @@
 }
 
 /* --------------------------------------------------------------------------
-   FIX F-8: Finance history mobile card — detail row overflow
-   "Cash Sales ₱XXX.XX · Expenses ₱XXX.XX" can exceed 320px card width
-   if amounts are large (e.g. ₱12,345.67).
+   FIX F-8: REMOVED — selector targeted the old inline-styled history card
+   structure (.finance-history-card > div > div:first-child > div:last-child).
+   After the FH-2 refactor (history.html now uses .fh-card semantic classes),
+   this deep descendant selector no longer matches anything. Replaced by the
+   FIX FH-2 block in the FINANCE HISTORY PAGE section below.
    -------------------------------------------------------------------------- */
-@media (max-width: 430px) {
-
-  .finance-history-card > div > div:first-child > div:last-child {
-    /* The subtitle line: allow wrapping */
-    white-space: normal;
-    overflow-wrap: break-word;
-    font-size: 0.72rem !important;
-    line-height: 1.4;
-  }
-
-  /* Ending COH amount in history card: always full-width, never clipped */
-  .finance-history-card > div > div:first-child > div:last-child div[style*="font-family"] {
-    font-size: clamp(1rem, 5vw, 1.1rem) !important;
-    white-space: nowrap;
-  }
-
-}
 
 /* --------------------------------------------------------------------------
    FIX F-9: Finance history mobile card — action button touch targets
@@ -2773,16 +2770,14 @@
 }
 
 /* --------------------------------------------------------------------------
-   FIX R-3: Summary stats grid — 3-card layout
-   At XS the stats-grid is 2-column. Three cards means the third card spans
-   alone and looks visually unbalanced. Force single-column at ≤ 360px so
-   all three cards stack cleanly. Also protect monetary amounts from clipping.
+   Stats grid — 2-column at all mobile widths including 320px.
+   The reports page has 2 stat cards; the dashboard has 4. Both form a
+   balanced 2-column grid at every mobile breakpoint without any override.
    -------------------------------------------------------------------------- */
 @media (max-width: 360px) {
 
-  /* Keep 2-column grid even on very narrow screens — the dashboard always
-     has 4 stat cards so a 2×2 layout is always balanced. The original
-     single-column rule was written for a 3-card variant that no longer exists. */
+  /* Explicit 2-column guard so a future addition of a third card on any page
+     does not produce an unbalanced orphan row at very narrow widths. */
   .stats-grid {
     grid-template-columns: repeat(2, 1fr) !important;
   }
@@ -3279,3 +3274,337 @@
 
 }
 /* END DASHBOARD RECENT ORDERS MOBILE CARDS one-line fix */
+
+/* ==========================================================================
+   FINANCE HISTORY PAGE — Mobile UI Enhancement
+   Scoped to history.html only via .finance-history-filters and .fh-* classes.
+   Desktop layout (≥ 576px) is controlled separately below.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   FIX FH-0: Finance history filter bar — desktop layout
+   On desktop the form is a single horizontal flex row, all four controls
+   inline. The wrapper divs use display:contents to be invisible to the
+   parent flex context, so the four controls participate directly.
+   -------------------------------------------------------------------------- */
+@media (min-width: 576px) {
+
+  .fh-filter__form {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    width: 100%;
+  }
+
+  /* Wrappers transparent on desktop — children join the form's flex row */
+  .fh-filter__search,
+  .fh-filter__month {
+    display: contents;
+  }
+
+  /* Buttons wrapper: also transparent on desktop */
+  .fh-filter__buttons {
+    display: contents;
+  }
+
+  /* Desktop input max-width (matches existing .filter-bar .form-control rule) */
+  .fh-filter__form .form-control {
+    max-width: 220px;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX FH-1: Finance history filter bar — 3-row mobile layout
+   Row 1: text search (full width)
+   Row 2: month date picker (full width)
+   Row 3: Filter + Clear buttons, side-by-side, equal widths
+
+   Root cause of the previous regression:
+   - The <form> had an inline style="display:flex;flex-wrap:wrap" which has
+     specificity (1,0,0) and beat all stylesheet rules trying to make the
+     form a column. The inline style is now removed; layout is CSS-only.
+   - Global .filter-bar .btn { width:100% } rules forced both buttons to
+     full width even inside the row-3 flex wrapper. Fixed by scoping buttons
+     as .fh-filter__btn and using flex:1 + !important to override.
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  /* Remove the margin the global .filter-bar adds — we control it here */
+  .finance-history-filters {
+    margin-bottom: 12px !important;
+  }
+
+  /* Form: strict column, each row stacks vertically */
+  .fh-filter__form {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Row 1: text search — full width */
+  .fh-filter__search {
+    display: block;
+    width: 100%;
+  }
+  .fh-filter__search .form-control {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 46px;
+    font-size: 0.95rem;
+    box-sizing: border-box;
+  }
+
+  /* Row 2: month picker — full width */
+  .fh-filter__month {
+    display: block;
+    width: 100%;
+  }
+  .fh-filter__month .form-control,
+  .fh-filter__month input[type="month"] {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 46px;
+    font-size: 0.95rem;
+    box-sizing: border-box;
+  }
+
+  /* Row 3: Filter + Clear — side-by-side, equal widths */
+  .fh-filter__buttons {
+    display: flex !important;
+    gap: 8px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Each button takes equal share of the row */
+  .fh-filter__btn {
+    flex: 1 1 0 !important;
+    width: auto !important;
+    min-width: 0 !important;
+    min-height: 46px !important;
+    justify-content: center;
+    white-space: nowrap;
+    box-sizing: border-box;
+    touch-action: manipulation;
+  }
+
+}
+
+/* --------------------------------------------------------------------------
+   FIX FH-2: Finance history record cards — three-part structured layout
+   Uses .fh-card and child classes added to history.html.
+   Mobile only (cards are display:none on desktop via existing rule).
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+
+  /* Card wrapper: consistent padding and bottom border */
+  .fh-card {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--cream);
+  }
+  .fh-card:last-child {
+    border-bottom: none;
+  }
+
+  /* ── Header row ── */
+  .fh-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+
+  /* Date — left-aligned, bold */
+  .fh-card__date {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--brown-dark);
+    line-height: 1.3;
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Ending COH block — right-aligned */
+  .fh-card__coh {
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .fh-card__coh-amount {
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    font-size: clamp(1rem, 4.5vw, 1.15rem);
+    color: var(--caramel);
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+  /* Negative variant */
+  .fh-card__coh--neg .fh-card__coh-amount {
+    color: var(--red-accent);
+  }
+  .fh-card__coh-label {
+    font-size: 0.7rem;
+    color: #aaa;
+    margin-top: 2px;
+    white-space: nowrap;
+  }
+
+  /* ── Details row ── */
+  .fh-card__details {
+    display: flex;
+    flex-wrap: wrap;           /* wraps naturally on 320px if amounts are large */
+    align-items: baseline;
+    gap: 2px 8px;
+    margin-bottom: 10px;
+    font-size: 0.75rem;
+    color: #aaa;
+    line-height: 1.4;
+  }
+  .fh-card__detail-item {
+    white-space: nowrap;
+  }
+  .fh-card__detail-item strong {
+    font-weight: 600;
+    color: var(--brown-dark);
+  }
+  .fh-card__detail--sales strong {
+    color: var(--green-success);   /* match desktop table cell color */
+  }
+  .fh-card__detail-sep {
+    color: #ccc;
+    flex-shrink: 0;
+    display: inline-block;
+  }
+
+  /* ── Actions row ── */
+  .fh-card__actions {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  /* Edit button: fills available width, comfortable tap target */
+  .fh-card__edit-btn {
+    flex: 1;
+    justify-content: center;
+    min-height: 44px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    touch-action: manipulation;
+  }
+
+  /* Print button: fixed width, icon + visually-hidden text */
+  .fh-card__print-btn {
+    flex-shrink: 0;
+    min-height: 44px;
+    min-width: 52px;
+    padding: 0 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    touch-action: manipulation;
+  }
+
+  /* Print label: visually hidden but accessible to screen readers */
+  .fh-print-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+}
+/* END FINANCE HISTORY PAGE — Mobile UI Enhancement */
+
+
+/* ==========================================================================
+   INVENTORY LIST PAGE — Desktop filter-bar single-row layout
+   Scope: .inv-filter-form (inventory/list.html only)
+   Applies at ≥ 992px so it does not affect tablet/mobile layouts.
+   ========================================================================== */
+@media (min-width: 992px) {
+
+  /* Force all controls onto one row; override the global flex-wrap:wrap */
+  .inv-filter-form {
+    flex-wrap: nowrap !important;
+    align-items: center;
+    gap: 10px;
+  }
+
+  /* Search bar — takes the majority of available space */
+  .inv-filter-form #inv-search {
+    flex: 1 1 auto;
+    min-width: 180px;
+    max-width: none;   /* lift the inline max-width:280px cap on wide screens */
+    width: auto;
+  }
+
+  /* Category and Stock Level dropdowns — fixed comfortable width, never shrink too small */
+  .inv-filter-form #inv-category,
+  .inv-filter-form #inv-stock-status {
+    flex: 0 0 175px;
+    min-width: 150px;
+    max-width: 175px;
+    width: 175px;
+  }
+
+  /* Clear link and Filter button — don't grow, stay compact */
+  .inv-filter-form .btn {
+    flex: 0 0 auto;
+    width: auto;
+    white-space: nowrap;
+  }
+
+}
+/* END INVENTORY LIST PAGE — Desktop filter-bar single-row layout */
+
+/* ==========================================================================
+   INVENTORY LOG PAGE — Desktop filter-bar single-row layout
+   Scope: #log-filter-form (inventory/log.html only)
+   Applies at ≥ 992px so it does not affect tablet/mobile layouts.
+   ========================================================================== */
+@media (min-width: 992px) {
+
+  /* Force all controls onto one row; override the global flex-wrap:wrap */
+  #log-filter-form {
+    flex-wrap: nowrap !important;
+    align-items: center;
+    gap: 10px;
+  }
+
+  /* Search bar — takes the majority of available space */
+  #log-filter-form #log-search {
+    flex: 1 1 auto;
+    min-width: 180px;
+    max-width: none;
+    width: auto;
+  }
+
+  /* Actions and Sources dropdowns — fixed readable width, never shrink too small */
+  #log-filter-form #log-action-filter,
+  #log-filter-form #log-source-filter {
+    flex: 0 0 165px;
+    min-width: 140px;
+    max-width: 165px;
+    width: 165px;
+  }
+
+  /* Search and Clear buttons — don't grow, stay compact */
+  #log-filter-form .btn {
+    flex: 0 0 auto;
+    width: auto;
+    white-space: nowrap;
+  }
+
+}
+/* END INVENTORY LOG PAGE — Desktop filter-bar single-row layout */

@@ -5,13 +5,46 @@
   <div><h1 class="page-title">Staff Accounts</h1><p class="page-subtitle">Manage your team</p></div>
   <a href="{% url 'accounts:staff_create' %}" class="btn btn-primary">+ Add Staff</a>
 </div>
+<style>
+/* ── Staff Accounts filter row — desktop layout ────────────────────────────
+   Scoped entirely to .staff-filter-form so no other filter bar is affected.
+   On desktop (≥ 768 px): search + dropdown sit on one row, proportional.
+     - Search bar:    flex 3 (≈60 %) — capped at 480 px on wide screens.
+     - Role dropdown: flex 2 (≈40 %) — minimum 160 px, max 260 px.
+     - Gap: 12 px (matches the global .filter-bar gap in main.css).
+   Below 768 px the form keeps flex-wrap:wrap and the global responsive rules
+   in responsive.css / mobile-design-system.css stack them vertically. */
+@media (min-width: 768px) {
+  .staff-filter-form {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+  }
+  /* ~60 % — flexible but never wider than 480 px */
+  .staff-filter-form #staff-search {
+    flex: 3 1 0;
+    min-width: 0;
+    max-width: 480px;
+  }
+  /* ~40 % — flexible, stays between 160 px and 260 px */
+  .staff-filter-form #staff-role {
+    flex: 2 1 0;
+    min-width: 160px;
+    max-width: 260px;
+  }
+}
+</style>
+
 <div class="filter-bar" style="margin-bottom:1rem;">
   <form method="get" class="staff-filter-form" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
     <input type="text" name="q" id="staff-search"
            value="{{ search }}"
            placeholder="Search by name, username, or email…"
-           class="form-control" style="max-width:320px;">
-    <select name="role" id="staff-role" class="form-control" style="max-width:160px;">
+           class="form-control">
+    <select name="role" id="staff-role" class="form-control">
       <option value="">All Roles</option>
       <option value="admin" {% if role_filter == 'admin' %}selected{% endif %}>Admin</option>
       <option value="cashier" {% if role_filter == 'cashier' %}selected{% endif %}>Cashier</option>

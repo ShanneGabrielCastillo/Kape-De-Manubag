@@ -1,23 +1,307 @@
 {% extends "base_admin.html" %}
+{% load static %}
 {% block page_title %}{{ title }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/product-form.css' %}">
+<link rel="stylesheet" href="{% static 'css/category-form.css' %}">
+{% endblock %}
+
 {% block content %}
-<div class="page-header">
-  <div><h1 class="page-title">{{ title }}</h1></div>
-  <a href="{% url 'menu:category_list' %}" class="btn btn-outline">← Back</a>
-</div>
-<div class="card" style="max-width:480px">
-  <div class="card-body">
-    <form method="post" enctype="multipart/form-data">
-      {% csrf_token %}
-      {% for field in form %}
-      <div class="form-group">
-        <label class="form-label">{{ field.label }}</label>
-        {{ field }}
-        {% if field.errors %}<small style="color:var(--red-accent)">{{ field.errors.0 }}</small>{% endif %}
-      </div>
-      {% endfor %}
-      <button type="submit" class="btn btn-primary">Save Category</button>
-    </form>
+
+{# ── Page Header ───────────────────────────────────────────────────────── #}
+<div class="pf-page-header">
+  <div class="pf-page-header__left">
+    <h1 class="pf-page-header__title">
+      {% if category %}Edit Category{% else %}Add New Category{% endif %}
+    </h1>
+    <p class="pf-page-header__subtitle">
+      {% if category %}
+        Update the details and settings for this menu category.
+      {% else %}
+        Create and organize a category for your menu.
+      {% endif %}
+    </p>
   </div>
+  <a href="{% url 'menu:category_list' %}" class="btn btn-outline pf-back-btn">
+    <i data-lucide="arrow-left" aria-hidden="true"></i>
+    Back to Categories
+  </a>
 </div>
+
+{# ── Non-field errors (e.g. duplicate-name validation) ────────────────── #}
+{% if form.non_field_errors %}
+<div class="alert alert-danger" style="margin-bottom:24px">
+  {% for error in form.non_field_errors %}
+    <span>{{ error }}</span>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ── Main form ─────────────────────────────────────────────────────────── #}
+<form id="category-form"
+      method="post"
+      enctype="multipart/form-data"
+      novalidate
+      aria-label="Category form">
+  {% csrf_token %}
+  <div class="pf-layout cf-layout">
+
+    {# ══════════════════════════════════════════════════════════════════════ #}
+    {# Section 01 — Category Information                                    #}
+    {# ══════════════════════════════════════════════════════════════════════ #}
+    <section class="pf-section" aria-labelledby="cf-section-info-heading">
+      <div class="pf-section__header">
+        <span class="pf-section__number" aria-hidden="true">01</span>
+        <div>
+          <h2 class="pf-section__title" id="cf-section-info-heading">Category Information</h2>
+          <p class="pf-section__desc">Basic details that identify this menu category.</p>
+        </div>
+      </div>
+
+      <div class="pf-section__body">
+
+        {# Row: Name + Category Type ──────────────────────────────────── #}
+        <div class="pf-row pf-row--2col">
+
+          <div class="form-group{% if form.name.errors %} has-error{% endif %}">
+            <label class="form-label" for="{{ form.name.id_for_label }}">
+              Category Name <span class="pf-required" aria-hidden="true">*</span>
+            </label>
+            {{ form.name }}
+            {% if form.name.errors %}
+              <p class="pf-field-error" role="alert">{{ form.name.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-group{% if form.category_type.errors %} has-error{% endif %}">
+            <label class="form-label" for="{{ form.category_type.id_for_label }}">
+              Category Type <span class="pf-required" aria-hidden="true">*</span>
+            </label>
+            {{ form.category_type }}
+            {% if form.category_type.errors %}
+              <p class="pf-field-error" role="alert">{{ form.category_type.errors.0 }}</p>
+            {% endif %}
+            <p class="pf-help-text">{{ form.category_type.help_text }}</p>
+          </div>
+
+        </div>
+
+        {# Description ────────────────────────────────────────────────── #}
+        <div class="form-group{% if form.description.errors %} has-error{% endif %}">
+          <label class="form-label" for="{{ form.description.id_for_label }}">Description</label>
+          {{ form.description }}
+          {% if form.description.errors %}
+            <p class="pf-field-error" role="alert">{{ form.description.errors.0 }}</p>
+          {% endif %}
+          <p class="pf-help-text">Optional — shown to customers on the menu page.</p>
+        </div>
+
+      </div>{# /.pf-section__body #}
+    </section>
+
+    {# ══════════════════════════════════════════════════════════════════════ #}
+    {# Section 02 — Category Appearance                                     #}
+    {# ══════════════════════════════════════════════════════════════════════ #}
+    <section class="pf-section" aria-labelledby="cf-section-appearance-heading">
+      <div class="pf-section__header">
+        <span class="pf-section__number" aria-hidden="true">02</span>
+        <div>
+          <h2 class="pf-section__title" id="cf-section-appearance-heading">Category Appearance</h2>
+          <p class="pf-section__desc">Set an emoji icon and an optional cover image for this category.</p>
+        </div>
+      </div>
+
+      <div class="pf-section__body">
+
+        {# Icon field with live preview ─────────────────────────────── #}
+        <div class="form-group{% if form.icon.errors %} has-error{% endif %}">
+          <label class="form-label" for="{{ form.icon.id_for_label }}">Category Icon</label>
+          <div class="cf-icon-row">
+            <div class="cf-icon-preview" id="cf-icon-preview" aria-hidden="true">
+              {{ form.instance.icon|default:"🍽️" }}
+            </div>
+            {{ form.icon }}
+          </div>
+          {% if form.icon.errors %}
+            <p class="pf-field-error" role="alert">{{ form.icon.errors.0 }}</p>
+          {% endif %}
+          <p class="pf-help-text">
+            Enter a single emoji character. It appears next to the category name on the menu and POS.
+            Default: 🍽️
+          </p>
+        </div>
+
+        {# Category Image ──────────────────────────────────────────────── #}
+        <div class="form-group{% if form.image.errors %} has-error{% endif %}">
+          <label class="form-label" id="cf-image-label">Category Image</label>
+
+          {# Hidden real file input — kept in normal flow to avoid overflow #}
+          <input type="file"
+                 id="{{ form.image.id_for_label }}"
+                 name="{{ form.image.html_name }}"
+                 accept="image/*"
+                 class="pf-file-input-hidden"
+                 aria-labelledby="cf-image-label"
+                 aria-describedby="cf-image-help">
+
+          {# Custom upload area #}
+          <div class="pf-upload-area" id="cf-upload-area" role="button" tabindex="0"
+               aria-label="Upload category image — click or drag and drop">
+
+            {# Empty state #}
+            <div class="pf-upload-empty" id="cf-upload-empty">
+              <div class="pf-upload-icon" aria-hidden="true">
+                <i data-lucide="image-plus"></i>
+              </div>
+              <p class="pf-upload-main-text">Upload Category Image</p>
+              <p class="pf-upload-sub-text">Click to browse, or drag &amp; drop here</p>
+            </div>
+
+            {# Preview state #}
+            <div class="pf-upload-preview" id="cf-upload-preview" hidden aria-hidden="true">
+              <img id="cf-preview-img" src="" alt="Selected category image preview">
+              <div class="pf-upload-preview-overlay" aria-hidden="true">
+                <i data-lucide="refresh-cw"></i>
+                <span>Replace image</span>
+              </div>
+            </div>
+
+          </div>
+
+          {# Remove button #}
+          <button type="button"
+                  class="pf-upload-remove-btn"
+                  id="cf-upload-remove-btn"
+                  hidden
+                  aria-label="Remove selected image">
+            <i data-lucide="x" aria-hidden="true"></i> Remove image
+          </button>
+
+          {% if form.image.errors %}
+            <p class="pf-field-error" role="alert">{{ form.image.errors.0 }}</p>
+          {% endif %}
+
+          {# Existing image on edit pages #}
+          {% if form.instance.image %}
+            <p class="pf-help-text">
+              Current image:
+              <a href="{{ form.instance.image.url }}" target="_blank" rel="noopener">
+                {{ form.instance.image.name|cut:"categories/" }}
+              </a>
+              — select a new file above to replace it.
+            </p>
+          {% endif %}
+
+          <p class="pf-help-text" id="cf-image-help">
+            Accepted formats: JPG, PNG, WEBP. Recommended size: 800 × 400 px or larger.
+          </p>
+        </div>
+
+      </div>{# /.pf-section__body #}
+    </section>
+
+    {# ══════════════════════════════════════════════════════════════════════ #}
+    {# Section 03 — Category Settings                                       #}
+    {# ══════════════════════════════════════════════════════════════════════ #}
+    <section class="pf-section" aria-labelledby="cf-section-settings-heading">
+      <div class="pf-section__header">
+        <span class="pf-section__number" aria-hidden="true">03</span>
+        <div>
+          <h2 class="pf-section__title" id="cf-section-settings-heading">Category Settings</h2>
+          <p class="pf-section__desc">Control how this category behaves on the menu and at the POS.</p>
+        </div>
+      </div>
+
+      <div class="pf-section__body">
+        <div class="pf-toggles-list">
+
+          {# Is Active ─────────────────────────────────────────────────── #}
+          <div class="pf-toggle-row">
+            <div class="pf-toggle-info">
+              <span class="pf-toggle-title">Is Active</span>
+              <span class="pf-toggle-desc">
+                Active categories and their products are visible on the customer menu and the POS.
+                Deactivating hides the entire category without deleting any data.
+              </span>
+            </div>
+            <label class="pf-toggle-switch" for="{{ form.is_active.id_for_label }}"
+                   aria-label="Is Active">
+              {{ form.is_active }}
+              <span class="pf-toggle-track" aria-hidden="true">
+                <span class="pf-toggle-thumb"></span>
+              </span>
+            </label>
+          </div>
+
+          {# Is Packaging Required ─────────────────────────────────────── #}
+          <div class="pf-toggle-row">
+            <div class="pf-toggle-info">
+              <span class="pf-toggle-title">Packaging Required</span>
+              <span class="pf-toggle-desc">
+                Enable for food and meal categories. Adds a ₱6 packaging fee per item on Take-Out orders.
+                Leave disabled for beverages and drinks.
+              </span>
+            </div>
+            <label class="pf-toggle-switch" for="{{ form.is_packaging_required.id_for_label }}"
+                   aria-label="Packaging Required">
+              {{ form.is_packaging_required }}
+              <span class="pf-toggle-track" aria-hidden="true">
+                <span class="pf-toggle-thumb"></span>
+              </span>
+            </label>
+          </div>
+
+        </div>
+      </div>{# /.pf-section__body #}
+    </section>
+
+    {# ══════════════════════════════════════════════════════════════════════ #}
+    {# Section 04 — Display Settings                                        #}
+    {# ══════════════════════════════════════════════════════════════════════ #}
+    <section class="pf-section" aria-labelledby="cf-section-display-heading">
+      <div class="pf-section__header">
+        <span class="pf-section__number" aria-hidden="true">04</span>
+        <div>
+          <h2 class="pf-section__title" id="cf-section-display-heading">Display Settings</h2>
+          <p class="pf-section__desc">Control where this category appears relative to others.</p>
+        </div>
+      </div>
+
+      <div class="pf-section__body">
+        <div class="cf-order-row">
+          <div class="form-group{% if form.order.errors %} has-error{% endif %}">
+            <label class="form-label" for="{{ form.order.id_for_label }}">Display Order</label>
+            {{ form.order }}
+            {% if form.order.errors %}
+              <p class="pf-field-error" role="alert">{{ form.order.errors.0 }}</p>
+            {% endif %}
+            <p class="pf-help-text">
+              Lower numbers appear first on the menu. Categories with the same order value
+              are sorted alphabetically. Default is 0.
+            </p>
+          </div>
+        </div>
+      </div>{# /.pf-section__body #}
+    </section>
+
+    {# ── Form actions ──────────────────────────────────────────────────── #}
+    <div class="pf-actions">
+      <a href="{% url 'menu:category_list' %}" class="btn btn-outline pf-actions__cancel">Cancel</a>
+      <button type="submit"
+              id="cf-submit-btn"
+              class="btn btn-primary pf-actions__submit">
+        <i data-lucide="save" aria-hidden="true"></i>
+        <span id="cf-submit-label">Save Category</span>
+        <span id="cf-submit-spinner" class="pf-spinner" aria-hidden="true" hidden></span>
+      </button>
+    </div>
+
+  </div>{# /.pf-layout #}
+</form>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/category-form.js' %}"></script>
 {% endblock %}
