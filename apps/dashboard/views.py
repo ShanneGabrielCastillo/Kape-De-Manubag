@@ -2,7 +2,7 @@
 Dashboard views - Statistics and analytics for Admin/Cashier
 """
 import logging
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
@@ -17,7 +17,7 @@ from django.utils import timezone
 
 from apps.accounts.decorators import admin_required, cashier_or_admin_required
 from apps.audit.services import log_action
-from apps.inventory.models import InventoryItem
+from apps.inventory.models import IngredientMovementLog, InventoryItem
 from apps.menu.models import CRITICAL_STOCK_THRESHOLD, Product
 from apps.orders.models import Order, OrderItem
 
@@ -243,6 +243,154 @@ def _format_quantity(value):
     return format(value.normalize(), 'f')
 
 
+def _format_signed_quantity(value):
+    """Format a signed quantity with an explicit sign for non-zero values."""
+    formatted = _format_quantity(value)
+    if value == 0 or formatted.startswith('-'):
+        return formatted
+    return f'+{formatted}'
+
+
+def _humanize_reason(code):
+    """Turn a stored reason code into readable text without inventing one."""
+    return code.replace('_', ' ').strip().capitalize() if code else ''
+
+
+# Phase 7.3: only these movement types change physical on-hand stock.
+_PHYSICAL_MOVEMENT_TYPES = (
+    IngredientMovementLog.MOVEMENT_PURCHASE,
+    IngredientMovementLog.MOVEMENT_CONSUMPTION,
+    IngredientMovementLog.MOVEMENT_WASTAGE,
+    IngredientMovementLog.MOVEMENT_ADJUSTMENT,
+)
+
+
+def _ingredient_movement_summary(period='week'):
+    """Per-unit physical movement totals for the active dashboard period.
+
+    Uses IngredientMovementLog as the sole source and reads only
+    ``on_hand_delta``. Reservation and release rows are non-physical and are
+    excluded explicitly. Opening stock is not written to the ledger, so these
+    are period activity totals, not a stock reconciliation.
+
+    Rows are grouped by ``base_unit`` and ``movement_type`` in ONE query.
+    Units are never combined: grams, millilitres, and pieces are different
+    dimensions. Only units with at least one physical movement are returned.
+    Decimal values are preformatted as strings for stable JSON serialization.
+    """
+    today = timezone.localdate()
+    start_date = _period_start(period, today)
+    if period == 'month':
+        if start_date.month == 12:
+            end_date = start_date.replace(year=start_date.year + 1, month=1)
+        else:
+            end_date = start_date.replace(month=start_date.month + 1)
+    else:
+        end_date = start_date + timedelta(days=7)
+
+    start = timezone.make_aware(datetime.combine(start_date, time.min))
+    end = timezone.make_aware(datetime.combine(end_date, time.min))
+
+    rows = (
+        IngredientMovementLog.objects
+        .filter(
+            movement_type__in=_PHYSICAL_MOVEMENT_TYPES,
+            created_at__gte=start,
+            created_at__lt=end,
+        )
+        .values('base_unit', 'movement_type')
+        .annotate(total=Sum('on_hand_delta'))
+    )
+
+    totals_by_unit = {}
+    for row in rows:
+        unit_totals = totals_by_unit.setdefault(
+            row['base_unit'],
+            {
+                'consumed': Decimal('0'),
+                'purchased': Decimal('0'),
+                'wasted': Decimal('0'),
+                'net_adjustment': Decimal('0'),
+            },
+        )
+        total = row['total'] or Decimal('0')
+        if row['movement_type'] == IngredientMovementLog.MOVEMENT_CONSUMPTION:
+            unit_totals['consumed'] = -total
+        elif row['movement_type'] == IngredientMovementLog.MOVEMENT_PURCHASE:
+            unit_totals['purchased'] = total
+        elif row['movement_type'] == IngredientMovementLog.MOVEMENT_WASTAGE:
+            unit_totals['wasted'] = -total
+        elif row['movement_type'] == IngredientMovementLog.MOVEMENT_ADJUSTMENT:
+            unit_totals['net_adjustment'] = total
+
+    unit_order = {
+        InventoryItem.BASE_UNIT_G: 0,
+        InventoryItem.BASE_UNIT_ML: 1,
+        InventoryItem.BASE_UNIT_PCS: 2,
+    }
+    return [
+        {
+            'base_unit': unit,
+            'consumed': _format_quantity(totals['consumed']),
+            'purchased': _format_quantity(totals['purchased']),
+            'wasted': _format_quantity(totals['wasted']),
+            'net_adjustment': _format_quantity(totals['net_adjustment']),
+            'net_adjustment_display': _format_signed_quantity(
+                totals['net_adjustment'],
+            ),
+        }
+        for unit, totals in sorted(
+            totals_by_unit.items(),
+            key=lambda item: (unit_order.get(item[0], 99), item[0]),
+        )
+    ]
+
+
+def _recent_ingredient_activity():
+    """Five most recent physical ingredient/packaging movements.
+
+    Independent of the selected Week/Month summary period: this is the most
+    recent activity overall. One SELECT ordered by ``-created_at, -pk`` keeps
+    ties deterministic. Snapshot fields avoid an inventory-item join and an
+    N+1 when the template or JavaScript renders each row.
+    """
+    rows = (
+        IngredientMovementLog.objects
+        .filter(movement_type__in=_PHYSICAL_MOVEMENT_TYPES)
+        .order_by('-created_at', '-pk')
+        .values(
+            'pk', 'item_name', 'movement_type', 'on_hand_delta',
+            'base_unit', 'order_number', 'reason_code', 'note',
+            'created_at',
+        )[:5]
+    )
+    type_labels = dict(IngredientMovementLog.MOVEMENT_TYPE_CHOICES)
+    return [
+        {
+            'pk': row['pk'],
+            'item_name': row['item_name'],
+            'movement_type': row['movement_type'],
+            'movement_type_display': type_labels.get(
+                row['movement_type'], row['movement_type'],
+            ),
+            'on_hand_delta': _format_quantity(row['on_hand_delta']),
+            'quantity_display': _format_signed_quantity(
+                row['on_hand_delta'],
+            ),
+            'base_unit': row['base_unit'],
+            'order_number': row['order_number'],
+            'reason_code': row['reason_code'],
+            'reason_display': _humanize_reason(row['reason_code']),
+            'note': row['note'],
+            'created_at': row['created_at'].isoformat(),
+            'created_at_display': timezone.localtime(
+                row['created_at'],
+            ).strftime('%b %d, %Y %I:%M %p'),
+        }
+        for row in rows
+    ]
+
+
 def _ingredient_low_stock():
     """Active ingredient/packaging items at or below their own threshold.
 
@@ -368,6 +516,21 @@ def _load_widgets(period='week', chart_label_fmt=None, *, include_recent=False):
         failed.add('ingredient_low_stock')
     widgets['ingredient_low_stock'] = ingredient_low_stock
 
+    movement_summary, movement_summary_failed = _widget(
+        'ingredient movement summary', [],
+        lambda: _ingredient_movement_summary(period),
+    )
+    if movement_summary_failed:
+        failed.add('ingredient_movement_summary')
+    widgets['ingredient_movement_summary'] = movement_summary
+
+    recent_activity, recent_activity_failed = _widget(
+        'recent ingredient activity', [], _recent_ingredient_activity,
+    )
+    if recent_activity_failed:
+        failed.add('recent_ingredient_activity')
+    widgets['recent_ingredient_activity'] = recent_activity
+
     return widgets, failed
 
 
@@ -406,6 +569,8 @@ def dashboard_summary(request):
     top_failed = 'top_products' in failed
     low_failed = 'low_stock' in failed
     ingredient_low_failed = 'ingredient_low_stock' in failed
+    movement_summary_failed = 'ingredient_movement_summary' in failed
+    recent_activity_failed = 'recent_ingredient_activity' in failed
 
     return JsonResponse({
         'daily_sales': None if stats_failed else float(widgets['daily_sales']),
@@ -452,6 +617,14 @@ def dashboard_summary(request):
             }
             for i in widgets['ingredient_low_stock']
         ],
+        'ingredient_movement_summary': (
+            None if movement_summary_failed
+            else widgets['ingredient_movement_summary']
+        ),
+        'recent_ingredient_activity': (
+            None if recent_activity_failed
+            else widgets['recent_ingredient_activity']
+        ),
     })
 
 

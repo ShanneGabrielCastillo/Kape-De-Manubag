@@ -20,7 +20,7 @@ KEEPING the real ``Template._render``, so the test client still captures
 ``response.context`` (needed by the statistics tests).
 """
 
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 from unittest import mock
 
@@ -32,7 +32,7 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from apps.accounts.models import CustomUser
-from apps.inventory.models import InventoryItem
+from apps.inventory.models import IngredientMovementLog, InventoryItem
 from apps.menu.models import Category, Product
 from apps.orders.models import Order, OrderItem
 
@@ -61,27 +61,29 @@ CHART_URL = '/dashboard/chart-data/'
 
 # Bounded query budget for one dashboard page load. Measured breakdown on
 # the supported stack (Django 5.0, SQLite):
-#   7  view queries (sales stats, status counts, chart data, top products,
-#      recent orders, legacy low stock, ingredient low stock -- all single
-#      consolidated queries)
+#   9  view queries (sales stats, status counts, chart data, top products,
+#      recent orders, legacy low stock, ingredient low stock, movement
+#      summary, recent ingredient activity -- all single consolidated
+#      queries)
 #   2  session SELECT + user SELECT (auth middleware)
 #   3  session UPDATE for the idle-timeout middleware's last-activity stamp
 #      (savepoint + UPDATE + release; only on the first request in a window)
-# Total: 12. The budget is exact (not a bound), so re-adding per-request
+# Total: 14. The budget is exact (not a bound), so re-adding per-request
 # queries (e.g. unused context-stat COUNTs or a cart lookup for staff) fails
 # the suite. Because it is exact, re-verify the count after upgrading Django
 # or changing middleware (session-write behaviour can shift it by +/- 1).
-DASHBOARD_QUERY_BUDGET = 12
+DASHBOARD_QUERY_BUDGET = 14
 # The chart endpoint needs only the session/user lookups plus ONE grouped
 # query per request. Measured at 3; the first authenticated request in an
 # idle-timeout window adds the session UPDATE (savepoint/update/release), so
 # the budget allows 6 for that worst case.
 CHART_QUERY_BUDGET = 6
-# The realtime summary endpoint runs the six consolidated view queries
+# The realtime summary endpoint runs the eight consolidated view queries
 # (sales stats, status counts, chart data, top products, legacy low stock,
-# ingredient low stock) plus the same auth/session lookups as the page.
-# Budget: 6 view + 2 auth + 3 session UPDATE worst case = 11.
-SUMMARY_QUERY_BUDGET = 11
+# ingredient low stock, movement summary, recent ingredient activity) plus
+# the same auth/session lookups as the page.
+# Budget: 8 view + 2 auth + 3 session UPDATE worst case = 13.
+SUMMARY_QUERY_BUDGET = 13
 SUMMARY_URL = '/dashboard/summary/'
 
 
@@ -1020,6 +1022,8 @@ class DashboardErrorResilienceTests(TestCase):
             '_top_products': Exception('boom'),
             '_low_stock': Exception('boom'),
             '_ingredient_low_stock': Exception('boom'),
+            '_ingredient_movement_summary': Exception('boom'),
+            '_recent_ingredient_activity': Exception('boom'),
         }
         with mock.patch.multiple('apps.dashboard.views', **failures):
             response = self.client.get(SUMMARY_URL)
@@ -1027,7 +1031,8 @@ class DashboardErrorResilienceTests(TestCase):
         data = response.json()
         for key in ('daily_sales', 'daily_orders', 'pending_count',
                     'chart_data', 'top_products', 'low_stock',
-                    'ingredient_low_stock'):
+                    'ingredient_low_stock', 'ingredient_movement_summary',
+                    'recent_ingredient_activity'):
             self.assertIsNone(data[key])
 
     # ── Chart endpoint ─────────────────────────────────────────────────────
@@ -1310,3 +1315,356 @@ class SidebarJSRegressionTest(TestCase):
             "This block must be removed — active state is set server-side "
             "by Django's request.resolver_match in base_admin.html."
         )
+
+
+class Phase73MovementWidgetTestBase(TestCase):
+    """Shared fixtures for the Phase 7.3 movement widgets."""
+
+    def setUp(self):
+        self.admin = _create_user('movement_admin', 'admin')
+        self.client.force_login(self.admin)
+
+    def _make_item(self, name, *, base_unit=InventoryItem.BASE_UNIT_G,
+                   item_type=InventoryItem.ITEM_TYPE_INGREDIENT,
+                   is_active=True):
+        return InventoryItem.objects.create(
+            name=name,
+            item_type=item_type,
+            base_unit=base_unit,
+            on_hand_quantity=Decimal('100.000'),
+            reserved_quantity=Decimal('0.000'),
+            low_stock_threshold=Decimal('10.000'),
+            is_active=is_active,
+        )
+
+    def _make_movement(self, item, movement_type, delta, *, created_at=None,
+                       reason_code='', note='', order_number=''):
+        """Create a constraint-valid movement row for widget tests."""
+        delta = Decimal(str(delta))
+        on_hand_before = Decimal('100.000')
+        on_hand_delta = delta
+        reserved_before = Decimal('0.000')
+        reserved_delta = Decimal('0.000')
+
+        if movement_type == IngredientMovementLog.MOVEMENT_CONSUMPTION:
+            reserved_before = abs(delta)
+            reserved_delta = delta
+        elif movement_type == IngredientMovementLog.MOVEMENT_RESERVATION:
+            on_hand_delta = Decimal('0.000')
+            reserved_delta = abs(delta)
+        elif movement_type == IngredientMovementLog.MOVEMENT_RESERVATION_RELEASE:
+            on_hand_delta = Decimal('0.000')
+            reserved_before = abs(delta)
+            reserved_delta = -abs(delta)
+
+        movement = IngredientMovementLog.objects.create(
+            inventory_item=item,
+            item_name=item.name,
+            base_unit=item.base_unit,
+            movement_type=movement_type,
+            on_hand_delta=on_hand_delta,
+            reserved_delta=reserved_delta,
+            on_hand_before=on_hand_before,
+            on_hand_after=on_hand_before + on_hand_delta,
+            reserved_before=reserved_before,
+            reserved_after=reserved_before + reserved_delta,
+            order_number=order_number,
+            reason_code=reason_code,
+            note=note,
+        )
+        if created_at is not None:
+            IngredientMovementLog.objects.filter(pk=movement.pk).update(
+                created_at=created_at,
+            )
+            movement.created_at = created_at
+        return movement
+
+    def _summary(self, period='week'):
+        from apps.dashboard.views import _ingredient_movement_summary
+        return _ingredient_movement_summary(period)
+
+
+class Phase73MovementSummaryTests(Phase73MovementWidgetTestBase):
+    """Per-unit physical movement summaries (Phase 7.3 decisions D1-D4)."""
+
+    def test_physical_totals_are_per_unit_and_use_on_hand_delta(self):
+        coffee = self._make_item('Coffee Beans')
+        cups = self._make_item(
+            'Takeaway Cups', base_unit=InventoryItem.BASE_UNIT_PCS,
+            item_type=InventoryItem.ITEM_TYPE_PACKAGING,
+        )
+        self._make_movement(coffee, IngredientMovementLog.MOVEMENT_PURCHASE, 500)
+        self._make_movement(coffee, IngredientMovementLog.MOVEMENT_PURCHASE, 200)
+        self._make_movement(coffee, IngredientMovementLog.MOVEMENT_CONSUMPTION, -50)
+        self._make_movement(coffee, IngredientMovementLog.MOVEMENT_CONSUMPTION, -30)
+        self._make_movement(coffee, IngredientMovementLog.MOVEMENT_WASTAGE, -20)
+        self._make_movement(coffee, IngredientMovementLog.MOVEMENT_ADJUSTMENT, 10)
+        self._make_movement(coffee, IngredientMovementLog.MOVEMENT_ADJUSTMENT, -4)
+        self._make_movement(coffee, IngredientMovementLog.MOVEMENT_RESERVATION, 50)
+        self._make_movement(
+            coffee, IngredientMovementLog.MOVEMENT_RESERVATION_RELEASE, 50,
+        )
+        self._make_movement(cups, IngredientMovementLog.MOVEMENT_PURCHASE, 120)
+        self._make_movement(cups, IngredientMovementLog.MOVEMENT_CONSUMPTION, -5)
+        self._make_movement(cups, IngredientMovementLog.MOVEMENT_WASTAGE, -2)
+        self._make_movement(cups, IngredientMovementLog.MOVEMENT_ADJUSTMENT, 3)
+
+        rows = self._summary()
+        self.assertEqual([row['base_unit'] for row in rows], ['g', 'pcs'])
+        self.assertEqual(rows[0], {
+            'base_unit': 'g',
+            'consumed': '80',
+            'purchased': '700',
+            'wasted': '20',
+            'net_adjustment': '6',
+            'net_adjustment_display': '+6',
+        })
+        self.assertEqual(rows[1], {
+            'base_unit': 'pcs',
+            'consumed': '5',
+            'purchased': '120',
+            'wasted': '2',
+            'net_adjustment': '3',
+            'net_adjustment_display': '+3',
+        })
+
+    def test_reservations_and_releases_alone_create_no_summary_row(self):
+        item = self._make_item('Reserved Only', base_unit=InventoryItem.BASE_UNIT_ML)
+        self._make_movement(item, IngredientMovementLog.MOVEMENT_RESERVATION, 50)
+        self._make_movement(
+            item, IngredientMovementLog.MOVEMENT_RESERVATION_RELEASE, 50,
+        )
+        self.assertEqual(self._summary(), [])
+
+    def test_inactive_item_history_is_included(self):
+        item = self._make_item('Retired Item', is_active=False)
+        self._make_movement(item, IngredientMovementLog.MOVEMENT_PURCHASE, 25)
+        self.assertEqual(self._summary()[0]['purchased'], '25')
+
+    def test_week_period_excludes_previous_week(self):
+        item = self._make_item('Weekly Coffee')
+        self._make_movement(
+            item, IngredientMovementLog.MOVEMENT_PURCHASE, 40,
+            created_at=timezone.now() - timedelta(days=7),
+        )
+        self._make_movement(item, IngredientMovementLog.MOVEMENT_PURCHASE, 60)
+        self.assertEqual(self._summary('week')[0]['purchased'], '60')
+
+    def test_month_period_excludes_previous_month(self):
+        item = self._make_item('Monthly Milk', base_unit=InventoryItem.BASE_UNIT_ML)
+        self._make_movement(
+            item, IngredientMovementLog.MOVEMENT_PURCHASE, 40,
+            created_at=timezone.now() - timedelta(days=40),
+        )
+        self._make_movement(item, IngredientMovementLog.MOVEMENT_PURCHASE, 60)
+        self.assertEqual(self._summary('month')[0]['purchased'], '60')
+
+    def test_local_period_boundary_is_inclusive_start_exclusive_end(self):
+        from apps.dashboard.views import _period_start
+
+        item = self._make_item('Boundary Coffee')
+        today = timezone.localdate()
+        start_date = _period_start('week', today)
+        end_date = start_date + timedelta(days=7)
+        start = timezone.make_aware(datetime.combine(start_date, time.min))
+        end = timezone.make_aware(datetime.combine(end_date, time.min))
+        self._make_movement(
+            item, IngredientMovementLog.MOVEMENT_PURCHASE, 10,
+            created_at=start - timedelta(seconds=1),
+        )
+        self._make_movement(
+            item, IngredientMovementLog.MOVEMENT_PURCHASE, 20,
+            created_at=start,
+        )
+        self._make_movement(
+            item, IngredientMovementLog.MOVEMENT_PURCHASE, 30,
+            created_at=end - timedelta(seconds=1),
+        )
+        self._make_movement(
+            item, IngredientMovementLog.MOVEMENT_PURCHASE, 40,
+            created_at=end,
+        )
+        self.assertEqual(self._summary('week')[0]['purchased'], '50')
+
+    def test_empty_summary_is_empty_not_a_failure(self):
+        self.assertEqual(self._summary(), [])
+
+    def test_page_and_summary_expose_same_summary_dataset(self):
+        item = self._make_item('Parity Beans')
+        self._make_movement(item, IngredientMovementLog.MOVEMENT_PURCHASE, 75)
+
+        page = self.client.get(DASHBOARD_URL)
+        summary = self.client.get(SUMMARY_URL)
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(summary.status_code, 200)
+        self.assertEqual(
+            page.context['ingredient_movement_summary'],
+            summary.json()['ingredient_movement_summary'],
+        )
+        for row in summary.json()['ingredient_movement_summary']:
+            for key in ('consumed', 'purchased', 'wasted',
+                        'net_adjustment', 'net_adjustment_display'):
+                self.assertIsInstance(row[key], str)
+
+    def test_summary_uses_one_query_regardless_of_movement_count(self):
+        item = self._make_item('Query Beans')
+        for i in range(20):
+            self._make_movement(item, IngredientMovementLog.MOVEMENT_PURCHASE, i + 1)
+        with CaptureQueriesContext(connection) as ctx:
+            self._summary()
+        self.assertEqual(len(ctx.captured_queries), 1)
+
+    def test_page_renders_when_summary_widget_fails(self):
+        with mock.patch(
+            'apps.dashboard.views._ingredient_movement_summary',
+            side_effect=Exception('boom'),
+        ):
+            page = self.client.get(DASHBOARD_URL)
+            summary = self.client.get(SUMMARY_URL)
+
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(
+            page, 'Movement summary is temporarily unavailable',
+        )
+        self.assertIn('ingredient_movement_summary', page.context['widget_errors'])
+        self.assertIsNone(summary.json()['ingredient_movement_summary'])
+        self.assertIsNotNone(summary.json()['recent_ingredient_activity'])
+
+
+class Phase73RecentActivityTests(Phase73MovementWidgetTestBase):
+    """Bounded recent physical activity feed (Phase 7.3 decisions D5-D7)."""
+
+    def test_physical_types_are_signed_snapshotted_and_limited_to_five(self):
+        items = [
+            self._make_item(f'Activity Item {i}') for i in range(6)
+        ]
+        base = timezone.now() - timedelta(minutes=10)
+        for i, item in enumerate(items):
+            self._make_movement(
+                item, IngredientMovementLog.MOVEMENT_PURCHASE, 100,
+                created_at=base + timedelta(minutes=i),
+            )
+        # A newer non-physical event must not displace physical rows.
+        self._make_movement(
+            items[0], IngredientMovementLog.MOVEMENT_RESERVATION, 20,
+            created_at=timezone.now(),
+        )
+        self._make_movement(
+            items[0], IngredientMovementLog.MOVEMENT_RESERVATION_RELEASE, 20,
+            created_at=timezone.now(),
+        )
+
+        from apps.dashboard.views import _recent_ingredient_activity
+        rows = _recent_ingredient_activity()
+        self.assertEqual(len(rows), 5)
+        self.assertEqual(
+            [row['item_name'] for row in rows],
+            ['Activity Item 5', 'Activity Item 4', 'Activity Item 3',
+             'Activity Item 2', 'Activity Item 1'],
+        )
+        self.assertTrue(all(
+            row['movement_type'] == IngredientMovementLog.MOVEMENT_PURCHASE
+            for row in rows
+        ))
+
+    def test_signed_quantities_and_snapshot_fields(self):
+        item = self._make_item('Snapshot Beans')
+        base = timezone.now() - timedelta(minutes=4)
+        self._make_movement(
+            item, IngredientMovementLog.MOVEMENT_PURCHASE, 500,
+            created_at=base, order_number='ORD-001', note='Delivery',
+        )
+        self._make_movement(
+            item, IngredientMovementLog.MOVEMENT_CONSUMPTION, -50,
+            created_at=base + timedelta(minutes=1),
+            reason_code='cancelled_prepared',
+        )
+        self._make_movement(
+            item, IngredientMovementLog.MOVEMENT_WASTAGE, -20,
+            created_at=base + timedelta(minutes=2), reason_code='expired',
+        )
+        self._make_movement(
+            item, IngredientMovementLog.MOVEMENT_ADJUSTMENT, -4,
+            created_at=base + timedelta(minutes=3),
+            reason_code='stock_count_correction',
+        )
+        item.name = 'Renamed Beans'
+        item.save(update_fields=['name'])
+
+        from apps.dashboard.views import _recent_ingredient_activity
+        rows = _recent_ingredient_activity()
+        self.assertEqual([row['quantity_display'] for row in rows],
+                         ['-4', '-20', '-50', '+500'])
+        self.assertEqual(rows[0]['reason_display'], 'Stock count correction')
+        self.assertEqual(rows[1]['reason_display'], 'Expired')
+        self.assertEqual(rows[2]['reason_display'], 'Cancelled prepared')
+        self.assertEqual(rows[3]['order_number'], 'ORD-001')
+        self.assertEqual(rows[3]['note'], 'Delivery')
+        self.assertTrue(all(row['item_name'] == 'Snapshot Beans' for row in rows))
+        self.assertTrue(all(row['base_unit'] == 'g' for row in rows))
+        self.assertTrue(all(isinstance(row['created_at'], str) for row in rows))
+
+    def test_order_ties_use_descending_primary_key(self):
+        item = self._make_item('Tie Item')
+        same_time = timezone.now()
+        first = self._make_movement(
+            item, IngredientMovementLog.MOVEMENT_PURCHASE, 10,
+            created_at=same_time,
+        )
+        second = self._make_movement(
+            item, IngredientMovementLog.MOVEMENT_PURCHASE, 20,
+            created_at=same_time,
+        )
+
+        from apps.dashboard.views import _recent_ingredient_activity
+        rows = _recent_ingredient_activity()
+        self.assertEqual([row['pk'] for row in rows], [second.pk, first.pk])
+
+    def test_only_nonphysical_events_produce_empty_activity(self):
+        item = self._make_item('No Physical')
+        self._make_movement(item, IngredientMovementLog.MOVEMENT_RESERVATION, 10)
+        self._make_movement(
+            item, IngredientMovementLog.MOVEMENT_RESERVATION_RELEASE, 10,
+        )
+
+        from apps.dashboard.views import _recent_ingredient_activity
+        self.assertEqual(_recent_ingredient_activity(), [])
+
+    def test_page_and_summary_expose_same_activity_dataset(self):
+        item = self._make_item('Parity Activity')
+        self._make_movement(item, IngredientMovementLog.MOVEMENT_PURCHASE, 25)
+
+        page = self.client.get(DASHBOARD_URL)
+        summary = self.client.get(SUMMARY_URL)
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(summary.status_code, 200)
+        self.assertEqual(
+            page.context['recent_ingredient_activity'],
+            summary.json()['recent_ingredient_activity'],
+        )
+
+    def test_activity_uses_one_query(self):
+        item = self._make_item('Query Activity')
+        for i in range(10):
+            self._make_movement(item, IngredientMovementLog.MOVEMENT_PURCHASE, i + 1)
+
+        from apps.dashboard.views import _recent_ingredient_activity
+        with CaptureQueriesContext(connection) as ctx:
+            _recent_ingredient_activity()
+        self.assertEqual(len(ctx.captured_queries), 1)
+
+    def test_page_renders_when_activity_widget_fails(self):
+        with mock.patch(
+            'apps.dashboard.views._recent_ingredient_activity',
+            side_effect=Exception('boom'),
+        ):
+            page = self.client.get(DASHBOARD_URL)
+            summary = self.client.get(SUMMARY_URL)
+
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(
+            page, 'Recent movement activity is temporarily unavailable',
+        )
+        self.assertIn('recent_ingredient_activity', page.context['widget_errors'])
+        self.assertIsNone(summary.json()['recent_ingredient_activity'])
+        self.assertIsNotNone(summary.json()['ingredient_movement_summary'])

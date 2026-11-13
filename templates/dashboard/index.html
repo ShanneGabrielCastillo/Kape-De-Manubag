@@ -598,6 +598,84 @@
   </div>
 </div>
 
+<!-- Phase 7.3: physical movement summary + recent activity -->
+<div class="dashboard-grid-secondary" style="margin-top:24px">
+  <div class="card dash-content">
+    <div class="card-header">
+      <h3><i data-lucide="arrow-left-right" class="btn-icon" aria-hidden="true"></i> Ingredient &amp; Packaging Movement</h3>
+      <span id="movement-summary-period-label" class="badge badge-pending">This Week</span>
+    </div>
+    <div class="card-body" id="ingredient-movement-summary-list" style="padding:0;overflow-x:auto">
+      {% if 'ingredient_movement_summary' in widget_errors %}
+      <div class="empty-state widget-error">
+        <div class="empty-icon"><i data-lucide="triangle-alert" style="width:2.2rem;height:2.2rem;opacity:0.5" aria-hidden="true"></i></div>
+        <p>Movement summary is temporarily unavailable. Please try again later.</p>
+      </div>
+      {% elif ingredient_movement_summary %}
+      <table class="dash-table" style="width:100%">
+        <thead>
+          <tr>
+            <th>Unit</th>
+            <th>Consumed</th>
+            <th>Purchased</th>
+            <th>Wasted</th>
+            <th>Net adjustment</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in ingredient_movement_summary %}
+          <tr>
+            <td><strong>{{ row.base_unit }}</strong></td>
+            <td>{{ row.consumed }}</td>
+            <td>{{ row.purchased }}</td>
+            <td>{{ row.wasted }}</td>
+            <td>{{ row.net_adjustment_display }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty-state"><div class="empty-icon"><i data-lucide="arrow-left-right" style="width:4rem;height:4rem;opacity:0.5" aria-hidden="true"></i></div><p>No ingredient or packaging movements recorded <span id="movement-summary-period-copy">this week</span>.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card dash-content">
+    <div class="card-header">
+      <h3><i data-lucide="history" class="btn-icon" aria-hidden="true"></i> Recent Activity</h3>
+      <span class="badge badge-completed">Physical only</span>
+    </div>
+    <div class="card-body dash-list" id="recent-ingredient-activity-list" style="padding:0">
+      {% if 'recent_ingredient_activity' in widget_errors %}
+      <div class="empty-state widget-error">
+        <div class="empty-icon"><i data-lucide="triangle-alert" style="width:2.2rem;height:2.2rem;opacity:0.5" aria-hidden="true"></i></div>
+        <p>Recent movement activity is temporarily unavailable. Please try again later.</p>
+      </div>
+      {% else %}
+      {% for row in recent_ingredient_activity %}
+      <div class="dash-row">
+        <div style="min-width:0">
+          <div style="font-weight:600;font-size:0.85rem">{{ row.item_name }}</div>
+          <div style="font-size:0.75rem;color:#aaa">
+            {{ row.movement_type_display }}{% if row.order_number %} · {{ row.order_number }}{% endif %}{% if row.reason_display %} · {{ row.reason_display }}{% endif %}
+          </div>
+          {% if row.note %}<div style="font-size:0.72rem;color:#999;margin-top:2px">{{ row.note|truncatechars:80 }}</div>{% endif %}
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <span class="badge {% if row.movement_type == 'purchase' %}badge-completed{% elif row.movement_type == 'consumption' %}badge-preparing{% elif row.movement_type == 'wastage' %}badge-cancelled{% else %}badge-pending{% endif %}">
+            {{ row.quantity_display }} {{ row.base_unit }}
+          </span>
+          <div style="font-size:0.7rem;color:#aaa;margin-top:5px">{{ row.created_at_display }}</div>
+        </div>
+      </div>
+      {% empty %}
+      <div class="empty-state"><div class="empty-icon"><i data-lucide="history" style="width:4rem;height:4rem;opacity:0.5" aria-hidden="true"></i></div><p>No physical ingredient or packaging movements yet.</p></div>
+      {% endfor %}
+      {% endif %}
+    </div>
+  </div>
+</div>
+
 </div><!-- /#dashboard-content -->
 
 <noscript>
@@ -697,6 +775,15 @@
     if (label) label.textContent = period === 'month' ? 'This Month' : 'This Week';
   }
 
+  // Keep the Phase 7.3 movement summary label synchronized with the chart
+  // period selector. The recent-activity card is intentionally period-free.
+  function updateMovementSummaryPeriodLabel(period) {
+    const label = document.getElementById('movement-summary-period-label');
+    if (label) label.textContent = period === 'month' ? 'This Month' : 'This Week';
+    const copy = document.getElementById('movement-summary-period-copy');
+    if (copy) copy.textContent = period === 'month' ? 'this month' : 'this week';
+  }
+
   async function loadChart(period, btn) {
     // Update active button state
     document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
@@ -736,6 +823,7 @@
     // fetchDashboardSummary() reads the now-active .period-btn so it sends
     // the correct ?period= to the server — no extra argument needed.
     updateTopProductsPeriodLabel(period);
+    updateMovementSummaryPeriodLabel(period);
     fetchDashboardSummary();
   }
 
@@ -816,6 +904,8 @@
     safeWidgetUpdate('top products', function () { rebuildTopProducts(s.top_products); });
     safeWidgetUpdate('low stock', function () { rebuildLowStock(s.low_stock); });
     safeWidgetUpdate('ingredient stock', function () { rebuildIngredientStock(s.ingredient_low_stock); });
+    safeWidgetUpdate('movement summary', function () { rebuildMovementSummary(s.ingredient_movement_summary); });
+    safeWidgetUpdate('recent activity', function () { rebuildRecentIngredientActivity(s.recent_ingredient_activity); });
   }
 
   function updateStatCards(s) {
@@ -966,6 +1056,73 @@
           '<span class="badge ' + cls + '">' + label + ': ' +
           escHtml(i.quantity_display + ' ' + i.base_unit) + '</span>' +
           '</div>';
+      }).join('');
+    }
+    if (list.innerHTML !== html) list.innerHTML = html;
+  }
+
+  // Phase 7.3 — per-unit physical movement summary. The server has already
+  // aggregated by base_unit; never combine these rows into one total here.
+  function rebuildMovementSummary(rows) {
+    const list = document.getElementById('ingredient-movement-summary-list');
+    if (!list) return;
+    let html;
+    if (rows === null || rows === undefined) {
+      html = widgetErrorHtml('Movement summary is temporarily unavailable. Please try again later.');
+    } else if (!rows.length) {
+      const active = document.querySelector('.period-btn.active');
+      const periodCopy = active && active.dataset.period === 'month' ? 'this month' : 'this week';
+      html = '<div class="empty-state"><div class="empty-icon"><i data-lucide="arrow-left-right" style="width:4rem;height:4rem;opacity:0.5" aria-hidden="true"></i></div>' +
+        '<p>No ingredient or packaging movements recorded ' + periodCopy + '.</p></div>';
+    } else {
+      html = '<table class="dash-table" style="width:100%"><thead><tr>' +
+        '<th>Unit</th><th>Consumed</th><th>Purchased</th><th>Wasted</th><th>Net adjustment</th>' +
+        '</tr></thead><tbody>' +
+        rows.map(function (r) {
+          return '<tr>' +
+            '<td><strong>' + escHtml(r.base_unit) + '</strong></td>' +
+            '<td>' + escHtml(r.consumed) + '</td>' +
+            '<td>' + escHtml(r.purchased) + '</td>' +
+            '<td>' + escHtml(r.wasted) + '</td>' +
+            '<td>' + escHtml(r.net_adjustment_display) + '</td>' +
+            '</tr>';
+        }).join('') + '</tbody></table>';
+    }
+    if (list.innerHTML !== html) list.innerHTML = html;
+  }
+
+  // Phase 7.3 — recent physical movements. Classes are derived from a fixed
+  // movement-type map, never from unsanitized payload text.
+  function movementBadgeClass(movementType) {
+    if (movementType === 'purchase') return 'badge-completed';
+    if (movementType === 'consumption') return 'badge-preparing';
+    if (movementType === 'wastage') return 'badge-cancelled';
+    return 'badge-pending';
+  }
+
+  function rebuildRecentIngredientActivity(items) {
+    const list = document.getElementById('recent-ingredient-activity-list');
+    if (!list) return;
+    let html;
+    if (items === null || items === undefined) {
+      html = widgetErrorHtml('Recent movement activity is temporarily unavailable. Please try again later.');
+    } else if (!items.length) {
+      html = '<div class="empty-state"><div class="empty-icon"><i data-lucide="history" style="width:4rem;height:4rem;opacity:0.5" aria-hidden="true"></i></div><p>No physical ingredient or packaging movements yet.</p></div>';
+    } else {
+      html = items.map(function (i) {
+        const meta = [i.movement_type_display, i.order_number, i.reason_display]
+          .filter(Boolean).map(escHtml).join(' · ');
+        const note = i.note
+          ? '<div style="font-size:0.72rem;color:#999;margin-top:2px">' + escHtml(i.note) + '</div>'
+          : '';
+        return '<div class="dash-row">' +
+          '<div style="min-width:0"><div style="font-weight:600;font-size:0.85rem">' + escHtml(i.item_name) + '</div>' +
+          '<div style="font-size:0.75rem;color:#aaa">' + meta + '</div>' + note + '</div>' +
+          '<div style="text-align:right;flex-shrink:0">' +
+          '<span class="badge ' + movementBadgeClass(i.movement_type) + '">' +
+          escHtml(i.quantity_display + ' ' + i.base_unit) + '</span>' +
+          '<div style="font-size:0.7rem;color:#aaa;margin-top:5px">' + escHtml(i.created_at_display) + '</div>' +
+          '</div></div>';
       }).join('');
     }
     if (list.innerHTML !== html) list.innerHTML = html;
