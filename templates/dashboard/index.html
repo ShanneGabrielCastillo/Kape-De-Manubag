@@ -550,6 +550,54 @@
   </div>
 </div>
 
+<!-- Ingredients & Packaging — skeleton -->
+<div class="card dash-skeleton" aria-hidden="true" style="margin-top:24px">
+  <div class="card-header"><h3><i data-lucide="package" class="btn-icon" aria-hidden="true"></i> Ingredients &amp; Packaging</h3></div>
+  <div class="card-body dash-list" style="padding:0">
+    {% for i in "12345" %}
+    <div class="sk-row">
+      <div style="flex:1">
+        <div class="loading-skeleton" style="width:45%;height:12px;margin-bottom:6px"></div>
+        <div class="loading-skeleton" style="width:35%;height:10px"></div>
+      </div>
+      <div class="loading-skeleton" style="width:80px;height:18px;border-radius:20px"></div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Ingredients & Packaging — real content -->
+<div class="card dash-content" style="margin-top:24px">
+  <div class="card-header">
+    <h3><i data-lucide="package" class="btn-icon" aria-hidden="true"></i> Ingredients &amp; Packaging</h3>
+    <a href="{% url 'inventory:ingredient_list' %}" class="btn btn-sm btn-outline">Manage</a>
+  </div>
+  <div class="card-body dash-list" id="ingredient-low-stock-list" style="padding:0">
+    {% if 'ingredient_low_stock' in widget_errors %}
+    <div class="empty-state widget-error">
+      <div class="empty-icon"><i data-lucide="triangle-alert" style="width:2.2rem;height:2.2rem;opacity:0.5" aria-hidden="true"></i></div>
+      <p>Ingredient stock data is temporarily unavailable. Please try again later.</p>
+    </div>
+    {% else %}
+    {% for row in ingredient_low_stock %}
+    <div class="dash-row">
+      <div>
+        <div style="font-weight:600;font-size:0.85rem">{{ row.name }}</div>
+        <div style="font-size:0.75rem;color:#aaa">
+          {{ row.item_type }} · alert at {{ row.threshold_display }} {{ row.base_unit }}
+        </div>
+      </div>
+      <span class="badge {% if row.is_critical %}badge-cancelled{% else %}badge-pending{% endif %}">
+        {% if row.is_critical %}Critical{% else %}Low{% endif %}: {{ row.quantity_display }} {{ row.base_unit }}
+      </span>
+    </div>
+    {% empty %}
+    <div class="empty-state"><div class="empty-icon"><i data-lucide="circle-check" style="width:4rem;height:4rem;opacity:0.5" aria-hidden="true"></i></div><p>All ingredients and packaging well-stocked</p></div>
+    {% endfor %}
+    {% endif %}
+  </div>
+</div>
+
 </div><!-- /#dashboard-content -->
 
 <noscript>
@@ -767,6 +815,7 @@
     safeWidgetUpdate('chart', function () { updateChartFromSummary(s); });
     safeWidgetUpdate('top products', function () { rebuildTopProducts(s.top_products); });
     safeWidgetUpdate('low stock', function () { rebuildLowStock(s.low_stock); });
+    safeWidgetUpdate('ingredient stock', function () { rebuildIngredientStock(s.ingredient_low_stock); });
   }
 
   function updateStatCards(s) {
@@ -891,6 +940,31 @@
           '<div><div style="font-weight:600;font-size:0.85rem">' + escHtml(p.name) + '</div>' +
           '<div style="font-size:0.75rem;color:#aaa">' + escHtml(p.category) + '</div></div>' +
           '<span class="badge ' + cls + '">' + label + ': ' + p.stock_quantity + ' left</span>' +
+          '</div>';
+      }).join('');
+    }
+    if (list.innerHTML !== html) list.innerHTML = html;
+  }
+
+  function rebuildIngredientStock(items) {
+    const list = document.getElementById('ingredient-low-stock-list');
+    if (!list) return;
+    let html;
+    if (items === null || items === undefined) {
+      // Dataset failed server-side: friendly fallback, keep the card layout.
+      html = widgetErrorHtml('Ingredient stock data is temporarily unavailable. Please try again later.');
+    } else if (!items.length) {
+      html = '<div class="empty-state"><div class="empty-icon"><i data-lucide="circle-check" style="width:4rem;height:4rem;opacity:0.5" aria-hidden="true"></i></div><p>All ingredients and packaging well-stocked</p></div>';
+    } else {
+      html = items.map(function (i) {
+        const cls = i.is_critical ? 'badge-cancelled' : 'badge-pending';
+        const label = i.is_critical ? 'Critical' : 'Low';
+        return '<div class="dash-row">' +
+          '<div><div style="font-weight:600;font-size:0.85rem">' + escHtml(i.name) + '</div>' +
+          '<div style="font-size:0.75rem;color:#aaa">' + escHtml(i.item_type) +
+          ' · alert at ' + escHtml(i.threshold_display + ' ' + i.base_unit) + '</div></div>' +
+          '<span class="badge ' + cls + '">' + label + ': ' +
+          escHtml(i.quantity_display + ' ' + i.base_unit) + '</span>' +
           '</div>';
       }).join('');
     }

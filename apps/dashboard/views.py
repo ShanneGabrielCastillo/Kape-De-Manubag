@@ -7,7 +7,9 @@ from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count, Q, Sum
+from django.db.models import (
+    Count, DecimalField, ExpressionWrapper, F, Q, Sum,
+)
 from django.db.models.functions import TruncDate
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
@@ -15,6 +17,7 @@ from django.utils import timezone
 
 from apps.accounts.decorators import admin_required, cashier_or_admin_required
 from apps.audit.services import log_action
+from apps.inventory.models import InventoryItem
 from apps.menu.models import CRITICAL_STOCK_THRESHOLD, Product
 from apps.orders.models import Order, OrderItem
 
@@ -235,6 +238,54 @@ def _low_stock():
     )
 
 
+def _format_quantity(value):
+    """Render a 3-decimal quantity without unnecessary trailing zeros."""
+    return format(value.normalize(), 'f')
+
+
+def _ingredient_low_stock():
+    """Active ingredient/packaging items at or below their own threshold.
+
+    Availability is ``on_hand_quantity - reserved_quantity`` (Rev 3 §C.3),
+    never on-hand alone: an item is low when the quantity still sellable is
+    low, even if physical stock looks healthy. The predicate matches the
+    ingredient-list screen exactly (apps/inventory/views.py).
+
+    Both item types share the ingredient ledger and its per-item
+    ``low_stock_threshold``, so packaging is included. The legacy
+    ``CRITICAL_STOCK_THRESHOLD`` is a finished-product unit count and is
+    deliberately not used here; Critical means available <= 0.
+
+    Returns plain dictionaries so the page context and the summary JSON
+    expose the same ordered dataset. Quantities stay Decimal internally and
+    are preformatted as strings for display/serialization.
+    """
+    available = ExpressionWrapper(
+        F('on_hand_quantity') - F('reserved_quantity'),
+        output_field=DecimalField(max_digits=14, decimal_places=3),
+    )
+    items = (
+        InventoryItem.objects
+        .filter(is_active=True)
+        .annotate(available=available)
+        .filter(available__lte=F('low_stock_threshold'))
+        .order_by('available', 'name')[:5]
+    )
+    return [
+        {
+            'pk': item.pk,
+            'name': item.name,
+            'item_type': item.get_item_type_display(),
+            'base_unit': item.base_unit,
+            'available_quantity': item.available,
+            'quantity_display': _format_quantity(item.available),
+            'threshold_display': _format_quantity(item.low_stock_threshold),
+            'is_critical': item.available <= Decimal('0.000'),
+        }
+        for item in items
+    ]
+
+
 def _recent_orders():
     """The ten most recent orders, with the cashier preloaded (no N+1)."""
     return list(Order.objects.select_related('cashier').order_by('-created_at')[:10])
@@ -310,6 +361,13 @@ def _load_widgets(period='week', chart_label_fmt=None, *, include_recent=False):
         failed.add('low_stock')
     widgets['low_stock'] = low_stock
 
+    ingredient_low_stock, ingredient_failed = _widget(
+        'ingredient stock', [], _ingredient_low_stock,
+    )
+    if ingredient_failed:
+        failed.add('ingredient_low_stock')
+    widgets['ingredient_low_stock'] = ingredient_low_stock
+
     return widgets, failed
 
 
@@ -347,6 +405,7 @@ def dashboard_summary(request):
     chart_failed = 'chart' in failed
     top_failed = 'top_products' in failed
     low_failed = 'low_stock' in failed
+    ingredient_low_failed = 'ingredient_low_stock' in failed
 
     return JsonResponse({
         'daily_sales': None if stats_failed else float(widgets['daily_sales']),
@@ -380,6 +439,18 @@ def dashboard_summary(request):
                 'is_critical': p.stock_quantity <= CRITICAL_STOCK_THRESHOLD,
             }
             for p in widgets['low_stock']
+        ],
+        'ingredient_low_stock': None if ingredient_low_failed else [
+            {
+                'pk': i['pk'],
+                'name': i['name'],
+                'item_type': i['item_type'],
+                'base_unit': i['base_unit'],
+                'quantity_display': i['quantity_display'],
+                'threshold_display': i['threshold_display'],
+                'is_critical': i['is_critical'],
+            }
+            for i in widgets['ingredient_low_stock']
         ],
     })
 

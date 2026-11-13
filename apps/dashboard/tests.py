@@ -32,6 +32,7 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from apps.accounts.models import CustomUser
+from apps.inventory.models import InventoryItem
 from apps.menu.models import Category, Product
 from apps.orders.models import Order, OrderItem
 
@@ -60,26 +61,27 @@ CHART_URL = '/dashboard/chart-data/'
 
 # Bounded query budget for one dashboard page load. Measured breakdown on
 # the supported stack (Django 5.0, SQLite):
-#   6  view queries (sales stats, status counts, chart data, top products,
-#      recent orders, low stock -- all single consolidated queries)
+#   7  view queries (sales stats, status counts, chart data, top products,
+#      recent orders, legacy low stock, ingredient low stock -- all single
+#      consolidated queries)
 #   2  session SELECT + user SELECT (auth middleware)
 #   3  session UPDATE for the idle-timeout middleware's last-activity stamp
 #      (savepoint + UPDATE + release; only on the first request in a window)
-# Total: 11. The budget is exact (not a bound), so re-adding per-request
+# Total: 12. The budget is exact (not a bound), so re-adding per-request
 # queries (e.g. unused context-stat COUNTs or a cart lookup for staff) fails
 # the suite. Because it is exact, re-verify the count after upgrading Django
 # or changing middleware (session-write behaviour can shift it by +/- 1).
-DASHBOARD_QUERY_BUDGET = 11
+DASHBOARD_QUERY_BUDGET = 12
 # The chart endpoint needs only the session/user lookups plus ONE grouped
 # query per request. Measured at 3; the first authenticated request in an
 # idle-timeout window adds the session UPDATE (savepoint/update/release), so
 # the budget allows 6 for that worst case.
 CHART_QUERY_BUDGET = 6
-# The realtime summary endpoint runs the five consolidated view queries
-# (sales stats, status counts, chart data, top products, low stock) plus the
-# same auth/session lookups as the page. Budget: 5 view + 2 auth + 3 session
-# UPDATE worst case = 10.
-SUMMARY_QUERY_BUDGET = 10
+# The realtime summary endpoint runs the six consolidated view queries
+# (sales stats, status counts, chart data, top products, legacy low stock,
+# ingredient low stock) plus the same auth/session lookups as the page.
+# Budget: 6 view + 2 auth + 3 session UPDATE worst case = 11.
+SUMMARY_QUERY_BUDGET = 11
 SUMMARY_URL = '/dashboard/summary/'
 
 
@@ -356,7 +358,7 @@ class LegacyLowStockWidgetSeparationTests(TestCase):
     Product.stock_quantity but their real stock lives in the ingredient
     ledger (InventoryItem with its own low_stock_threshold), so they must
     never appear in this widget (Rev 3 §C.4, §E.3b). The ingredient widget
-    itself arrives in a later Phase 7 subphase.
+    itself is covered by IngredientLowStockWidgetTests (Phase 7.2).
     """
 
     def setUp(self):
@@ -408,6 +410,250 @@ class LegacyLowStockWidgetSeparationTests(TestCase):
         data = response.json()
         self.assertIsNotNone(data['low_stock'])
         self.assertEqual([row['pk'] for row in data['low_stock']], [legacy.pk])
+
+
+class IngredientLowStockWidgetTests(TestCase):
+    """Phase 7.2 — ingredients and packaging low-stock widget.
+
+    Covers the availability predicate (on_hand - reserved, not on-hand),
+    threshold filtering, active-item filtering, both item types, ordering,
+    the five-row limit, Critical classification, page/summary parity, error
+    isolation, and the one-query guarantee.
+    """
+
+    def setUp(self):
+        self.admin = _create_user('ingredient_low_admin', 'admin')
+        self.client.force_login(self.admin)
+        self.category = Category.objects.create(name='Drinks', slug='drinks')
+
+    def _make_item(self, name, *, on_hand='50.000', reserved='0.000',
+                   threshold='50.000',
+                   item_type=InventoryItem.ITEM_TYPE_INGREDIENT,
+                   base_unit=InventoryItem.BASE_UNIT_G, is_active=True):
+        return InventoryItem.objects.create(
+            name=name,
+            item_type=item_type,
+            base_unit=base_unit,
+            on_hand_quantity=Decimal(on_hand),
+            reserved_quantity=Decimal(reserved),
+            low_stock_threshold=Decimal(threshold),
+            is_active=is_active,
+        )
+
+    def _page_rows(self):
+        response = self.client.get(DASHBOARD_URL)
+        self.assertEqual(response.status_code, 200)
+        return response.context['ingredient_low_stock']
+
+    # ── A. Threshold behavior ─────────────────────────────────────────────
+
+    def test_items_at_or_below_threshold_are_included_above_are_not(self):
+        at_threshold = self._make_item(
+            'At Threshold', on_hand='50.000', threshold='50.000',
+        )
+        below = self._make_item(
+            'Below Threshold', on_hand='20.000', threshold='50.000',
+        )
+        self._make_item('Above Threshold', on_hand='51.000', threshold='50.000')
+
+        self.assertEqual(
+            [row['pk'] for row in self._page_rows()],
+            [below.pk, at_threshold.pk],
+        )
+
+    # ── B. Reservation-driven low stock ───────────────────────────────────
+
+    def test_availability_accounts_for_reservations(self):
+        item = self._make_item(
+            'Reserved Coffee', on_hand='100.000', reserved='80.000',
+            threshold='30.000',
+        )
+
+        rows = self._page_rows()
+        self.assertEqual([row['pk'] for row in rows], [item.pk])
+        self.assertEqual(rows[0]['available_quantity'], Decimal('20.000'))
+        self.assertEqual(rows[0]['quantity_display'], '20')
+        self.assertFalse(rows[0]['is_critical'])
+
+    # ── C. Active/inactive behavior ───────────────────────────────────────
+
+    def test_inactive_items_are_excluded(self):
+        active = self._make_item('Active Item', on_hand='10.000', threshold='20.000')
+        self._make_item(
+            'Inactive Item', on_hand='10.000', threshold='20.000',
+            is_active=False,
+        )
+
+        self.assertEqual([row['pk'] for row in self._page_rows()], [active.pk])
+
+    # ── D. Packaging inclusion ────────────────────────────────────────────
+
+    def test_ingredients_and_packaging_are_both_included(self):
+        ingredient = self._make_item(
+            'Coffee Beans', base_unit=InventoryItem.BASE_UNIT_G,
+            on_hand='100.000', threshold='500.000',
+        )
+        packaging = self._make_item(
+            'Takeaway Cups', item_type=InventoryItem.ITEM_TYPE_PACKAGING,
+            base_unit=InventoryItem.BASE_UNIT_PCS,
+            on_hand='10.000', threshold='20.000',
+        )
+
+        rows = self._page_rows()
+        self.assertEqual([row['pk'] for row in rows], [packaging.pk, ingredient.pk])
+        by_pk = {row['pk']: row for row in rows}
+        self.assertEqual(by_pk[ingredient.pk]['item_type'], 'Ingredient')
+        self.assertEqual(by_pk[ingredient.pk]['base_unit'], 'g')
+        self.assertEqual(by_pk[packaging.pk]['item_type'], 'Packaging')
+        self.assertEqual(by_pk[packaging.pk]['base_unit'], 'pcs')
+
+    # ── E. Ordering and limit ─────────────────────────────────────────────
+
+    def test_results_are_sorted_by_available_then_limited_to_five(self):
+        for i in range(1, 10):
+            self._make_item(
+                f'Order Item {i}', on_hand=f'{i}.000', threshold='10.000',
+            )
+
+        self.assertEqual(
+            [row['name'] for row in self._page_rows()],
+            ['Order Item 1', 'Order Item 2', 'Order Item 3',
+             'Order Item 4', 'Order Item 5'],
+        )
+
+    def test_equal_availability_uses_name_order(self):
+        self._make_item('Zeta Item', on_hand='3.000', threshold='5.000')
+        self._make_item('Alpha Item', on_hand='3.000', threshold='5.000')
+
+        self.assertEqual(
+            [row['name'] for row in self._page_rows()],
+            ['Alpha Item', 'Zeta Item'],
+        )
+
+    # ── F. Critical classification ────────────────────────────────────────
+
+    def test_critical_is_available_at_or_below_zero(self):
+        out_of_stock = self._make_item(
+            'Out Of Stock', on_hand='0.000', threshold='0.000',
+        )
+        low = self._make_item(
+            'Still Positive', on_hand='5.000', threshold='5.000',
+        )
+
+        by_pk = {row['pk']: row for row in self._page_rows()}
+        self.assertTrue(by_pk[out_of_stock.pk]['is_critical'])
+        self.assertFalse(by_pk[low.pk]['is_critical'])
+
+    # ── G. Quantity formatting and page/summary parity ────────────────────
+
+    def test_quantity_formatting_removes_trailing_zeros(self):
+        self._make_item('Milk', on_hand='12.500', threshold='250.000')
+
+        row = self._page_rows()[0]
+        self.assertEqual(row['quantity_display'], '12.5')
+        self.assertEqual(row['threshold_display'], '250')
+
+    def test_page_and_summary_expose_the_same_ordered_rows(self):
+        self._make_item('Rice', on_hand='250.000', threshold='500.000')
+        self._make_item(
+            'Cups', item_type=InventoryItem.ITEM_TYPE_PACKAGING,
+            base_unit=InventoryItem.BASE_UNIT_PCS,
+            on_hand='12.500', reserved='2.500', threshold='20.000',
+        )
+
+        page_rows = self._page_rows()
+        response = self.client.get(SUMMARY_URL)
+        self.assertEqual(response.status_code, 200)
+        json_rows = response.json()['ingredient_low_stock']
+
+        self.assertEqual(
+            [row['pk'] for row in page_rows], [row['pk'] for row in json_rows],
+        )
+        for page_row, json_row in zip(page_rows, json_rows):
+            self.assertEqual(page_row['name'], json_row['name'])
+            self.assertEqual(page_row['item_type'], json_row['item_type'])
+            self.assertEqual(page_row['base_unit'], json_row['base_unit'])
+            self.assertEqual(
+                page_row['quantity_display'], json_row['quantity_display'],
+            )
+            self.assertEqual(
+                page_row['threshold_display'], json_row['threshold_display'],
+            )
+            self.assertEqual(page_row['is_critical'], json_row['is_critical'])
+            self.assertIsInstance(json_row['quantity_display'], str)
+            self.assertIsInstance(json_row['threshold_display'], str)
+        self.assertIsInstance(page_rows[0]['available_quantity'], Decimal)
+
+    # ── H. Error isolation ────────────────────────────────────────────────
+
+    def test_page_renders_when_ingredient_widget_fails(self):
+        Product.objects.create(
+            category=self.category, name='Legacy Low', price='50.00',
+            stock_quantity=3, low_stock_threshold=10,
+        )
+        with mock.patch(
+            'apps.dashboard.views._ingredient_low_stock',
+            side_effect=Exception('boom'),
+        ):
+            response = self.client.get(DASHBOARD_URL)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            'Ingredient stock data is temporarily unavailable',
+            response.content.decode(),
+        )
+        self.assertIn('ingredient_low_stock', response.context['widget_errors'])
+        self.assertEqual(response.context['ingredient_low_stock'], [])
+        self.assertEqual(
+            [p.name for p in response.context['low_stock']], ['Legacy Low'],
+        )
+
+    def test_summary_returns_null_only_for_failed_ingredient_widget(self):
+        with mock.patch(
+            'apps.dashboard.views._ingredient_low_stock',
+            side_effect=Exception('boom'),
+        ):
+            response = self.client.get(SUMMARY_URL)
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIsNone(data['ingredient_low_stock'])
+        self.assertIsNotNone(data['low_stock'])
+        self.assertEqual(data['daily_sales'], 0.0)
+        self.assertEqual(data['pending_count'], 0)
+
+    # ── I. Query performance ──────────────────────────────────────────────
+
+    def test_widget_uses_one_query_regardless_of_item_count(self):
+        from apps.dashboard.views import _ingredient_low_stock
+
+        self._make_item('Single Item', on_hand='1.000', threshold='10.000')
+        with CaptureQueriesContext(connection) as first:
+            _ingredient_low_stock()
+        self.assertEqual(len(first.captured_queries), 1)
+
+        for i in range(10):
+            self._make_item(
+                f'Many Item {i}', on_hand='1.000', threshold='10.000',
+            )
+        with CaptureQueriesContext(connection) as many:
+            _ingredient_low_stock()
+        self.assertEqual(len(many.captured_queries), 1)
+
+    def test_dashboard_query_budget_with_many_low_stock_items(self):
+        for i in range(10):
+            self._make_item(
+                f'Budget Item {i}', on_hand='1.000', threshold='10.000',
+            )
+
+        with CaptureQueriesContext(connection) as ctx:
+            response = self.client.get(DASHBOARD_URL)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(
+            len(ctx.captured_queries), DASHBOARD_QUERY_BUDGET,
+            f'dashboard executed {len(ctx.captured_queries)} queries',
+        )
 
 
 class DashboardAccessTests(TestCase):
@@ -773,13 +1019,15 @@ class DashboardErrorResilienceTests(TestCase):
             '_chart_series': Exception('boom'),
             '_top_products': Exception('boom'),
             '_low_stock': Exception('boom'),
+            '_ingredient_low_stock': Exception('boom'),
         }
         with mock.patch.multiple('apps.dashboard.views', **failures):
             response = self.client.get(SUMMARY_URL)
         self.assertEqual(response.status_code, 200)
         data = response.json()
         for key in ('daily_sales', 'daily_orders', 'pending_count',
-                    'chart_data', 'top_products', 'low_stock'):
+                    'chart_data', 'top_products', 'low_stock',
+                    'ingredient_low_stock'):
             self.assertIsNone(data[key])
 
     # ── Chart endpoint ─────────────────────────────────────────────────────
