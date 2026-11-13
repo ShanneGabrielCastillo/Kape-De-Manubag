@@ -43,6 +43,7 @@ jobs:
           python manage.py test \
             apps.inventory \
             apps.orders \
+            apps.dashboard \
             apps.menu \
             apps.accounts \
             apps.finance \
@@ -128,6 +129,7 @@ jobs:
         run: |
           python manage.py test \
             apps.orders \
+            apps.dashboard \
             apps.menu \
             apps.accounts \
             apps.finance \

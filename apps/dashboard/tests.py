@@ -124,7 +124,7 @@ def _seed_orders_and_items():
     order_week = make_order(200, now - timedelta(days=1))
     make_order(300, now - timedelta(days=10))
     make_order(400, now - timedelta(days=40))
-    make_order(50, now, paid=False, status='pending')
+    make_order(50, now, paid=False, status='awaiting_payment')
     make_order(70, now, paid=False, status='preparing')
 
     for pk, created_at in backdates:
@@ -183,7 +183,7 @@ class DashboardQueryPerformanceTests(TestCase):
         order_week = make_order(200, 3)
         make_order(300, 10)
         make_order(400, 40)
-        make_order(50, 0, paid=False, status='pending')
+        make_order(50, 0, paid=False, status='awaiting_payment')
         make_order(70, 0, paid=False, status='preparing')
 
         for pk, created_at in backdates:
@@ -348,6 +348,68 @@ class DashboardStatisticsTests(TestCase):
         self.assertEqual(data, expected)
 
 
+class LegacyLowStockWidgetSeparationTests(TestCase):
+    """Phase 7.1 — the legacy low-stock widget must show only products still
+    tracked on the legacy stock ledger.
+
+    Ingredient-tracked products keep their (frozen, non-authoritative)
+    Product.stock_quantity but their real stock lives in the ingredient
+    ledger (InventoryItem with its own low_stock_threshold), so they must
+    never appear in this widget (Rev 3 §C.4, §E.3b). The ingredient widget
+    itself arrives in a later Phase 7 subphase.
+    """
+
+    def setUp(self):
+        self.admin = _create_user('lowstock_admin', 'admin')
+        self.client.force_login(self.admin)
+        self.category = Category.objects.create(name='Drinks', slug='drinks')
+
+    def _make_product(self, name, *, mode=Product.INVENTORY_TRACKING_LEGACY,
+                      stock=3, threshold=10):
+        """Sellable product below its threshold by default (stock 3 < 10)."""
+        return Product.objects.create(
+            category=self.category, name=name, price='50.00',
+            stock_quantity=stock, low_stock_threshold=threshold,
+            inventory_tracking_mode=mode,
+        )
+
+    def _get_low_stock_pks(self, url=DASHBOARD_URL):
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        return [p.pk for p in response.context['low_stock']]
+
+    def test_legacy_low_stock_product_included(self):
+        """A sellable legacy-tracked product below its threshold appears."""
+        legacy = self._make_product('Legacy Low')
+        self.assertIn(legacy.pk, self._get_low_stock_pks())
+
+    def test_ingredient_tracked_low_stock_product_excluded(self):
+        """An otherwise-qualifying ingredient-tracked product does not appear
+        in the legacy widget even though stock_quantity is below threshold."""
+        self._make_product('Ingredient Low',
+                           mode=Product.INVENTORY_TRACKING_INGREDIENT)
+        self.assertEqual(self._get_low_stock_pks(), [])
+
+    def test_mixed_modes_include_legacy_exclude_ingredient(self):
+        """With both modes present, only the legacy product is listed."""
+        legacy = self._make_product('Legacy Low')
+        self._make_product('Ingredient Low',
+                           mode=Product.INVENTORY_TRACKING_INGREDIENT)
+        self.assertEqual(self._get_low_stock_pks(), [legacy.pk])
+
+    def test_summary_endpoint_low_stock_matches_page(self):
+        """The realtime summary endpoint serialises low_stock from the same
+        consolidated loader — the exclusion must hold there too."""
+        legacy = self._make_product('Legacy Low')
+        self._make_product('Ingredient Low',
+                           mode=Product.INVENTORY_TRACKING_INGREDIENT)
+        response = self.client.get(SUMMARY_URL)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIsNotNone(data['low_stock'])
+        self.assertEqual([row['pk'] for row in data['low_stock']], [legacy.pk])
+
+
 class DashboardAccessTests(TestCase):
     """Admin and cashier can load the dashboard; customers cannot."""
 
@@ -384,7 +446,8 @@ class DashboardEmptyStateTests(TestCase):
         'No best-sellers yet',        # Top Products
         'No orders yet',              # Recent Orders
         'All items well-stocked',     # Low Stock
-        'No orders recorded yet',     # Total Revenue stat hint
+        'No orders yet today',        # Today's orders stat hint
+        'No orders this month',       # This month's orders stat hint
     ]
 
     def setUp(self):
@@ -438,7 +501,9 @@ class DashboardEmptyStateTests(TestCase):
             self.assertNotIn(marker, content)
         # Stats show real counts instead of the "No orders" hints.
         self.assertContains(response, '1 order today')
-        self.assertContains(response, '1 total order')
+        # The monthly stat hint switches to a real count too (the redesigned
+        # dashboard has no all-time total hint; today/week/month/year only).
+        self.assertContains(response, '1 order this month')
 
 
 class DashboardSummaryEndpointTests(TestCase):
@@ -496,12 +561,20 @@ class DashboardSummaryEndpointTests(TestCase):
         self.assertEqual(data['low_stock'][0]['stock_quantity'], 3)
         self.assertTrue(data['low_stock'][0]['is_critical'])
 
-    def test_summary_month_period_returns_thirty_days(self):
+    def test_summary_month_period_is_month_to_date(self):
+        # The 'month' period is the current calendar month TO DATE (Rev 3
+        # frontend contract: heading "This Month", _period_start docstring
+        # "'month' → 1st of the current calendar month"). Labels run from
+        # the 1st through today inclusive — NOT a rolling 30-day window.
         self._seed()
         response, _ = self._get_summary('month')
         data = response.json()
-        self.assertEqual(len(data['chart_labels']), 30)
-        self.assertEqual(len(data['chart_data']), 30)
+        expected_days = timezone.localdate().day
+        self.assertEqual(len(data['chart_labels']), expected_days)
+        self.assertEqual(len(data['chart_data']), expected_days)
+        # The seeded completed order placed today is the last bar. (Earlier
+        # bars may be non-zero too: the seed also backdates paid orders to
+        # yesterday and 10/40 days ago, which can fall inside this month.)
         self.assertEqual(data['chart_data'][-1], 100.0)
 
     def test_summary_query_count_is_bounded(self):
@@ -529,7 +602,7 @@ class DashboardSummaryEndpointTests(TestCase):
         # A new unpaid order appears as pending and in recent data
         Order.objects.create(
             customer_name='New Customer', order_type='take_out',
-            status='pending', is_paid=False,
+            status='awaiting_payment', is_paid=False,
             subtotal=Decimal('25.00'), total=Decimal('25.00'),
         )
         response, _ = self._get_summary()
@@ -546,7 +619,7 @@ class DashboardSummaryEndpointTests(TestCase):
         self.assertEqual(response.json()['daily_orders'], 1)
 
         # Pay the pending order: it leaves pending and enters today's sales
-        order = Order.objects.get(status='pending')
+        order = Order.objects.get(status='awaiting_payment')
         order.is_paid = True
         order.status = 'completed'
         order.save(update_fields=['is_paid', 'status'])
@@ -565,7 +638,7 @@ class DashboardSummaryEndpointTests(TestCase):
         self.assertEqual(data['preparing_count'], 1)
 
         # Move the pending order to preparing: pending drops, preparing rises
-        order = Order.objects.get(status='pending')
+        order = Order.objects.get(status='awaiting_payment')
         order.status = 'preparing'
         order.save(update_fields=['status'])
 

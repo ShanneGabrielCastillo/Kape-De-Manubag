@@ -220,9 +220,16 @@ def _low_stock():
     threshold (Product.objects.sellable().low_stock()).
     select_related('category') avoids an N+1 when the template renders each
     product's category name. Deactivated products are not sellable, so they
-    are excluded from restock alerts."""
+    are excluded from restock alerts.
+
+    Phase 7.1: ingredient-tracked products are excluded from this legacy
+    widget. Their stock is managed by the ingredient ledger (InventoryItem
+    with its own low_stock_threshold), not by Product.stock_quantity, which
+    is frozen and non-authoritative for them (Rev 3 §C.4, §E.3b). The
+    ingredient low-stock widget is added in a later Phase 7 subphase."""
     return list(
         Product.objects.sellable().low_stock()
+        .exclude(inventory_tracking_mode=Product.INVENTORY_TRACKING_INGREDIENT)
         .select_related('category')
         .order_by('stock_quantity')[:5]
     )
