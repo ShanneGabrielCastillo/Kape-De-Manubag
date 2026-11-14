@@ -271,8 +271,15 @@ class DashboardStatisticsTests(TestCase):
         self.admin = _create_user('dash_admin', 'admin')
         self.client.force_login(self.admin)
         self.category, self.low_product, now = _seed_orders_and_items()
-        self.today = now.date()
-        self.week_start = self.today - timedelta(days=self.today.weekday())
+        # The dashboard aggregates resolve __date lookups in the active
+        # local timezone (Asia/Manila) from timezone.localdate()
+        # (views.py _sales_stats). `now` from the seed is a UTC instant,
+        # whose .date() is the UTC date — during Manila 00:00–08:00 that
+        # differs from the Manila date and the assertion windows skew by a
+        # day. Use the same local-date basis the view uses. The weekly
+        # window is Sunday-start (isoweekday % 7), matching the view.
+        self.today = timezone.localdate()
+        self.week_start = self.today - timedelta(days=self.today.isoweekday() % 7)
         self.month_start = self.today.replace(day=1)
         # An extra, well-stocked product keeps the seed close to production.
         Product.objects.create(
