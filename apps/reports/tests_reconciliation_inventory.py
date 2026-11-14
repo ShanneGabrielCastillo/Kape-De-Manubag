@@ -8,10 +8,15 @@ IngredientMovementLog.record() (shape-CHECK-safe); deliberately broken
 chains/mismatches are created the same way, because record() accepts
 caller-supplied before/after values and only the DB CHECKs constrain them.
 
-Rows that violate DB CHECK constraints (negative levels, wrong shapes) are
-inserted with PRAGMA ignore_check_constraints=ON via raw SQL on the ISOLATED
-test database, restored immediately in a finally block. The local
-development database is never touched.
+Rows that would violate DB CHECK constraints (negative levels, wrong
+shapes, arithmetic disagreement) are represented as UNSAVED
+IngredientMovementLog instances and fed directly to
+apps.reports.views._reconcile_item() — the actual production
+reconciliation logic — so malformed-data detection is exercised without
+inserting CHECK-violating rows into ANY database. This keeps the suite
+portable across SQLite and PostgreSQL (no engine-specific commands, no
+raw SQL). Database-backed integration tests through the report view
+remain in place for valid ledger records and normal report behaviour.
 """
 
 import datetime
@@ -20,12 +25,13 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.db import connection
-from django.test import Client, TestCase, TransactionTestCase
+from django.test import Client, TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.inventory.models import IngredientMovementLog, InventoryItem
+from apps.reports.views import _reconcile_item
 
 User = get_user_model()
 
@@ -66,44 +72,6 @@ def _movement(item, mtype, on_delta, res_delta, on_before, res_before,
         moved = timezone.now() - datetime.timedelta(days=days_ago)
         IngredientMovementLog.objects.filter(pk=m.pk).update(created_at=moved)
     return m
-
-
-def _raw_movement(item, mtype, on_delta, res_delta, on_before, res_before,
-                  on_after=None, res_after=None):
-    """Insert a movement row that VIOLATES the DB CHECK constraints (used to
-    prove the report flags invalid ledger data instead of crashing). The
-    check-constraint bypass is applied to the ISOLATED test database only
-    and restored immediately. NOTE: the containing test class must be a
-    TransactionTestCase — the pragma is a no-op inside a TestCase atomic
-    transaction. order_number is supplied because the column is NOT NULL
-    without a database-level default."""
-    on_after = Decimal(str(on_after if on_after is not None
-                            else Decimal(str(on_before))
-                            + Decimal(str(on_delta))))
-    res_after = Decimal(str(res_after if res_after is not None
-                            else Decimal(str(res_before))
-                            + Decimal(str(res_delta))))
-    now = timezone.now()
-    try:
-        with connection.cursor() as cur:
-            cur.execute("PRAGMA ignore_check_constraints=ON")
-            cur.execute(
-                "INSERT INTO inventory_ingredientmovementlog "
-                "(inventory_item_id, item_name, base_unit, movement_type, "
-                " on_hand_delta, reserved_delta, on_hand_before, "
-                " on_hand_after, reserved_before, reserved_after, "
-                " reason_code, order_number, note, created_at) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
-                "%s, %s)",
-                [item.pk, item.name, item.base_unit, mtype,
-                 str(Decimal(str(on_delta))), str(Decimal(str(res_delta))),
-                 str(Decimal(str(on_before))), str(on_after),
-                 str(Decimal(str(res_before))), str(res_after),
-                 '', '', 'Phase 7.5 invalid-row test fixture', str(now)]
-            )
-    finally:
-        with connection.cursor() as cur:
-            cur.execute("PRAGMA ignore_check_constraints=OFF")
 
 
 def _download(client):
@@ -394,84 +362,143 @@ class ReconciliationStatusTests(ReconciliationTestBase):
         self.assertEqual(resp.context['summary']['no_movement_items'], 1)
 
 
-class ReconciliationInvalidDataTests(TransactionTestCase):
-    """Rows that violate DB CHECK constraints, inserted raw on the isolated
-    test database, must be flagged as findings without crashing.
+class ReconciliationInvalidDataTests(TestCase):
+    """Rows that would violate the ledger's DB CHECK constraints are
+    represented as UNSAVED IngredientMovementLog instances and fed directly
+    to _reconcile_item() — the actual production reconciliation logic — so
+    the malformed-data detection is exercised without inserting
+    CHECK-violating rows into ANY database (SQLite or PostgreSQL).
 
-    TransactionTestCase is REQUIRED here (standalone, not derived from the
-    TestCase-based base): PRAGMA ignore_check_constraints is a no-op inside
-    the transaction that a plain TestCase wraps every test in, but it works
-    in TransactionTestCase's autocommit mode."""
+    _reconcile_item(item, movements) is a pure function of its arguments
+    (verified: no database access inside), so unsaved in-memory rows are
+    fully supported. Movements must be supplied in the intended
+    (created_at, id)-equivalent order; unsaved rows carry their attributes
+    exactly as assigned (auto_now_add never runs without a save)."""
 
     def setUp(self):
         self.admin = _user('rec_invalid_admin')
         self.client = Client()
         self.client.force_login(self.admin)
 
-    def _page(self):
-        resp = self.client.get(REC_URL)
-        self.assertEqual(resp.status_code, 200)
-        return resp
+    def _unsaved(self, item, mtype, on_delta, res_delta, on_before,
+                 res_before, on_after=None, res_after=None, reason='',
+                 days_ago=0):
+        """Build one UNSAVED IngredientMovementLog with explicit chain
+        values (on_after/res_after default to before + delta)."""
+        if on_after is None:
+            on_after = Decimal(str(on_before)) + Decimal(str(on_delta))
+        if res_after is None:
+            res_after = Decimal(str(res_before)) + Decimal(str(res_delta))
+        created = timezone.now() - datetime.timedelta(days=days_ago)
+        return IngredientMovementLog(
+            inventory_item=item,
+            inventory_item_id=item.pk,
+            item_name=item.name,
+            base_unit=item.base_unit,
+            movement_type=mtype,
+            on_hand_delta=Decimal(str(on_delta)),
+            reserved_delta=Decimal(str(res_delta)),
+            on_hand_before=Decimal(str(on_before)),
+            on_hand_after=Decimal(str(on_after)),
+            reserved_before=Decimal(str(res_before)),
+            reserved_after=Decimal(str(res_after)),
+            reason_code=reason,
+            created_at=created,
+        )
+
+    def _reconciled(self, item, movements):
+        from apps.reports.views import _reconcile_item
+        return _reconcile_item(item, movements)
 
     def test_unexpected_shape_flagged(self):
         # A purchase that also changes reserved (shape violation).
         item = _item(on_hand=1000, reserved=5)
-        _raw_movement(item, 'purchase', 1000, 5, 0, 0)
-        resp = self._page()
-        content = resp.content.decode()
-        self.assertIn('UNEXPECTED MOVEMENT SHAPE', content)
-        self.assertIn('purchase must not change reserved', content)
+        m = self._unsaved(item, 'purchase', 1000, 5, 0, 0)
+        result = self._reconciled(item, [m])
+        shapes = [f for f in result['all_findings']
+                  if f['kind'] == 'UNEXPECTED MOVEMENT SHAPE']
+        self.assertEqual(len(shapes), 1)
+        self.assertEqual(shapes[0]['ledger'], 'Reserved')
+        self.assertIn('purchase must not change reserved',
+                      shapes[0]['message'])
+        # On-hand ledger unaffected (the purchase delta itself is valid).
+        self.assertEqual(
+            [f['kind'] for f in result['on_hand_findings']],
+            [])
 
     def test_negative_ledger_values_flagged(self):
         # A consumption that drives on-hand and reserved negative (CHECK
         # violations): on_before 50, delta -100 -> after -50.
         item = _item(on_hand=50, reserved=50)
-        _raw_movement(item, 'consumption', -100, -100, 50, 50,
-                      on_after=-50, res_after=-50)
-        resp = self._page()
-        self.assertEqual(resp.status_code, 200)
-        content = resp.content.decode()
-        self.assertIn('INVALID LEDGER VALUES', content)
-        self.assertIn('negative on-hand level', content)
-        self.assertIn('negative reserved level', content)
+        m = self._unsaved(item, 'consumption', -100, -100, 50, 50,
+                          on_after=-50, res_after=-50)
+        result = self._reconciled(item, [m])
+        invalid = [f for f in result['all_findings']
+                   if f['kind'] == 'INVALID LEDGER VALUES']
+        on_messages = [f['message'] for f in invalid
+                       if f['ledger'] == 'On-hand']
+        res_messages = [f['message'] for f in invalid
+                        if f['ledger'] == 'Reserved']
+        self.assertTrue(any('negative on-hand level' in msg
+                            for msg in on_messages))
+        self.assertTrue(any('negative reserved level' in msg
+                            for msg in res_messages))
 
     def test_arithmetic_disagreement_flagged(self):
-        # after != before + delta (CHECK-violating raw row).
+        # after != before + delta (CHECK-violating row).
         item = _item(on_hand=999)
-        _raw_movement(item, 'purchase', 500, 0, 0, 0, on_after=777)
-        resp = self._page()
-        content = resp.content.decode()
-        self.assertIn('INVALID LEDGER VALUES', content)
-        self.assertIn('777', content)
+        m = self._unsaved(item, 'purchase', 500, 0, 0, 0, on_after=777)
+        result = self._reconciled(item, [m])
+        kinds = [f['kind'] for f in result['all_findings']]
+        self.assertIn('INVALID LEDGER VALUES', kinds)
+        # The arithmetic finding names the disagreeing value.
+        invalid = [f for f in result['all_findings']
+                   if f['kind'] == 'INVALID LEDGER VALUES']
+        self.assertTrue(any('777' in f['message'] for f in invalid))
+        # Coexisting final-balance mismatch (computed 777 vs persisted 999).
+        self.assertIn('BALANCE MISMATCH', kinds)
 
     def test_arithmetic_violation_mid_chain(self):
         # Independent-audit fix: an arithmetic violation at position >= 1
-        # (raw-SQL tampered row whose `after` disagrees with its own
-        # `before + delta`) must be reported even though its `before`
-        # continues the chain and a BALANCE MISMATCH coexists.
+        # (row whose `after` disagrees with its own `before + delta`) must
+        # be reported even though its `before` continues the chain and a
+        # BALANCE MISMATCH coexists.
         item = _item(on_hand=120)
-        _movement(item, 'purchase', 150, 0, 100, 0)     # 100 -> 250 (valid)
-        # Tampered row: before 250 continues the chain, but after 999
-        # != 250 - 20 = 230.
-        _raw_movement(item, 'purchase', -20, 0, 250, 0, on_after=999)
-        resp = self._page()
-        content = resp.content.decode()
-        self.assertIn('INVALID LEDGER VALUES', content)
-        self.assertIn('999', content)
-        # Findings coexist: the final-balance mismatch (999 vs persisted
-        # 120) is preserved alongside the arithmetic finding.
-        self.assertIn('BALANCE MISMATCH', content)
+        m1 = _movement(item, 'purchase', 150, 0, 100, 0)  # 100 -> 250 (valid, saved)
+        m2 = self._unsaved(item, 'purchase', -20, 0, 250, 0,
+                           on_after=999)
+        result = self._reconciled(item, [m1, m2])
+        kinds = [f['kind'] for f in result['all_findings']]
+        self.assertIn('INVALID LEDGER VALUES', kinds)
+        invalid = [f for f in result['all_findings']
+                   if f['kind'] == 'INVALID LEDGER VALUES']
+        self.assertTrue(any('999' in f['message'] for f in invalid))
+        # No chain discontinuity: m2's before (250) continues m1 (250) —
+        # the defect is purely the arithmetic, which the report must still
+        # catch (this is the regression case for the audit fix).
+        self.assertNotIn('CHAIN DISCONTINUITY', kinds)
+        # Coexisting final-balance mismatch (999 vs persisted 120).
+        self.assertIn('BALANCE MISMATCH', kinds)
+        # The on-hand status names all three finding kinds: the tampered
+        # row is arithmetically invalid AND shape-invalid (a purchase with
+        # a negative delta), plus the coexisting balance mismatch.
+        self.assertEqual(
+            result['on_hand_status'],
+            'INVALID LEDGER VALUES & UNEXPECTED MOVEMENT SHAPE & '
+            'BALANCE MISMATCH')
 
     def test_adjustment_with_reserved_delta_flagged(self):
         # An adjustment that also changes reserved violates its shape rule
-        # (CHECK-violating raw row) and must be flagged on the Reserved
-        # ledger.
+        # (CHECK-violating row) and must be flagged on the Reserved ledger.
         item = _item(on_hand=100, reserved=0)
-        _raw_movement(item, 'adjustment', 100, 5, 0, 0)
-        resp = self._page()
-        content = resp.content.decode()
-        self.assertIn('UNEXPECTED MOVEMENT SHAPE', content)
-        self.assertIn('adjustment must not change reserved', content)
+        m = self._unsaved(item, 'adjustment', 100, 5, 0, 0)
+        result = self._reconciled(item, [m])
+        shapes = [f for f in result['all_findings']
+                  if f['kind'] == 'UNEXPECTED MOVEMENT SHAPE']
+        self.assertEqual(len(shapes), 1)
+        self.assertEqual(shapes[0]['ledger'], 'Reserved')
+        self.assertIn('adjustment must not change reserved',
+                      shapes[0]['message'])
 
 
 class ReconciliationSnapshotTests(ReconciliationTestBase):
