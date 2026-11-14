@@ -523,3 +523,457 @@ def cancellation_dispositions(request):
         'tab': 'cancellations',
     }
     return render(request, 'reports/cancellation_dispositions.html', context)
+
+
+# ── Phase 7.5 — Inventory Ledger Reconciliation ──────────────────────────────
+# Admin-only, all-time, per-item ledger-internal consistency report.
+#
+# Scope guardrails (owner-approved decisions):
+#   • NOT a physical stock-count verification — it proves ledger-internal
+#     consistency only (chain continuity + sum-to-balance).
+#   • Implicit opening balances: item creation writes no opening movement
+#     row (Phase 7.3 "Opening-stock limitation"), so the first movement's
+#     on_hand_before / reserved_before are the implicit openings. They are
+#     displayed as informational values, never inserted as rows.
+#   • Flag-and-display: a mismatch or discontinuity is a FINDING for
+#     investigation, never an application exception, and one passing check
+#     never conceals another failing one (all findings are preserved).
+#   • On-hand and reserved chains are reconciled independently.
+#     reservation / reservation_release rows are zero-delta on-hand links
+#     (DB CHECK forces on_hand_delta = 0) and MUST participate in the
+#     on-hand continuity walk; consumption settles BOTH chains (its
+#     reserved_delta equals its on_hand_delta by CHECK).
+#   • No truncation: the export emits one row per inventory item, and the
+#     row count scales with item count, not movement count — no cap is
+#     needed and none is applied.
+
+# Per-type expected ledger behaviour (Rev 3 §D.8 shape rules). Any deviation
+# is reported as an UNEXPECTED MOVEMENT SHAPE finding, never a crash.
+_MOVEMENT_SHAPES = {
+    IngredientMovementLog.MOVEMENT_PURCHASE: 'purchase',
+    IngredientMovementLog.MOVEMENT_RESERVATION: 'reservation',
+    IngredientMovementLog.MOVEMENT_RESERVATION_RELEASE: 'release',
+    IngredientMovementLog.MOVEMENT_CONSUMPTION: 'consumption',
+    IngredientMovementLog.MOVEMENT_WASTAGE: 'wastage',
+    IngredientMovementLog.MOVEMENT_ADJUSTMENT: 'adjustment',
+}
+
+ZERO = Decimal("0.000")
+
+KIND_CONTINUITY = 'CHAIN DISCONTINUITY'
+KIND_MISMATCH = 'BALANCE MISMATCH'
+KIND_INVALID = 'INVALID LEDGER VALUES'
+KIND_SHAPE = 'UNEXPECTED MOVEMENT SHAPE'
+STATUS_RECONCILED = 'RECONCILED'
+STATUS_NO_MOVEMENTS = 'NO MOVEMENTS'
+
+
+def _finding(kind, ledger, message, movement=None, expected=None,
+             actual=None, difference=None):
+    """One reconciliation finding. expected/actual/difference are
+    preformatted strings (or None) so the template stays trivial."""
+    return {
+        'kind': kind,
+        'ledger': ledger,
+        'message': message,
+        'movement_pk': movement.pk if movement is not None else None,
+        'created_at': movement.created_at if movement is not None else None,
+        'expected': expected,
+        'actual': actual,
+        'difference': difference,
+    }
+
+
+def _movement_shape_problems(m):
+    """Return (on_hand_problem, reserved_problem) messages for one movement
+    row, or (None, None) when the row matches its type's ledger semantics.
+    An unknown movement type is itself an on-hand problem."""
+    mt = m.movement_type
+    if mt == IngredientMovementLog.MOVEMENT_PURCHASE:
+        on = None if m.on_hand_delta > ZERO else (
+            f"purchase must increase on-hand (delta {m.on_hand_delta})")
+        res = None if m.reserved_delta == ZERO else (
+            f"purchase must not change reserved (delta {m.reserved_delta})")
+    elif mt == IngredientMovementLog.MOVEMENT_RESERVATION:
+        on = None if m.on_hand_delta == ZERO else (
+            f"reservation must not change on-hand (delta {m.on_hand_delta})")
+        res = None if m.reserved_delta > ZERO else (
+            f"reservation must increase reserved (delta {m.reserved_delta})")
+    elif mt == IngredientMovementLog.MOVEMENT_RESERVATION_RELEASE:
+        on = None if m.on_hand_delta == ZERO else (
+            f"reservation release must not change on-hand "
+            f"(delta {m.on_hand_delta})")
+        res = None if m.reserved_delta < ZERO else (
+            f"reservation release must decrease reserved "
+            f"(delta {m.reserved_delta})")
+    elif mt == IngredientMovementLog.MOVEMENT_CONSUMPTION:
+        on = None if m.on_hand_delta < ZERO else (
+            f"consumption must decrease on-hand (delta {m.on_hand_delta})")
+        res = None if m.reserved_delta == m.on_hand_delta else (
+            f"consumption reserved delta {m.reserved_delta} != on-hand "
+            f"delta {m.on_hand_delta}")
+    elif mt == IngredientMovementLog.MOVEMENT_WASTAGE:
+        on = None if m.on_hand_delta < ZERO else (
+            f"wastage must decrease on-hand (delta {m.on_hand_delta})")
+        res = None if m.reserved_delta == ZERO else (
+            f"wastage must not change reserved (delta {m.reserved_delta})")
+    elif mt == IngredientMovementLog.MOVEMENT_ADJUSTMENT:
+        on = None if m.on_hand_delta != ZERO else (
+            f"adjustment must change on-hand (delta {m.on_hand_delta})")
+        res = None if m.reserved_delta == ZERO else (
+            f"adjustment must not change reserved (delta {m.reserved_delta})")
+    else:
+        on = f"unexpected movement type {mt!r}"
+        res = None
+    return on, res
+
+
+def _reconcile_item(item, movements):
+    """Reconcile one InventoryItem against its ordered movement chain.
+
+    `movements` MUST already be in deterministic (created_at, id) order.
+    Returns the per-item result dict consumed by the page template and the
+    Item Reconciliation export sheet."""
+    on_findings = []
+    res_findings = []
+    has_movements = bool(movements)
+    opening_on = opening_res = None
+    computed_on = computed_res = None
+
+    if has_movements:
+        # Implicit opening balances (informational — never inserted as rows).
+        opening_on = movements[0].on_hand_before
+        opening_res = movements[0].reserved_before
+
+        prev_on = None
+        prev_res = None
+        for position, m in enumerate(movements):
+            # Row-level arithmetic agreement and non-negative levels are
+            # verified for EVERY movement row (independent audit fix #1:
+            # these checks previously ran only for the first row, so a
+            # raw-SQL-tampered row later in the chain could escape the
+            # report when its final balance happened to match). The DB
+            # CHECKs already guarantee this for ORM writes; re-verified
+            # from persisted data so the report audits the ledger rather
+            # than trusting it.
+            if m.on_hand_after != m.on_hand_before + m.on_hand_delta:
+                on_findings.append(_finding(
+                    KIND_INVALID, 'On-hand',
+                    f"movement pk={m.pk}: on_hand_after "
+                    f"{m.on_hand_after} != on_hand_before "
+                    f"{m.on_hand_before} + delta {m.on_hand_delta}",
+                    movement=m))
+            if m.reserved_after != m.reserved_before + m.reserved_delta:
+                res_findings.append(_finding(
+                    KIND_INVALID, 'Reserved',
+                    f"movement pk={m.pk}: reserved_after "
+                    f"{m.reserved_after} != reserved_before "
+                    f"{m.reserved_before} + delta {m.reserved_delta}",
+                    movement=m))
+            # Negative or otherwise invalid ledger values.
+            if m.on_hand_before < ZERO or m.on_hand_after < ZERO:
+                on_findings.append(_finding(
+                    KIND_INVALID, 'On-hand',
+                    f"movement pk={m.pk}: negative on-hand level "
+                    f"(before {m.on_hand_before}, after {m.on_hand_after})",
+                    movement=m))
+            if m.reserved_before < ZERO or m.reserved_after < ZERO:
+                res_findings.append(_finding(
+                    KIND_INVALID, 'Reserved',
+                    f"movement pk={m.pk}: negative reserved level "
+                    f"(before {m.reserved_before}, "
+                    f"after {m.reserved_after})", movement=m))
+            if position > 0:
+                # Chain continuity: each movement must continue the previous
+                # after-value on BOTH ledgers independently. A matching final
+                # balance never erases an intermediate discontinuity. The
+                # FIRST row's before-values are the implicit opening
+                # balances (decision C) and are never continuity findings.
+                if m.on_hand_before != prev_on:
+                    on_findings.append(_finding(
+                        KIND_CONTINUITY, 'On-hand',
+                        f"movement pk={m.pk}: on_hand_before "
+                        f"{m.on_hand_before} does not continue the chain "
+                        f"from {prev_on}",
+                        movement=m,
+                        expected=_format_quantity(prev_on),
+                        actual=_format_quantity(m.on_hand_before)))
+                if m.reserved_before != prev_res:
+                    res_findings.append(_finding(
+                        KIND_CONTINUITY, 'Reserved',
+                        f"movement pk={m.pk}: reserved_before "
+                        f"{m.reserved_before} does not continue the chain "
+                        f"from {prev_res}",
+                        movement=m,
+                        expected=_format_quantity(prev_res),
+                        actual=_format_quantity(m.reserved_before)))
+
+            # Unexpected movement shapes / invariant violations.
+            on_shape, res_shape = _movement_shape_problems(m)
+            if on_shape:
+                on_findings.append(_finding(
+                    KIND_SHAPE, 'On-hand', f"movement pk={m.pk}: {on_shape}",
+                    movement=m))
+            if res_shape:
+                res_findings.append(_finding(
+                    KIND_SHAPE, 'Reserved',
+                    f"movement pk={m.pk}: {res_shape}", movement=m))
+
+            prev_on = m.on_hand_after
+            prev_res = m.reserved_after
+
+        computed_on = movements[-1].on_hand_after
+        computed_res = movements[-1].reserved_after
+
+        # Final balance reconciliation — independent of continuity findings.
+        if computed_on != item.on_hand_quantity:
+            on_findings.append(_finding(
+                KIND_MISMATCH, 'On-hand',
+                f"computed final on-hand {computed_on} != persisted "
+                f"{item.on_hand_quantity}",
+                difference=_format_quantity(
+                    computed_on - item.on_hand_quantity)))
+        if computed_res != item.reserved_quantity:
+            res_findings.append(_finding(
+                KIND_MISMATCH, 'Reserved',
+                f"computed final reserved {computed_res} != persisted "
+                f"{item.reserved_quantity}",
+                difference=_format_quantity(
+                    computed_res - item.reserved_quantity)))
+
+    def _status(findings):
+        if not has_movements:
+            return STATUS_NO_MOVEMENTS
+        if not findings:
+            return STATUS_RECONCILED
+        kinds = list(dict.fromkeys(f['kind'] for f in findings))
+        return ' & '.join(kinds)
+
+    return {
+        'item': item,
+        'pk': item.pk,
+        'name': item.name,
+        'item_type': item.item_type,
+        'base_unit': item.base_unit,
+        'is_active': item.is_active,
+        'has_movements': has_movements,
+        'movement_count': len(movements),
+        'opening_on_hand': (_format_quantity(opening_on)
+                            if has_movements else None),
+        'opening_reserved': (_format_quantity(opening_res)
+                             if has_movements else None),
+        'computed_on_hand': (_format_quantity(computed_on)
+                             if has_movements else None),
+        'computed_reserved': (_format_quantity(computed_res)
+                              if has_movements else None),
+        # Raw Decimals for the Excel export (exact values, no string
+        # round-trip); None for zero-movement items.
+        'opening_on_hand_raw': opening_on if has_movements else None,
+        'opening_reserved_raw': opening_res if has_movements else None,
+        'computed_on_hand_raw': computed_on if has_movements else None,
+        'computed_reserved_raw': computed_res if has_movements else None,
+        'persisted_on_hand': item.on_hand_quantity,
+        'persisted_reserved': item.reserved_quantity,
+        'on_hand_findings': on_findings,
+        'reserved_findings': res_findings,
+        'all_findings': on_findings + res_findings,
+        'on_hand_status': _status(on_findings),
+        'reserved_status': _status(res_findings),
+    }
+
+
+def _compute_reconciliation():
+    """Shared computation for the reconciliation page and its export.
+
+    Two data queries total: every inventory item (including inactive) and
+    the entire movement ledger in deterministic (created_at, id) order,
+    grouped in Python by inventory_item_id. No N+1: snapshots carry the
+    display fields and the item list is fetched once."""
+    items = list(InventoryItem.objects.all().order_by('name'))
+    movements = list(
+        IngredientMovementLog.objects.all().order_by('created_at', 'id'))
+    by_item = {}
+    for m in movements:
+        by_item.setdefault(m.inventory_item_id, []).append(m)
+
+    results = [_reconcile_item(item, by_item.get(item.pk, []))
+               for item in items]
+
+    summary = {
+        'total_items': len(items),
+        'reconciled_items': sum(
+            1 for r in results
+            if r['has_movements'] and not r['on_hand_findings']
+            and not r['reserved_findings']),
+        'discontinuity_items': sum(
+            1 for r in results
+            if any(f['kind'] == KIND_CONTINUITY for f in r['all_findings'])),
+        'mismatch_items': sum(
+            1 for r in results
+            if any(f['kind'] == KIND_MISMATCH for f in r['all_findings'])),
+        'no_movement_items': sum(
+            1 for r in results if not r['has_movements']),
+        'total_findings': sum(len(r['all_findings']) for r in results),
+    }
+    return items, results, summary
+
+
+@login_required
+@admin_required
+def ingredient_reconciliation(request):
+    """Phase 7.5 — all-time ledger-internal reconciliation report.
+
+    Read-only. Verifies, per inventory item (active and inactive), that the
+    movement chains are continuous and that the ledger closes onto the
+    persisted InventoryItem balances. Findings are flagged and displayed —
+    never hard-failed, never hidden."""
+    _items, results, summary = _compute_reconciliation()
+    context = {
+        'results': results,
+        'summary': summary,
+        'has_any_items': bool(results),
+        'tab': 'reconciliation',
+    }
+    return render(request, 'reports/reconciliation.html', context)
+
+
+@login_required
+@admin_required
+def ingredient_reconciliation_export(request):
+    """Excel export of the reconciliation: exactly two worksheets —
+    'Summary' (counts only; unlike units are never summed) and
+    'Item Reconciliation' (one row per inventory item, including inactive
+    and zero-movement items). Quantities stay exact numeric Decimal cells;
+    every text cell is formula-injection-safe. One row per item means the
+    row count scales with item count, so no row cap applies and no rows are
+    ever truncated."""
+    try:
+        import openpyxl
+        from openpyxl.styles import Alignment, Font, PatternFill
+    except ImportError:
+        return HttpResponse("openpyxl not installed", status=500)
+
+    _items, results, summary = _compute_reconciliation()
+    generated = timezone.localtime(timezone.now())
+
+    wb = openpyxl.Workbook()
+
+    # ── Sheet 1: Summary ──────────────────────────────────────────────────
+    ws = wb.active
+    ws.title = "Summary"
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(fill_type="solid", fgColor="4A2C2A")
+
+    _safe_text_cell(ws, 1, 1, "Ingredient Ledger Reconciliation — Summary")
+    _safe_text_cell(ws, 2, 1, "Generated")
+    _safe_text_cell(ws, 2, 2, generated.strftime('%Y-%m-%d %H:%M'))
+    _safe_text_cell(ws, 3, 1, "Scope")
+    _safe_text_cell(
+        ws, 3, 2,
+        "All-time ledger-internal reconciliation per inventory item "
+        "(active and inactive). Not a physical stock-count verification.")
+
+    summary_headers = ['Metric', 'Value']
+    for col, header in enumerate(summary_headers, 1):
+        cell = ws.cell(row=5, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal='center')
+
+    summary_rows = [
+        ('Total inventory items', summary['total_items']),
+        ('Reconciled items', summary['reconciled_items']),
+        ('Items with chain discontinuities', summary['discontinuity_items']),
+        ('Items with balance mismatches', summary['mismatch_items']),
+        ('Items without movement history', summary['no_movement_items']),
+        ('Total findings', summary['total_findings']),
+    ]
+    for row_idx, (label, value) in enumerate(summary_rows, 6):
+        _safe_text_cell(ws, row_idx, 1, label)
+        # Counts are integers — numeric cells, never strings.
+        cell = ws.cell(row=row_idx, column=2, value=value)
+        cell.data_type = 'n'
+
+    # ── Sheet 2: Item Reconciliation ──────────────────────────────────────
+    ws2 = wb.create_sheet("Item Reconciliation")
+    headers = ['Item ID', 'Item Name', 'Type', 'Unit', 'Active',
+               'Opening On-Hand', 'Computed On-Hand', 'Persisted On-Hand',
+               'On-Hand Difference', 'On-Hand Status',
+               'Opening Reserved', 'Computed Reserved',
+               'Persisted Reserved', 'Reserved Difference',
+               'Reserved Status', 'Findings']
+    for col, header in enumerate(headers, 1):
+        cell = ws2.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal='center')
+
+    row_idx = 2
+    for result in results:
+        item = result['item']
+        # Identity fields are text — formula-safe via _safe_text_cell.
+        _safe_text_cell(ws2, row_idx, 1, result['pk'])
+        _safe_text_cell(ws2, row_idx, 2, result['name'])
+        _safe_text_cell(ws2, row_idx, 3, result['item_type'])
+        _safe_text_cell(ws2, row_idx, 4, result['base_unit'])
+        _safe_text_cell(ws2, row_idx, 5,
+                        'Yes' if result['is_active'] else 'No')
+
+        if result['has_movements']:
+            # Quantities are exact Decimals written directly as numeric
+            # cells — never converted to strings (H1 discipline). The raw
+            # Decimal values come straight from the reconciliation result
+            # (no formatted-string round-trip). The computed values equal
+            # the persisted ones exactly when the item reconciles, and
+            # differ when it does not.
+            opening_on = result['opening_on_hand_raw']
+            computed_on = result['computed_on_hand_raw']
+            computed_res = result['computed_reserved_raw']
+            opening_res = result['opening_reserved_raw']
+            ws2.cell(row=row_idx, column=6, value=opening_on)
+            ws2.cell(row=row_idx, column=7, value=computed_on)
+            ws2.cell(row=row_idx, column=9,
+                     value=computed_on - item.on_hand_quantity)
+            ws2.cell(row=row_idx, column=11, value=opening_res)
+            ws2.cell(row=row_idx, column=12, value=computed_res)
+            ws2.cell(row=row_idx, column=14,
+                     value=computed_res - item.reserved_quantity)
+        else:
+            computed_on = None
+            computed_res = None
+
+        # Persisted balances are always numeric, for every item.
+        ws2.cell(row=row_idx, column=8, value=item.on_hand_quantity)
+        ws2.cell(row=row_idx, column=13, value=item.reserved_quantity)
+        if computed_on is None:
+            # Zero-movement item: difference columns stay empty — there is
+            # no ledger to compute a difference from.
+            pass
+        _safe_text_cell(ws2, row_idx, 10, result['on_hand_status'])
+        _safe_text_cell(ws2, row_idx, 15, result['reserved_status'])
+        findings_text = '; '.join(
+            f"{f['ledger']} {f['kind']}: {f['message']}"
+            for f in result['all_findings']) or 'None'
+        _safe_text_cell(ws2, row_idx, 16, findings_text)
+        row_idx += 1
+
+    # Auto-fit columns (same approach as the sales export, capped for
+    # readability because the Findings column can be long).
+    for ws_current in (ws, ws2):
+        for col in ws_current.columns:
+            max_length = max(len(str(cell.value or '')) for cell in col)
+            ws_current.column_dimensions[
+                col[0].column_letter].width = min(max_length + 4, 60)
+
+    response = HttpResponse(
+        content_type=(
+            'application/vnd.openxmlformats-officedocument'
+            '.spreadsheetml.sheet'
+        )
+    )
+    response['Content-Disposition'] = (
+        f'attachment; filename="ingredient_reconciliation_'
+        f'{generated:%Y%m%d-%H%M}.xlsx"'
+    )
+    wb.save(response)
+    return response

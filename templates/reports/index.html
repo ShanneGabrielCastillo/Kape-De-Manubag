@@ -16,11 +16,12 @@
   </div>
 </div>
 
-<!-- Report tabs (Phase 7.4: Sales Reports | Ingredient Usage | Cancellation Dispositions) -->
+<!-- Report tabs (Phase 7.4/7.5: Sales Reports | Ingredient Usage | Cancellation Dispositions | Reconciliation) -->
 <nav class="report-tabs" style="display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap">
   <a href="{% url 'reports:index' %}" class="btn {% if tab == 'sales' %}btn-primary{% else %}btn-outline{% endif %}">Sales Reports</a>
   <a href="{% url 'reports:ingredient_usage' %}" class="btn {% if tab == 'ingredient' %}btn-primary{% else %}btn-outline{% endif %}">Ingredient Usage</a>
   <a href="{% url 'reports:cancellation_dispositions' %}" class="btn {% if tab == 'cancellations' %}btn-primary{% else %}btn-outline{% endif %}">Cancellation Dispositions</a>
+  <a href="{% url 'reports:ingredient_reconciliation' %}" class="btn {% if tab == 'reconciliation' %}btn-primary{% else %}btn-outline{% endif %}">Reconciliation</a>
 </nav>
 
 {% if was_clamped %}
