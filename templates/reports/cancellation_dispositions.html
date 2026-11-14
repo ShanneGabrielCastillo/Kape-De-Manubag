@@ -1,0 +1,104 @@
+{% extends "base_admin.html" %}
+{% load static %}
+{% block page_title %}Cancellation Dispositions{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div><h1 class="page-title">Cancellation Dispositions</h1><p class="page-subtitle">Product units recorded at cancellation</p></div>
+</div>
+
+<!-- Report tabs (Phase 7.4: Sales Reports | Ingredient Usage | Cancellation Dispositions) -->
+<nav class="report-tabs" style="display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap">
+  <a href="{% url 'reports:index' %}" class="btn {% if tab == 'sales' %}btn-primary{% else %}btn-outline{% endif %}">Sales Reports</a>
+  <a href="{% url 'reports:ingredient_usage' %}" class="btn {% if tab == 'ingredient' %}btn-primary{% else %}btn-outline{% endif %}">Ingredient Usage</a>
+  <a href="{% url 'reports:cancellation_dispositions' %}" class="btn {% if tab == 'cancellations' %}btn-primary{% else %}btn-outline{% endif %}">Cancellation Dispositions</a>
+</nav>
+
+<!-- Date Filter -->
+<div class="card" style="margin-bottom:24px">
+  <div class="card-body">
+    <form method="get" class="reports-date-filter" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+      <div class="reports-filter-dates">
+        <div class="form-group" style="margin:0">
+          <label class="form-label">From</label>
+          <input type="date" name="start" value="{{ start_date }}" class="form-control">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">To</label>
+          <input type="date" name="end" value="{{ end_date }}" class="form-control">
+        </div>
+      </div>
+      <div class="reports-filter-actions">
+        <button type="submit" class="btn btn-primary">Apply Filter</button>
+        <a href="{% url 'reports:cancellation_dispositions' %}" class="btn btn-outline">Reset</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Page-level empty state (decision record §8): only when the whole
+     result set is empty; both ledger headings below still render. -->
+{% if not has_any_dispositions %}
+<div style="background:#f8f9fa;border:1px solid var(--cream);border-radius:8px;padding:12px 16px;font-size:0.9rem;color:#555;margin-bottom:24px;text-align:center">
+  No cancellations recorded in this period.
+</div>
+{% endif %}
+
+{% for group in ledger_groups %}
+<!-- A15: both ledger groups always render, legacy first -->
+<div class="card" style="margin-bottom:24px">
+  <div class="card-header"><h3>{{ group.label }}</h3></div>
+  <div class="card-body" style="padding:12px 20px">
+    {% for src in group.sources %}
+    <div style="font-weight:600;font-size:0.85rem;color:#6c757d;margin:8px 0 4px">{{ src.label }}</div>
+    <div class="table-wrapper reports-table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Source</th>
+            <th>Lines</th>
+            <th>Prepared</th>
+            <th>Unprepared</th>
+            <th>Discarded</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in src.rows %}
+          <tr>
+            <td style="font-weight:600">{{ row.product_name }}</td>
+            <td>{{ src.label }}</td>
+            <td>{{ row.line_count }}</td>
+            <td>{{ row.prepared }}</td>
+            <td>{{ row.unprepared }}</td>
+            <td style="font-weight:700;color:var(--caramel)">{{ row.discarded }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <!-- Mobile fallback (plan §5.4): one card per product row; the three
+         disposition quantities are never combined (A14) -->
+    <div class="reports-mobile-cards">
+      {% for row in src.rows %}
+      <div class="report-card-item">
+        <div class="report-card-item-main">
+          <div class="report-card-item-name">{{ row.product_name }}</div>
+          <div class="report-card-item-sub">Prepared {{ row.prepared }} &middot; Unprepared {{ row.unprepared }} &middot; Discarded {{ row.discarded }}</div>
+        </div>
+        <div class="report-card-item-value">{{ row.line_count }} line{{ row.line_count|pluralize }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% empty %}
+    <div class="empty-state" style="padding:32px"><p>No {{ group.label|lower }} cancellations recorded in this period.</p></div>
+    {% endfor %}
+  </div>
+</div>
+{% endfor %}
+
+<!-- Copy requirements (decision record A12/A16) -->
+<div style="background:#f8f9fa;border:1px solid var(--cream);border-radius:8px;padding:12px 16px;font-size:0.85rem;color:#555;margin-bottom:24px">
+  Quantities are product units. Discarded units are a cancellation disposition, not an ingredient consumption figure.
+</div>
+{% endblock %}

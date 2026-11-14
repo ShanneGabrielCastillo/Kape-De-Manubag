@@ -1,0 +1,179 @@
+{% extends "base_admin.html" %}
+{% load static %}
+{% block page_title %}Ingredient Usage{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div><h1 class="page-title">Ingredient Usage</h1><p class="page-subtitle">Physically consumed ingredients and packaging</p></div>
+</div>
+
+<!-- Report tabs (Phase 7.4: Sales Reports | Ingredient Usage | Cancellation Dispositions) -->
+<nav class="report-tabs" style="display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap">
+  <a href="{% url 'reports:index' %}" class="btn {% if tab == 'sales' %}btn-primary{% else %}btn-outline{% endif %}">Sales Reports</a>
+  <a href="{% url 'reports:ingredient_usage' %}" class="btn {% if tab == 'ingredient' %}btn-primary{% else %}btn-outline{% endif %}">Ingredient Usage</a>
+  <a href="{% url 'reports:cancellation_dispositions' %}" class="btn {% if tab == 'cancellations' %}btn-primary{% else %}btn-outline{% endif %}">Cancellation Dispositions</a>
+</nav>
+
+<!-- Date Filter -->
+<div class="card" style="margin-bottom:24px">
+  <div class="card-body">
+    <form method="get" class="reports-date-filter" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+      <div class="reports-filter-dates">
+        <div class="form-group" style="margin:0">
+          <label class="form-label">From</label>
+          <input type="date" name="start" value="{{ start_date }}" class="form-control">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">To</label>
+          <input type="date" name="end" value="{{ end_date }}" class="form-control">
+        </div>
+      </div>
+      <div class="reports-filter-actions">
+        <button type="submit" class="btn btn-primary">Apply Filter</button>
+        <a href="{% url 'reports:ingredient_usage' %}" class="btn btn-outline">Reset</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Ingredients section (A7: separate from packaging, never combined).
+     Always rendered; shows the approved empty state when this item type
+     has no consumption records in the period. -->
+<div class="card" style="margin-bottom:24px">
+  <div class="card-header"><h3>Ingredients</h3></div>
+  <div class="card-body" style="padding:12px 20px">
+    {% for section in ingredient_sections %}
+    <div style="font-weight:600;font-size:0.85rem;color:#6c757d;margin:8px 0 4px">{{ section.unit_label }}</div>
+    <div class="table-wrapper reports-table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Prepared (order ready)</th>
+            <th>Cancelled after prep</th>
+            <th>Total consumed</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in section.rows %}
+          <tr>
+            <td style="font-weight:600">{{ row.item_name }}</td>
+            <td>{{ row.order_ready }}</td>
+            <td>{{ row.cancelled_prepared }}</td>
+            <td style="font-weight:700;color:var(--caramel)">{{ row.total }}</td>
+          </tr>
+          {% for extra in row.other %}
+          <tr>
+            <td colspan="4" style="color:#6c757d;font-size:0.82rem">{{ extra.label }}: {{ extra.qty }}</td>
+          </tr>
+          {% endfor %}
+          {% endfor %}
+          <tr>
+            <td style="font-weight:600">Total consumed ({{ section.base_unit }})</td>
+            <td></td>
+            <td></td>
+            <td style="font-weight:700;color:var(--caramel)">{{ section.unit_total }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <!-- Mobile fallback (plan §5.3): one card per item, same figures -->
+    <div class="reports-mobile-cards">
+      {% for row in section.rows %}
+      <div class="report-card-item">
+        <div class="report-card-item-main">
+          <div class="report-card-item-name">{{ row.item_name }}</div>
+          <div class="report-card-item-sub">Prepared {{ row.order_ready }} &middot; Cancelled after prep {{ row.cancelled_prepared }}</div>
+          {% for extra in row.other %}
+          <div class="report-card-item-sub">{{ extra.label }}: {{ extra.qty }}</div>
+          {% endfor %}
+        </div>
+        <div class="report-card-item-value">{{ row.total }}</div>
+      </div>
+      {% endfor %}
+      <div class="report-card-item">
+        <div class="report-card-item-main">
+          <div class="report-card-item-name">Total consumed ({{ section.base_unit }})</div>
+        </div>
+        <div class="report-card-item-value" style="font-weight:700;color:var(--caramel)">{{ section.unit_total }}</div>
+      </div>
+    </div>
+    {% empty %}
+    <div class="empty-state" style="padding:32px"><p>No consumption recorded in this period.</p></div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Packaging section (A7: separate from ingredients, never combined).
+     Always rendered; shows the approved empty state when this item type
+     has no consumption records in the period. -->
+<div class="card" style="margin-bottom:24px">
+  <div class="card-header"><h3>Packaging</h3></div>
+  <div class="card-body" style="padding:12px 20px">
+    {% for section in packaging_sections %}
+    <div style="font-weight:600;font-size:0.85rem;color:#6c757d;margin:8px 0 4px">{{ section.unit_label }}</div>
+    <div class="table-wrapper reports-table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Prepared (order ready)</th>
+            <th>Cancelled after prep</th>
+            <th>Total consumed</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in section.rows %}
+          <tr>
+            <td style="font-weight:600">{{ row.item_name }}</td>
+            <td>{{ row.order_ready }}</td>
+            <td>{{ row.cancelled_prepared }}</td>
+            <td style="font-weight:700;color:var(--caramel)">{{ row.total }}</td>
+          </tr>
+          {% for extra in row.other %}
+          <tr>
+            <td colspan="4" style="color:#6c757d;font-size:0.82rem">{{ extra.label }}: {{ extra.qty }}</td>
+          </tr>
+          {% endfor %}
+          {% endfor %}
+          <tr>
+            <td style="font-weight:600">Total consumed ({{ section.base_unit }})</td>
+            <td></td>
+            <td></td>
+            <td style="font-weight:700;color:var(--caramel)">{{ section.unit_total }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <!-- Mobile fallback (plan §5.3): one card per item, same figures -->
+    <div class="reports-mobile-cards">
+      {% for row in section.rows %}
+      <div class="report-card-item">
+        <div class="report-card-item-main">
+          <div class="report-card-item-name">{{ row.item_name }}</div>
+          <div class="report-card-item-sub">Prepared {{ row.order_ready }} &middot; Cancelled after prep {{ row.cancelled_prepared }}</div>
+          {% for extra in row.other %}
+          <div class="report-card-item-sub">{{ extra.label }}: {{ extra.qty }}</div>
+          {% endfor %}
+        </div>
+        <div class="report-card-item-value">{{ row.total }}</div>
+      </div>
+      {% endfor %}
+      <div class="report-card-item">
+        <div class="report-card-item-main">
+          <div class="report-card-item-name">Total consumed ({{ section.base_unit }})</div>
+        </div>
+        <div class="report-card-item-value" style="font-weight:700;color:var(--caramel)">{{ section.unit_total }}</div>
+      </div>
+    </div>
+    {% empty %}
+    <div class="empty-state" style="padding:32px"><p>No consumption recorded in this period.</p></div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Copy requirements (decision record A10/A11) -->
+<div style="background:#f8f9fa;border:1px solid var(--cream);border-radius:8px;padding:12px 16px;font-size:0.85rem;color:#555;margin-bottom:24px">
+  Figures are period activity from the ingredient movement ledger and are not a stock reconciliation or current on-hand balance. "Cancelled after prep" consumption is not wastage.
+</div>
+{% endblock %}

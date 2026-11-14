@@ -203,12 +203,6 @@ class CorrectnessAfterOptimisationTest(TestCase):
         resp = _reports(self.client)
         self.assertEqual(resp.context['total_orders'], 3)
 
-    def test_avg_order_correct(self):
-        resp = _reports(self.client)
-        # 440 / 3 ≈ 146.67
-        self.assertAlmostEqual(float(resp.context['avg_order']),
-                                440/3, places=2)
-
     def test_daily_sales_sum_equals_total_revenue(self):
         resp      = _reports(self.client)
         daily_sum = sum(d['total'] for d in resp.context['daily_sales'])
@@ -254,10 +248,6 @@ class ZeroOrdersCorrectnessTest(TestCase):
     def test_zero_orders_total_orders(self):
         resp = _reports(self.client)
         self.assertEqual(resp.context['total_orders'], 0)
-
-    def test_zero_orders_avg_order(self):
-        resp = _reports(self.client)
-        self.assertEqual(resp.context['avg_order'], 0)
 
     def test_zero_orders_daily_sales_all_zero(self):
         resp = _reports(self.client)
@@ -438,10 +428,6 @@ class ExistingTestsRegressionTest(TestCase):
     def test_total_orders(self):
         resp = self._report()
         self.assertEqual(resp.context['total_orders'], 2)
-
-    def test_avg_order(self):
-        resp = self._report()
-        self.assertAlmostEqual(float(resp.context['avg_order']), 280.0, places=2)
 
     def test_top_products_latte(self):
         resp = self._report()

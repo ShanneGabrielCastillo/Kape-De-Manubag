@@ -308,7 +308,7 @@ class NonCompletedExcludedTest(TestCase):
         o_good = _completed_order()
         _add_item(o_good, prod, quantity=1)
         # Non-completed
-        for status in ['pending', 'preparing', 'ready']:
+        for status in ['awaiting_payment', 'preparing', 'ready']:
             dt = timezone.make_aware(
                 datetime.datetime.combine(TODAY, datetime.time(9, 0))
             )

@@ -298,7 +298,7 @@ class NonCompletedStatusTest(TestCase):
         self.client = Client()
         self.client.login(username='admin_status', password='pass123')
         _order(TODAY, status='completed', is_paid=True,  total=Decimal('100.00'))
-        for st in ['pending', 'preparing', 'ready']:
+        for st in ['awaiting_payment', 'preparing', 'ready']:
             _order(TODAY, status=st, is_paid=False, total=Decimal('999.00'))
 
     def test_only_completed_counted(self):
@@ -315,7 +315,7 @@ class PaidNotCompletedTest(TestCase):
         self.admin = _user('admin_pnc')
         self.client = Client()
         self.client.login(username='admin_pnc', password='pass123')
-        _order(TODAY, status='pending',   is_paid=True,  total=Decimal('999.00'))
+        _order(TODAY, status='awaiting_payment',   is_paid=True,  total=Decimal('999.00'))
         _order(TODAY, status='completed', is_paid=True,  total=Decimal('150.00'))
 
     def test_paid_pending_excluded(self):
@@ -461,7 +461,7 @@ class HasAnySalesFlagTest(TestCase):
         self.assertFalse(resp.context['has_any_sales'])
 
     def test_false_when_only_pending_orders(self):
-        _order(TODAY, status='pending', is_paid=False, total=Decimal('999.00'))
+        _order(TODAY, status='awaiting_payment', is_paid=False, total=Decimal('999.00'))
         resp = _reports(self.client, TODAY, TODAY)
         self.assertFalse(resp.context['has_any_sales'])
 

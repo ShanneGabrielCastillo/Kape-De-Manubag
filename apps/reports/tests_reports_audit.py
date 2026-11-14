@@ -176,11 +176,6 @@ class MixedDayTest(TestCase):
         self.assertEqual(resp.context['total_revenue'], stats['daily_sales'])
         self.assertEqual(resp.context['total_orders'],  stats['daily_orders'])
 
-    def test_avg_order_correct(self):
-        resp = _reports(self.client, TODAY, TODAY)
-        # 700 / 2 = 350
-        self.assertEqual(resp.context['avg_order'], Decimal('350.00'))
-
 
 # ── 4. Multiple orders ────────────────────────────────────────────────────────
 
@@ -464,7 +459,6 @@ class NoSalesTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.context['total_revenue'], 0)
         self.assertEqual(resp.context['total_orders'],  0)
-        self.assertEqual(resp.context['avg_order'],     0)
 
     def test_zero_sales_finance_consistent(self):
         cash, count = _get_cash_sales_for_date(TODAY)

@@ -63,7 +63,7 @@ def _cashier(username='cashier_test'):
     return u
 
 
-def _order(status='pending', is_paid=False, payment_method='cash',
+def _order(status='awaiting_payment', is_paid=False, payment_method='cash',
            total=Decimal('100.00'), date=TODAY):
     """Create a minimal order on a given date."""
     dt = timezone.make_aware(
@@ -139,14 +139,14 @@ class PendingOrderTest(TestCase):
         self.admin = _user('admin_pending')
         self.client = Client()
         self.client.login(username='admin_pending', password='pass123')
-        _order(status='pending', is_paid=False, total=Decimal('250.00'))
+        _order(status='awaiting_payment', is_paid=False, total=Decimal('250.00'))
 
     def test_pending_excluded_from_all_modules(self):
         _assert_all_modules_zero(self, self.client)
 
     def test_pending_order_still_in_database(self):
         """Pending orders must remain queryable (historical traceability)."""
-        self.assertEqual(Order.objects.filter(status='pending').count(), 1)
+        self.assertEqual(Order.objects.filter(status='awaiting_payment').count(), 1)
 
 
 # ── 2. Preparing order excluded ───────────────────────────────────────────────
@@ -357,7 +357,7 @@ class FullWorkflowTest(TestCase):
 
     def test_workflow_step_by_step(self):
         # Step 1: Create order (pending)
-        order = _order(status='pending', is_paid=False, total=Decimal('300.00'))
+        order = _order(status='awaiting_payment', is_paid=False, total=Decimal('300.00'))
         _assert_all_modules_zero(self, self.client)
 
         # Step 2: Move to preparing
@@ -378,7 +378,7 @@ class FullWorkflowTest(TestCase):
                                    expected_count=1)
 
     def test_cancel_at_pending(self):
-        order = _order(status='pending', is_paid=False, total=Decimal('300.00'))
+        order = _order(status='awaiting_payment', is_paid=False, total=Decimal('300.00'))
         Order.objects.filter(pk=order.pk).update(status='cancelled')
         _assert_all_modules_zero(self, self.client)
 
@@ -464,7 +464,7 @@ class CrossModuleStatusConsistencyTest(TestCase):
         self.admin = _user('admin_cross')
         self.client = Client()
         self.client.login(username='admin_cross', password='pass123')
-        _order(status='pending',   is_paid=False, total=Decimal('999.00'))
+        _order(status='awaiting_payment',   is_paid=False, total=Decimal('999.00'))
         _order(status='preparing', is_paid=False, total=Decimal('999.00'))
         _order(status='ready',     is_paid=False, total=Decimal('999.00'))
         _order(status='cancelled', is_paid=False, total=Decimal('999.00'))
@@ -494,7 +494,7 @@ class CrossModuleStatusConsistencyTest(TestCase):
     def test_all_five_orders_still_in_database(self):
         """All orders must remain for historical traceability."""
         self.assertEqual(Order.objects.count(), 5)
-        for status in ['pending', 'preparing', 'ready', 'cancelled', 'completed']:
+        for status in ['awaiting_payment', 'preparing', 'ready', 'cancelled', 'completed']:
             self.assertTrue(
                 Order.objects.filter(status=status).exists(),
                 f"Order with status='{status}' missing from database",

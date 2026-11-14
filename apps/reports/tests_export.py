@@ -9,7 +9,7 @@ Key invariants:
     (is_paid=True, status='completed')
   - One data row per qualifying order
   - Sum of Total column == reports_index total_revenue
-  - Cancelled / pending orders absent from the export
+  - Cancelled / awaiting_payment orders absent from the export
   - Cash and GCash both exported; distinguishable via Payment column
   - Date parameters respected (same range, same validation)
   - Total cell values are numeric (Decimal/float), not strings
@@ -277,7 +277,7 @@ class NonCompletedExportTest(TestCase):
         self.client = Client()
         self.client.login(username='admin_export5', password='pass123')
         _order(TODAY, status='completed', is_paid=True,  total=Decimal('150.00'))
-        for st in ['pending', 'preparing', 'ready']:
+        for st in ['awaiting_payment', 'preparing', 'ready']:
             _order(TODAY, status=st,  is_paid=False, total=Decimal('999.00'))
 
     def test_only_completed_in_export(self):
@@ -396,7 +396,7 @@ class ColumnHeadersTest(TestCase):
             self.skipTest('openpyxl not available')
         headers = _headers(wb)
         expected = ['Order #', 'Date', 'Customer', 'Type',
-                    'Items', 'Total', 'Payment', 'Cashier']
+                    'Line items', 'Total', 'Payment', 'Cashier']
         self.assertEqual(headers, expected)
 
 

@@ -16,6 +16,19 @@
   </div>
 </div>
 
+<!-- Report tabs (Phase 7.4: Sales Reports | Ingredient Usage | Cancellation Dispositions) -->
+<nav class="report-tabs" style="display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap">
+  <a href="{% url 'reports:index' %}" class="btn {% if tab == 'sales' %}btn-primary{% else %}btn-outline{% endif %}">Sales Reports</a>
+  <a href="{% url 'reports:ingredient_usage' %}" class="btn {% if tab == 'ingredient' %}btn-primary{% else %}btn-outline{% endif %}">Ingredient Usage</a>
+  <a href="{% url 'reports:cancellation_dispositions' %}" class="btn {% if tab == 'cancellations' %}btn-primary{% else %}btn-outline{% endif %}">Cancellation Dispositions</a>
+</nav>
+
+{% if was_clamped %}
+<div style="background:#fffbeb;border:1.5px solid #fbbf24;border-radius:8px;padding:10px 14px;margin-bottom:24px;font-size:0.9rem">
+  Date range limited to {{ max_range_days }} days — showing {{ start_date }} to {{ end_date }}.
+</div>
+{% endif %}
+
 <!-- Date Filter -->
 <div class="card" style="margin-bottom:24px">
   <div class="card-body">
@@ -49,14 +62,8 @@
   <div class="stat-card green">
     <div class="stat-label">Total Orders</div>
     <div class="stat-value">{{ total_orders }}</div>
-    <div class="stat-sub">Paid orders</div>
+    <div class="stat-sub">Paid &amp; completed orders</div>
     <div class="stat-icon"><i data-lucide="clipboard-list"></i></div>
-  </div>
-  <div class="stat-card blue">
-    <div class="stat-label">Average Order</div>
-    <div class="stat-value">₱{{ avg_order|floatformat:2 }}</div>
-    <div class="stat-sub">Per transaction</div>
-    <div class="stat-icon"><i data-lucide="chart-column"></i></div>
   </div>
 </div>
 
@@ -74,7 +81,7 @@
 
   <!-- Category Sales -->
   <div class="card">
-    <div class="card-header"><h3>Sales by Category</h3></div>
+    <div class="card-header"><h3>Sales by Category</h3><div class="stat-sub" style="font-weight:400">Excludes packaging fees.</div></div>
     <div id="category-sales-scroll" class="card-body" style="padding:0">
       {% for cat in category_sales %}
       <div style="padding:12px 20px;border-bottom:1px solid var(--cream)">
@@ -94,7 +101,7 @@
 <!-- Top Products + Daily Table -->
 <div class="reports-grid-bottom">
   <div class="card card-scroll-host">
-    <div class="card-header"><h3><i data-lucide="award" class="btn-icon" aria-hidden="true"></i> Top Products</h3></div>
+    <div class="card-header"><h3><i data-lucide="award" class="btn-icon" aria-hidden="true"></i> Top Products</h3><div class="stat-sub" style="font-weight:400">Excludes packaging fees.</div></div>
     <div id="top-products-scroll" class="table-wrapper reports-table-wrapper">
       <table>
         <thead>
