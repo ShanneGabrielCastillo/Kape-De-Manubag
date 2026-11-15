@@ -284,6 +284,66 @@ class CartCheckoutE3BTests(E3BTestBase):
         resp = self._add(product, quantity=3)   # 3 > floor(500/250)=2
         self.assertFalse(resp.json()['success'])
 
+    # ── Phase 8D: zero-stock / packaging-rule / min-component enforcement ────
+
+    def test_ingredient_zero_stock_complete_config_cannot_add(self):
+        # Complete approved recipe but the ledger is empty: the add guard
+        # must reject with the out-of-stock message (not the
+        # configuration-incomplete one), because the configuration IS
+        # complete — availability is simply zero.
+        product = _ingredient_product('E3B Zero Stock', category=self.cat,
+                                      on_hand=0)
+        ledger_item = InventoryItem.objects.get(name__startswith='TEST Ledger')
+        _recipe(product, ledger_item, quantity_per_unit='250.000')
+        resp = self._add(product, quantity=1)
+        data = resp.json()
+        self.assertFalse(data['success'])
+        self.assertIn('out of stock', data['error'])
+
+    def test_ingredient_missing_packaging_rule_cannot_add(self):
+        # A missing packaging rule is NEVER interpreted as "no packaging"
+        # (Rev 3 §I.2): with a recipe present but no ProductPackagingRule
+        # rows, the configuration is incomplete and the add is rejected with
+        # the unavailable message.
+        product = _ingredient_product('E3B No Rule', category=self.cat,
+                                      on_hand=1000)
+        ProductPackagingRule.objects.filter(product=product).delete()
+        ledger_item = InventoryItem.objects.get(name__startswith='TEST Ledger')
+        _recipe(product, ledger_item, quantity_per_unit='250.000')
+        resp = self._add(product, quantity=1)
+        data = resp.json()
+        self.assertFalse(data['success'])
+        self.assertIn('currently unavailable', data['error'])
+
+    def test_ingredient_add_enforces_minimum_component(self):
+        # Two-ingredient recipe: the add guard must enforce the MINIMUM
+        # component availability — beans allow 4 units (1000/250) but milk
+        # only 3 (900/300), so 4 is rejected and 3 accepted.
+        product = _ingredient_product('E3B Min Component', category=self.cat,
+                                      on_hand=1000)
+        ledger_a = InventoryItem.objects.get(name__startswith='TEST Ledger')
+        ledger_b = InventoryItem.objects.create(
+            name='TEST Ledger E3B Min Milk', item_type='ingredient',
+            base_unit='ml', on_hand_quantity=Decimal('900.000'),
+        )
+        approver, _ = User.objects.get_or_create(
+            username='e3b_recipe_approver', defaults={'role': 'admin'})
+        recipe = Recipe.objects.create(
+            product=product, size='none',
+            order_type_scope=Recipe.SCOPE_ALL,
+            status='approved', revision=1,
+            approved_by=approver, approved_at=timezone.now(),
+        )
+        RecipeItem.objects.create(recipe=recipe, inventory_item=ledger_a,
+                                  quantity=Decimal('250.000'))
+        RecipeItem.objects.create(recipe=recipe, inventory_item=ledger_b,
+                                  quantity=Decimal('300.000'))
+        resp_over = self._add(product, quantity=4)   # milk limits to 3
+        self.assertFalse(resp_over.json()['success'])
+        self.assertIn('left in stock', resp_over.json()['error'])
+        resp_ok = self._add(product, quantity=3)
+        self.assertTrue(resp_ok.json()['success'])
+
     def test_ingredient_add_uses_selected_size(self):
         # Sized ingredient product: 'large' has its own recipe with a
         # different per-unit quantity, so per-size availability differs.

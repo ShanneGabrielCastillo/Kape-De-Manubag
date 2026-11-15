@@ -502,6 +502,37 @@ class IngredientLowStockWidgetTests(TestCase):
 
         self.assertEqual([row['pk'] for row in self._page_rows()], [active.pk])
 
+    # ── C2. Zero-available boundary (Phase 8D) ────────────────────────────
+
+    def test_zero_available_item_is_included_and_critical(self):
+        # Available 0 <= any threshold (thresholds are CHECK >= 0): a fully
+        # depleted item must appear with the Critical classification.
+        item = self._make_item(
+            'Depleted Item', on_hand='0.000', reserved='0.000',
+            threshold='10.000',
+        )
+
+        rows = self._page_rows()
+        self.assertEqual([row['pk'] for row in rows], [item.pk])
+        self.assertEqual(rows[0]['available_quantity'], Decimal('0.000'))
+        self.assertTrue(rows[0]['is_critical'])
+
+    # ── C3. Fully-reserved boundary (Phase 8D) ────────────────────────────
+
+    def test_positive_on_hand_fully_reserved_is_included(self):
+        # Physical stock is positive but every unit is reserved: the widget
+        # must flag it because AVAILABILITY (on_hand - reserved) is zero —
+        # never the raw on-hand value.
+        item = self._make_item(
+            'Fully Reserved Item', on_hand='30.000', reserved='30.000',
+            threshold='10.000',
+        )
+
+        rows = self._page_rows()
+        self.assertEqual([row['pk'] for row in rows], [item.pk])
+        self.assertEqual(rows[0]['available_quantity'], Decimal('0.000'))
+        self.assertTrue(rows[0]['is_critical'])
+
     # ── D. Packaging inclusion ────────────────────────────────────────────
 
     def test_ingredients_and_packaging_are_both_included(self):
