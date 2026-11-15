@@ -197,16 +197,25 @@
       <div class="pos-grid">
         {% for product in cat.products.all %}
         {% if product.is_available and product.is_active %}
-        <div class="pos-item {% if product.stock_quantity == 0 %}pos-item--out{% endif %}"
-             {% if product.stock_quantity == 0 %}
+        {# Phase 8B: ingredient products gate on derived availability;      #}
+        {# legacy products keep the stock_quantity gate.                    #}
+        <div class="pos-item {% if product.inventory_tracking_mode == 'ingredient' and not product.ingredient_sellable %}pos-item--out{% elif product.stock_quantity == 0 %}pos-item--out{% endif %}"
+             {% if product.inventory_tracking_mode == 'ingredient' and not product.ingredient_sellable %}
+             onclick="showToast('{{ product.name|escapejs }} is out of stock', 'error')"
+             {% elif product.stock_quantity == 0 %}
              onclick="showToast('{{ product.name|escapejs }} is out of stock', 'error')"
              {% else %}
              onclick="handlePosAdd({{ product.pk }}, '{{ product.name|escapejs }}', {{ product.price }}, this)"
              {% endif %}
              data-product-id="{{ product.pk }}" data-name="{{ product.name|escape }}" data-base-price="{{ product.price }}"
              data-has-sizes="{% if product.has_sizes %}1{% else %}0{% endif %}"
+             {% if product.inventory_tracking_mode == 'ingredient' %}
+             data-stock="{{ product.ingredient_units }}"
+             {% if not product.ingredient_sellable %}data-out="1"{% endif %}
+             {% else %}
              data-stock="{{ product.stock_quantity }}"
              {% if product.stock_quantity == 0 %}data-out="1"{% endif %}
+             {% endif %}
              {% if product.has_sizes %}
              data-price-medium="{{ product.price_medium|default:product.price }}"
              data-price-large="{{ product.price_large|default:product.price }}"
@@ -216,12 +225,22 @@
             {% product_image product alt=product.name %}
           </div>
           <div class="item-name">{{ product.name }}</div>
-          {% if product.stock_quantity == 0 %}
+          {% if product.inventory_tracking_mode == 'ingredient' %}
+            {% if not product.ingredient_complete %}
+            <span class="stock-badge stock-badge--critical">Configuration incomplete</span>
+            {% elif product.ingredient_units == 0 %}
             <span class="stock-badge stock-badge--out">Out of Stock</span>
-          {% elif product.stock_status == 'critical' %}
+            {% else %}
+            <span class="stock-badge stock-badge--low">{{ product.ingredient_units }} available</span>
+            {% endif %}
+          {% else %}
+            {% if product.stock_quantity == 0 %}
+            <span class="stock-badge stock-badge--out">Out of Stock</span>
+            {% elif product.stock_status == 'critical' %}
             <span class="stock-badge stock-badge--critical">{{ product.stock_quantity }} left</span>
-          {% elif product.stock_status == 'low' %}
+            {% elif product.stock_status == 'low' %}
             <span class="stock-badge stock-badge--low">{{ product.stock_quantity }} left</span>
+            {% endif %}
           {% endif %}
           <div class="item-price">₱{{ product.price }}</div>
         </div>

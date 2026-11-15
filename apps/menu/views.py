@@ -59,7 +59,73 @@ def menu_index(request):
     (main.js), so no separate server-side product queryset is needed.
     """
     categories = Category.objects.with_sellable_products()
-    return render(request, 'menu/index.html', {'categories': categories})
+
+    # Phase 8B (Rev 3 §E.3b): ingredient-tracked products gate on derived
+    # availability (per configured size — sellable while ANY size is
+    # sellable), never on the frozen legacy stock_quantity. Legacy products
+    # keep the stock_quantity gate. The template gates each card through
+    # this PK list, so the server-rendered initial state matches the
+    # product_stock polling payload.
+    unavailable_ingredient_pks = []
+    for category in categories:
+        for product in category.products.all():
+            if product.inventory_tracking_mode == 'ingredient':
+                _max_units, any_sellable, _per_size = _ingredient_availability(
+                    product)
+                if not any_sellable:
+                    unavailable_ingredient_pks.append(product.pk)
+
+    return render(request, 'menu/index.html', {
+        'categories': categories,
+        'ingredient_unavailable_pks': unavailable_ingredient_pks,
+    })
+
+
+# ── Phase 8B: read-side availability (Rev 3 §E.3b) ───────────────────────────
+
+def configured_sizes_for_product(product):
+    """Size identifiers actually configured for this product.
+
+    Existing identifiers only (no invented sizes): every product has the
+    'none' (base-price) size; sized products add the sizes they price
+    (medium / large / hot) — the same set the menu card renders."""
+    if not product.has_sizes:
+        return ['none']
+    sizes = ['none']
+    if product.price_medium:
+        sizes.append('medium')
+    if product.price_large:
+        sizes.append('large')
+    if product.price_hot:
+        sizes.append('hot')
+    return sizes
+
+
+def _ingredient_availability(product):
+    """Per-size availability for one ingredient-tracked product (Rev 3
+    §E.3b). Returns (max_units, any_sellable, per_size) where per_size maps
+    each configured size to {'available_units', 'configuration_complete',
+    'sellable'}.  A size is sellable when its plan is complete AND units
+    > 0; the product is sellable while ANY configured size is sellable
+    (any size orderable).  any_sellable therefore conflates completeness
+    with current stock — configuration completeness alone is available per
+    size via per_size[size]['configuration_complete']."""
+    from apps.inventory.services import get_available_units
+
+    per_size = {}
+    max_units = 0
+    any_sellable = False
+    for size in configured_sizes_for_product(product):
+        r = get_available_units(product, size)
+        sellable = r.configuration_complete and r.units > 0
+        per_size[size] = {
+            'available_units': r.units,
+            'configuration_complete': r.configuration_complete,
+            'sellable': sellable,
+        }
+        max_units = max(max_units, r.units)
+        any_sellable = any_sellable or sellable
+    return max_units, any_sellable, per_size
 
 
 def product_stock(request):
@@ -79,18 +145,41 @@ def product_stock(request):
       cache customer-specific data between different browsers.
     """
     import hashlib, json as _json
-    products = list(Product.objects.filter(is_active=True).values(
-        'pk', 'stock_quantity', 'is_available',
-    ).order_by('pk'))
 
-    data = {
-        str(p['pk']): {
-            'stock_quantity': p['stock_quantity'],
-            'is_available':   p['is_available'],
-            'is_active':      True,
+    # Phase 8B (Rev 3 §E.3b): availability is computed per product, PER SIZE
+    # for ingredient-tracked products (owner decision — no collapsing), and
+    # from stock_quantity for legacy products (zero extra queries). The
+    # response is ADDITIVE: the legacy fields are preserved verbatim.
+    products = list(Product.objects.filter(is_active=True).order_by('pk'))
+
+    data = {}
+    for p in products:
+        entry = {
+            'stock_quantity': p.stock_quantity,   # legacy field, preserved
+            'is_available':   p.is_available,     # preserved
+            'is_active':      True,               # preserved
+            # Phase 8B additive fields:
+            'inventory_tracking_mode': p.inventory_tracking_mode,
         }
-        for p in products
-    }
+        if p.inventory_tracking_mode == 'ingredient':
+            max_units, any_sellable, per_size = _ingredient_availability(p)
+            entry['available_units'] = max_units
+            # Configuration completeness is independent of current stock:
+            # true only when EVERY configured size has a complete plan
+            # (Phase 8B audit fix M1).  sellable/out_of_stock carry the
+            # availability semantics.
+            entry['configuration_complete'] = all(
+                size_data['configuration_complete']
+                for size_data in per_size.values())
+            entry['sellable'] = any_sellable
+            entry['out_of_stock'] = not any_sellable
+            entry['sizes'] = per_size
+        else:
+            entry['available_units'] = int(p.stock_quantity)
+            entry['configuration_complete'] = True
+            entry['sellable'] = p.is_available and p.stock_quantity > 0
+            entry['out_of_stock'] = p.stock_quantity <= 0
+        data[str(p.pk)] = entry
 
     # Build a cheap ETag from a hash of the serialised data.
     # Only changes when stock or availability actually changes.

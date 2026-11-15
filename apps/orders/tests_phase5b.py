@@ -1925,10 +1925,16 @@ class ReservationRegressionTests(TestCase):
         prod, ingr, _, _, _ = _ingredient_product(
             ingr_item=ingr, qty_per_unit=Decimal('10.000')
         )
-        # The checkout pre-flight checks product.stock_quantity > 0 even for
-        # ingredient products; set a non-zero value so the pre-flight passes.
-        prod.stock_quantity = 99
-        prod.save(update_fields=['stock_quantity'])
+        # Phase 8B (Rev 3 §E.3b/§I.2): the customer flow evaluates
+        # availability with order_type=None = most restrictive over BOTH
+        # order types, and every size × order type needs an explicit
+        # packaging rule.  The helper only creates the dine_in rule, so add
+        # the takeout rule or the cart add is (correctly) rejected and no
+        # reservation is ever created.  The legacy stock_quantity pre-flight
+        # bypass this test used to set is gone: ingredient sellability now
+        # derives from the availability function, never from stock_quantity.
+        _packaging_rule(prod, size='none', order_type='takeout',
+                        no_packaging=True)
         self.client.post(
             reverse('orders:add_to_cart', args=[prod.pk]),
             {'quantity': 1, 'size': 'none'},

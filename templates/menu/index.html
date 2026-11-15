@@ -84,7 +84,20 @@
             </div>
             <div class="product-card-footer">
               <span class="product-price" id="price-{{ product.pk }}">₱{{ product.price }}</span>
-              {% if product.stock_quantity == 0 %}
+              {% if product.inventory_tracking_mode == 'ingredient' %}
+              {# Phase 8B: availability derives from the ingredient ledger, #}
+              {# never from the frozen legacy stock_quantity.              #}
+              {% if product.pk in ingredient_unavailable_pks %}
+              <span class="out-of-stock-label">Out of Stock</span>
+              {% else %}
+              <form class="add-to-cart-form" action="{% url 'orders:add_to_cart' product.pk %}" method="post" style="display:inline">
+                {% csrf_token %}
+                <input type="hidden" name="quantity" value="1">
+                <input type="hidden" name="size" id="size-input-{{ product.pk }}" value="none">
+                <button type="submit" class="add-btn" title="Add to cart">+</button>
+              </form>
+              {% endif %}
+              {% elif product.stock_quantity == 0 %}
               <span class="out-of-stock-label">Out of Stock</span>
               {% else %}
               <form class="add-to-cart-form" action="{% url 'orders:add_to_cart' product.pk %}" method="post" style="display:inline">
@@ -190,11 +203,44 @@
 <script src="{% static 'js/chatbot.js' %}"></script>
 
 <script>
-// ── Size selector → hidden input sync ─────────────────────────────────────
+// ── Size selector → hidden input sync + Phase 8B per-size availability ────
+// Shared store: the last availability payload per product id, written by
+// the polling IIFE below and read here for per-size add-button gating.
+const kdmStockInfo = {};
+// For ingredient-tracked products the polled payload carries per-size
+// availability; after the customer selects a size, the add button is
+// disabled when that size has no sellable units (the server re-validates
+// on add anyway — this is a UX layer, not a security boundary). Legacy
+// products are unaffected.
 document.querySelectorAll('.size-selector').forEach(sel => {
   sel.addEventListener('change', function() {
     const sizeInput = document.getElementById(`size-input-${this.dataset.productId}`);
     if (sizeInput) sizeInput.value = this.value;
+    const card = this.closest('.product-card');
+    if (!card) return;
+    const productId = card.dataset.productId;
+    const info = kdmStockInfo[productId];
+    if (!info || info.inventory_tracking_mode !== 'ingredient' || !info.sizes) {
+      return;
+    }
+    const sizeData = info.sizes[this.value];
+    const form = card.querySelector('.add-to-cart-form');
+    let label = card.querySelector('.size-availability-label');
+    if (!sizeData || sizeData.available_units <= 0
+            || !sizeData.configuration_complete) {
+      if (form) form.style.display = 'none';
+      if (!label) {
+        label = document.createElement('span');
+        label.className = 'out-of-stock-label size-availability-label';
+        const footer = card.querySelector('.product-card-footer');
+        if (footer) footer.appendChild(label);
+      }
+      label.textContent = 'Out of Stock for this size';
+    } else {
+      if (form) form.style.display = '';
+      if (label) label.remove();
+    }
+  });
   });
 });
 
@@ -214,9 +260,16 @@ document.querySelectorAll('.size-selector').forEach(sel => {
   let lastEtag = '';
 
   function applyStock(id, info) {
+    kdmStockInfo[id] = info;
     const card = document.querySelector(`.product-card[data-product-id="${id}"]`);
     if (!card) return;
-    const out = !info.is_active || !info.is_available || info.stock_quantity <= 0;
+    // Phase 8B: ingredient products gate on derived availability
+    // (out_of_stock, computed per size server-side); legacy products keep
+    // the stock_quantity gate. Additive fields — legacy payloads unchanged.
+    const out = !info.is_active || !info.is_available ||
+        (info.inventory_tracking_mode === 'ingredient'
+            ? info.out_of_stock === true
+            : info.stock_quantity <= 0);
     card.classList.toggle('product-card--out', out);
     const form  = card.querySelector('.add-to-cart-form');
     const label = card.querySelector('.out-of-stock-label');

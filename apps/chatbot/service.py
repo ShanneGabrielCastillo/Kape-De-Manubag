@@ -910,6 +910,42 @@ def _cat_label(cat) -> str:
 
 # ── Product name ORM lookup ───────────────────────────────────────────────────
 
+def _sellable_units(product):
+    """Customer-facing sellable units for one product (chatbot context).
+
+    Legacy products: stock_quantity (unchanged behaviour). Ingredient
+    products: the most units available across the product's configured
+    sizes — the chatbot has no size intent, so the conservative aggregate
+    is "any configured size orderable"; 0 when the recipe configuration is
+    incomplete (never recommended). Sizes mirror the menu card
+    (apps.menu.views.configured_sizes_for_product — kept local to avoid a
+    cross-app view import)."""
+    from apps.inventory.services import get_available_units
+
+    if product.inventory_tracking_mode != 'ingredient':
+        return product.stock_quantity
+
+    # Phase 8B: per-size decision (owner decision #1) — the product is
+    # recommendable while ANY configured size is sellable; a size with an
+    # incomplete configuration is skipped (not recommended for that size),
+    # never zeroing the whole product.
+    sizes = ['none']
+    if product.has_sizes:
+        if product.price_medium:
+            sizes.append('medium')
+        if product.price_large:
+            sizes.append('large')
+        if product.price_hot:
+            sizes.append('hot')
+
+    best = 0
+    for size in sizes:
+        r = get_available_units(product, size)
+        if r.configuration_complete and r.units > 0:
+            best = max(best, r.units)
+    return best
+
+
 def query_products_by_name(
     name_term: str,
     category_type: str | None = None,
@@ -955,13 +991,11 @@ def query_products_by_name(
                 name_filter,
                 is_active=True,
                 is_available=True,
-                stock_quantity__gt=0,
                 category__is_active=True,
             )
             .select_related('category')
             .distinct()
         )
-
         qs = _cat_type_filter(qs, category_type)
 
         # Optional price constraints (hybrid: "What burgers can I get for ₱50?")
@@ -975,7 +1009,14 @@ def query_products_by_name(
             if constraints.get('price_gte') is not None:
                 qs = qs.filter(price__gte=constraints['price_gte'])
 
-        products = list(qs.order_by('price')[:10])  # cap at 10 — avoid wall-of-text
+        # Phase 8B (Rev 3 §E.3b): availability from the centralized service.
+        # Legacy products: stock_quantity (unchanged). Ingredient products:
+        # recipe/packaging-derived units; incomplete configuration excludes
+        # the product from recommendations.  Post-filtered in Python after
+        # the ORM ordering — the active catalog is small, and filtering
+        # before the cap keeps the result at a full 10 sellable items.
+        sellable = [p for p in qs.order_by('price') if _sellable_units(p) > 0]
+        products = sellable[:10]   # cap at 10 — avoid wall-of-text
 
         if not products:
             return '', False
@@ -1062,15 +1103,29 @@ def _sorted_products_context(
             .filter(
                 is_active=True,
                 is_available=True,
-                stock_quantity__gt=0,
                 category__is_active=True,
             )
             .select_related('category')
         )
-
         qs = _cat_type_filter(qs, category_type)
 
-        products = list(qs.order_by(order_field, 'name')[:limit])
+        # Phase 8B (Rev 3 §E.3b): availability-based filtering (legacy:
+        # stock_quantity; ingredient: recipe/packaging-derived units;
+        # incomplete configuration excluded).  Post-filtered in Python
+        # (the candidate set is the active catalog, small) — the sort that
+        # used to be qs.order_by(order_field, 'name') is replicated here
+        # because the post-filter must run before the limit.
+        sellable = [p for p in qs if _sellable_units(p) > 0]
+        # Replicate the previous Django ordering `order_by(order_field,
+        # 'name')` with a stable two-pass sort (Phase 8B audit fix M3):
+        # sort by name ascending first, then stable-sort by the primary
+        # field (descending for '-price'); stability preserves the
+        # ascending name order within equal-price ties.
+        sellable.sort(key=lambda p: p.name)
+        reverse = order_field.startswith('-')
+        sort_field = order_field.lstrip('-')
+        sellable.sort(key=lambda p: getattr(p, sort_field), reverse=reverse)
+        products = sellable[:limit]
 
         if not products:
             return '', False
@@ -1151,11 +1206,14 @@ def get_filtered_menu_context(
     was_filtered = _has_price_constraint(constraints) or (category_type is not None)
 
     try:
-        # Start from sellable products (active + available)
+        # Start from sellable products (active + available). Phase 8B
+        # (Rev 3 §E.3b): the legacy stock filter is replaced by
+        # availability-based post-filtering — legacy products: stock_
+        # quantity; ingredient products: recipe/packaging-derived units;
+        # incomplete configuration excluded.
         qs = Product.objects.filter(
             is_active=True,
             is_available=True,
-            stock_quantity__gt=0,   # exclude out-of-stock in filtered results
         ).select_related('category').filter(
             category__is_active=True,
         )
@@ -1179,9 +1237,13 @@ def get_filtered_menu_context(
         if constraints.get('price_gte') is not None:
             qs = qs.filter(price__gte=constraints['price_gte'])
 
-        products = qs.order_by('category__order', 'category__name', 'price')
+        products = [
+            p for p in qs.order_by(
+                'category__order', 'category__name', 'price')
+            if _sellable_units(p) > 0
+        ]
 
-        if not products.exists():
+        if not products:
             return '', was_filtered
 
         # Build the context text grouped by category
@@ -1236,7 +1298,11 @@ def get_menu_context() -> str:
                 continue
             items = []
             for p in prods[:15]:   # cap per category to keep prompt small
-                if p.stock_quantity == 0:
+                # Phase 8B (Rev 3 §E.3b): sellability via the centralized
+                # availability function. Legacy: stock_quantity (unchanged);
+                # ingredient: recipe/packaging-derived units — incomplete
+                # configuration is also out of stock for the customer.
+                if _sellable_units(p) == 0:
                     # Include but mark as out of stock so AI doesn't recommend it
                     items.append(f'  - {p.name} [OUT OF STOCK]')
                     continue

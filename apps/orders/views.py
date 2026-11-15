@@ -127,11 +127,18 @@ def cart_view(request):
         if item.unit_price != live_price:
             item.unit_price = live_price
             changed = True
-        if item.quantity > product.stock_quantity:
-            if product.stock_quantity <= 0:
-                item.delete()
-                continue
-            item.quantity = product.stock_quantity
+        # Phase 8B (Rev 3 §E.3b): availability from the centralized service.
+        # Legacy products: units == stock_quantity (identical behaviour).
+        # Ingredient products: units derive from the approved recipe and the
+        # available ingredient/packaging stock; an incomplete configuration
+        # means the line cannot be ordered and is removed.
+        from apps.inventory.services import get_available_units  # noqa: E402
+        availability = get_available_units(product, item.size, None)
+        if not availability.configuration_complete or availability.units <= 0:
+            item.delete()
+            continue
+        if item.quantity > availability.units:
+            item.quantity = availability.units
             changed = True
         if changed:
             item.save(update_fields=['quantity', 'unit_price'])
@@ -162,15 +169,31 @@ def add_to_cart(request, product_id):
 
     # Server-side availability guard (the menu already disables the button,
     # but a stale page or a direct request must never add an unorderable
-    # product). The stock check here is a pre-check only -- checkout re-
-    # validates against the live stock inside its transaction.
-    if product.stock_quantity <= 0:
+    # product). The check here is a pre-check only -- checkout re-validates
+    # against live availability inside its transaction, and the placement
+    # reservation remains the final authority.
+    #
+    # Phase 8B (Rev 3 §E.3b): centralized availability. Legacy products:
+    # units == stock_quantity (identical behaviour). Ingredient products:
+    # units derive from the approved recipe and available ingredient/
+    # packaging stock, for the SELECTED size; order_type=None applies the
+    # most restrictive applicable plan because the cart stage has no order
+    # type yet. An incomplete configuration means the product is currently
+    # unsellable — reported to the customer without internal details.
+    from apps.inventory.services import get_available_units  # noqa: E402
+    availability = get_available_units(product, size, None)
+    if not availability.configuration_complete:
+        return _reject(
+            f'{product.name} is currently unavailable and cannot be added '
+            'to your cart.'
+        )
+    if availability.units <= 0:
         return _reject(
             f'{product.name} is out of stock and cannot be added to your cart.'
         )
-    if quantity > product.stock_quantity:
+    if quantity > availability.units:
         return _reject(
-            f'Only {product.stock_quantity} {product.name} left in stock. '
+            f'Only {availability.units} {product.name} left in stock. '
             'Please adjust the quantity.'
         )
 
@@ -231,9 +254,14 @@ def update_cart(request, item_id):
             removed=True, quantity=0, item_subtotal=0,
             message=f'{name} is no longer available and was removed from your cart.',
         )
-    # Out-of-stock items cannot be ordered; remove them instead of leaving a
-    # dead row that would fail checkout.
-    if product.stock_quantity <= 0:
+    # Phase 8B (Rev 3 §E.3b): centralized availability. Out-of-stock items
+    # (zero units, or a configuration that is no longer complete) cannot be
+    # ordered; remove them instead of leaving a dead row that would fail
+    # checkout. Legacy products: units == stock_quantity (identical
+    # behaviour).
+    from apps.inventory.services import get_available_units  # noqa: E402
+    availability = get_available_units(product, item.size, None)
+    if not availability.configuration_complete or availability.units <= 0:
         name = product.name
         item.delete()
         return _response(
@@ -242,7 +270,7 @@ def update_cart(request, item_id):
         )
     # Cap the quantity at what is actually available, telling the customer
     # instead of silently changing their order.
-    capped = min(quantity, product.stock_quantity)
+    capped = min(quantity, availability.units)
     # Refresh the unit price from the current product price so the cart
     # always displays the up-to-date price and checkout uses the correct
     # value.  The price is authoritative at the DB level, not from the
@@ -253,7 +281,7 @@ def update_cart(request, item_id):
     message = None
     if capped < quantity:
         message = (
-            f'Only {product.stock_quantity} {product.name} left in stock. '
+            f'Only {availability.units} {product.name} left in stock. '
             'Quantity adjusted.'
         )
     return _response(
@@ -336,10 +364,14 @@ def checkout_view(request):
             # unavailable, or out of stock) are dropped with a clear notice
             # so the customer can review the remaining cart before checking
             # out -- an unorderable product must never end up in an order.
+            # Phase 8B (Rev 3 §E.3b): the legacy stock_quantity=0 clause is
+            # deliberately NOT applied here — ingredient-tracked products'
+            # sellability derives from the availability function (checked
+            # per line in the loop below), never from the frozen legacy
+            # stock field.
             unorderable_items = items.filter(
                 Q(product__is_active=False)
                 | Q(product__is_available=False)
-                | Q(product__stock_quantity=0),
             )
             if unorderable_items.exists():
                 unorderable_items.delete()
@@ -359,7 +391,16 @@ def checkout_view(request):
             # their order quantity is reduced.
             adjusted_items = []
             for cart_item in items:
-                available = cart_item.product.stock_quantity
+                # Phase 8B (Rev 3 §E.3b): centralized availability. The
+                # checkout stage knows the order type — pass it through.
+                from apps.inventory.services import get_available_units  # noqa: E402
+                availability = get_available_units(
+                    cart_item.product, cart_item.size,
+                    form.cleaned_data['order_type'],
+                )
+                available = availability.units
+                if not availability.configuration_complete:
+                    available = 0
                 if cart_item.quantity > available:
                     cart_item.quantity = available
                     cart_item.unit_price = cart_item.product.get_price_for_size(cart_item.size)
@@ -471,10 +512,33 @@ def checkout_view(request):
                                 f'"{live_product.name}" is currently unavailable. '
                                 'Please remove it from your cart.'
                             )
-                        if live_product.stock_quantity <= 0:
+                        # Phase 8B (Rev 3 §E.3b): centralized availability.
+                        # Read-only — acquires no additional locks, so the
+                        # existing lock order (order row held; product rows
+                        # to be locked by the coordinator in ascending order)
+                        # is unchanged. For legacy products units ==
+                        # stock_quantity (identical behaviour); for
+                        # ingredient products units derive from the approved
+                        # recipe and the available ingredient/packaging
+                        # stock. The placement reservation remains the final
+                        # authoritative inventory authority.
+                        from apps.inventory.services import (  # noqa: E402
+                            get_available_units,
+                        )
+                        availability = get_available_units(
+                            live_product, cart_item.size,
+                            form.cleaned_data['order_type'],
+                        )
+                        if not availability.configuration_complete:
                             raise ValueError(
-                                f'"{live_product.name}" is out of stock. '
-                                'Please remove it from your cart.'
+                                f'"{live_product.name}" is temporarily '
+                                'unavailable. Please remove it from your cart.'
+                            )
+                        if availability.units < cart_item.quantity:
+                            raise ValueError(
+                                f'Only {availability.units} {live_product.name} '
+                                'left in stock. Please remove some of it from '
+                                'your cart.'
                             )
 
                         # 3. Validate the size value is a known choice so that a
@@ -1635,6 +1699,31 @@ def cashier_pos(request):
     # POS; deactivated products stay hidden and keep their order history.
     # Category.objects.with_sellable_products() prefetches them in one query.
     categories = Category.objects.with_sellable_products()
+
+    # Phase 8B (Rev 3 §E.3b): availability for ingredient-tracked products,
+    # derived per configured size (the grid shows product-level status; the
+    # selected size determines the actual quantity limit at placement).
+    from apps.inventory.services import get_available_units  # noqa: E402
+    from apps.menu.views import configured_sizes_for_product  # noqa: E402
+
+    for category in categories:
+        for product in category.products.all():
+            if product.inventory_tracking_mode != 'ingredient':
+                continue
+            max_units = 0
+            configuration_complete = True
+            for size in configured_sizes_for_product(product):
+                r = get_available_units(product, size)
+                configuration_complete = (
+                    configuration_complete and r.configuration_complete)
+                max_units = max(max_units, r.units)
+            # Annotate the prefetched instances for the template (the same
+            # objects the POS grid iterates).
+            product.ingredient_units = max_units
+            product.ingredient_complete = configuration_complete
+            product.ingredient_sellable = (
+                configuration_complete and max_units > 0)
+
     return render(request, 'orders/pos.html', {'categories': categories})
 
 

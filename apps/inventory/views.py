@@ -91,6 +91,17 @@ def inventory_list(request):
 @cashier_or_admin_required
 def restock_product(request, pk):
     product = get_object_or_404(Product, pk=pk)
+    # Phase 8B (Rev 3 §E.3b): legacy restocking is disabled for
+    # ingredient-tracked products — their stock lives in the ingredient
+    # ledger (InventoryItem / IngredientMovementLog), not in the frozen
+    # Product.stock_quantity.
+    if product.inventory_tracking_mode == 'ingredient':
+        return JsonResponse(
+            {'success': False,
+             'error': 'This product uses ingredient-based inventory. '
+                      'Restock it through the ingredient inventory screen.'},
+            status=400,
+        )
     if request.method == 'POST':
         # Non-numeric input falls through to the same 'Invalid quantity'
         # response used for zero/negative values (a raw int() would 500).

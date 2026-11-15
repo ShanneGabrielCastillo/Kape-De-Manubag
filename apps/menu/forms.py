@@ -30,6 +30,19 @@ class ProductForm(forms.ModelForm):
             )
         self.fields['category'].queryset = categories
 
+        # Phase 8B (Rev 3 §E.3b): legacy stock_quantity is frozen for
+        # ingredient-tracked products — their stock lives in the ingredient
+        # ledger (InventoryItem / IngredientMovementLog). The field is
+        # disabled in the UI, and Django's disabled-field handling ignores
+        # submitted values server-side, so the persisted balance is never
+        # silently overwritten.
+        if self.instance.pk and self.instance.inventory_tracking_mode == (
+                'ingredient'):
+            self.fields['stock_quantity'].disabled = True
+            self.fields['stock_quantity'].help_text = (
+                'Managed by the ingredient ledger — adjust through the '
+                'ingredient inventory screen.')
+
     class Meta:
         model = Product
         fields = ['category', 'name', 'description', 'image', 'price', 'price_medium',
