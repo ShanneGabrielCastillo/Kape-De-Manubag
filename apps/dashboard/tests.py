@@ -328,9 +328,16 @@ class DashboardStatisticsTests(TestCase):
     def test_top_products_ranking_is_correct(self):
         response = self.client.get(DASHBOARD_URL)
         top = list(response.context['top_products'])
+        # The widget aggregates within the Sunday-start weekly window. When
+        # today IS Sunday, the yesterday-seeded Americano order belongs to
+        # last week and only today's items rank (top[1] is still Latte).
         self.assertEqual(top[0]['product_name'], 'Americano')
-        self.assertEqual(top[0]['total_qty'], 6)
-        self.assertEqual(top[0]['total_revenue'], Decimal('260.00'))
+        if self.week_start == self.today:
+            self.assertEqual(top[0]['total_qty'], 2)
+            self.assertEqual(top[0]['total_revenue'], Decimal('60.00'))
+        else:
+            self.assertEqual(top[0]['total_qty'], 6)
+            self.assertEqual(top[0]['total_revenue'], Decimal('260.00'))
         self.assertEqual(top[1]['product_name'], 'Latte')
 
     def test_low_stock_list_is_correct(self):
@@ -782,16 +789,26 @@ class DashboardSummaryEndpointTests(TestCase):
         return response, ctx
 
     def test_summary_matches_page_statistics(self):
-        self._seed()
+        _category, _low, now = _seed_orders_and_items()
         response, _ = self._get_summary()
         self.assertEqual(response.status_code, 200)
         data = response.json()
 
-        # Same values the page renders (see DashboardStatisticsTests)
+        # Same values the page renders (see DashboardStatisticsTests).
+        # Daily/total windows are weekday-independent; the Sunday-start
+        # weekly window contains the yesterday-seeded order only when today
+        # is NOT Sunday (on Sunday the week begins today, so weekly totals
+        # see just today's paid order).
+        today = timezone.localdate(now)
+        week_start = today - timedelta(days=today.isoweekday() % 7)
+        if week_start == today:
+            weekly_sales, weekly_orders = 100.0, 1
+        else:
+            weekly_sales, weekly_orders = 300.0, 2
         self.assertEqual(data['daily_sales'], 100.0)
         self.assertEqual(data['daily_orders'], 1)
-        self.assertEqual(data['weekly_sales'], 300.0)
-        self.assertEqual(data['weekly_orders'], 2)
+        self.assertEqual(data['weekly_sales'], weekly_sales)
+        self.assertEqual(data['weekly_orders'], weekly_orders)
         self.assertEqual(data['total_sales'], 1000.0)
         self.assertEqual(data['total_orders'], 4)
         self.assertEqual(data['pending_count'], 1)
@@ -804,10 +821,15 @@ class DashboardSummaryEndpointTests(TestCase):
         today_index = timezone.localdate().isoweekday() % 7  # Sun=0 … Sat=6
         self.assertEqual(data['chart_data'][today_index], 100.0)
 
-        # Top products (Americano 6 sold / ₱260; Latte 1 / ₱40)
+        # Top products (Mon–Sat: Americano 6 sold / ₱260; on Sunday the
+        # yesterday-seeded order is last-week and only today's rank)
         self.assertEqual(data['top_products'][0]['product_name'], 'Americano')
-        self.assertEqual(data['top_products'][0]['total_qty'], 6)
-        self.assertEqual(data['top_products'][0]['total_revenue'], 260.0)
+        if week_start == today:
+            self.assertEqual(data['top_products'][0]['total_qty'], 2)
+            self.assertEqual(data['top_products'][0]['total_revenue'], 60.0)
+        else:
+            self.assertEqual(data['top_products'][0]['total_qty'], 6)
+            self.assertEqual(data['top_products'][0]['total_revenue'], 260.0)
         self.assertEqual(data['top_products'][1]['product_name'], 'Latte')
 
         # Low stock (the only product under its threshold)
