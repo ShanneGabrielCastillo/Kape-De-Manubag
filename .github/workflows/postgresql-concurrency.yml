@@ -1,0 +1,294 @@
+name: PostgreSQL Concurrency Verification (Phase 1.2)
+
+# Phase 1.2 — execute the Phase 1.1 cutover concurrency suite against a real
+# PostgreSQL server provided by a GitHub Actions service container.
+#
+# Why a dedicated workflow:
+#   * it never deploys anything and needs only `contents: read`;
+#   * it can be triggered manually (workflow_dispatch) by the owner, and runs
+#     automatically on pull requests so future changes are verified;
+#   * PostgreSQL lives in a job-scoped service container, so no Docker Desktop
+#     or local PostgreSQL installation is required on any laptop;
+#   * the disposable credentials below are fixed test-only values — there is
+#     no reason to consume repository secrets for them.
+#
+# The database is reachable only from this job's runner (localhost port map);
+# it is destroyed with the runner when the job finishes.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: ["**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: postgresql-concurrency-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ── PostgreSQL 16 — the real concurrency verification ──────────────────────
+  postgresql-concurrency:
+    name: Phase 1.1 concurrency tests (PostgreSQL 16)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: kdm_phase12_test
+          POSTGRES_USER: kdm_phase12
+          POSTGRES_PASSWORD: kdm_phase12_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kdm_phase12 -d kdm_phase12_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DEBUG: "1"
+      SECRET_KEY: "ci-postgresql-phase12-key-not-for-production"
+      DJANGO_SETTINGS_MODULE: kape_de_manubag.test_postgres_settings
+      # Disposable, job-scoped CI credentials — not used anywhere else.
+      POSTGRES_DB: kdm_phase12_test
+      POSTGRES_USER: kdm_phase12
+      POSTGRES_PASSWORD: kdm_phase12_ci_only
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      # Turn a non-PostgreSQL skip into a hard failure (tests_phase11_pg.py).
+      KDM_REQUIRE_POSTGRESQL: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Verify PostgreSQL isolation before running anything
+        # Prints ENGINE / NAME / HOST / server version / live connection status
+        # and aborts if the database is not the dedicated CI PostgreSQL server.
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+
+          import django
+          from django.conf import settings
+
+          django.setup()
+
+          from django.db import connection
+
+          db = settings.DATABASES['default']
+          print('ENGINE          :', db['ENGINE'])
+          print('NAME            :', db['NAME'])
+          print('HOST            :', db['HOST'])
+          print('PORT            :', db['PORT'])
+          print('TEST DATABASE   :', db['TEST']['NAME'])
+          print('DJANGO VENDOR   :', connection.vendor)
+
+          connection.ensure_connection()
+          with connection.cursor() as cursor:
+              cursor.execute('SHOW server_version')
+              server_version = cursor.fetchone()[0]
+              cursor.execute('SELECT current_database(), current_user')
+              current_db, current_user = cursor.fetchone()
+
+          print('SERVER VERSION  :', server_version)
+          print('CURRENT DATABASE:', current_db)
+          print('CURRENT USER    :', current_user)
+          print('CONNECTION      : OK')
+
+          problems = []
+          if db['ENGINE'] != 'django.db.backends.postgresql':
+              problems.append(f"ENGINE is {db['ENGINE']!r}, expected "
+                              "'django.db.backends.postgresql'")
+          if connection.vendor != 'postgresql':
+              problems.append(f'Django vendor is {connection.vendor!r}')
+          if str(db['NAME']).lower().endswith('.sqlite3'):
+              problems.append(f"database NAME {db['NAME']!r} is a SQLite file")
+          if db['NAME'] != os.environ.get('POSTGRES_DB'):
+              problems.append(f"database NAME {db['NAME']!r} is not the "
+                              'dedicated CI database')
+          if current_db != db['NAME']:
+              problems.append(f'server reports database {current_db!r}')
+          for env_var, actual in (
+              ('POSTGRES_HOST', db['HOST']),
+              ('POSTGRES_PORT', str(db['PORT'])),
+              ('POSTGRES_USER', db['USER']),
+          ):
+              expected = os.environ.get(env_var)
+              if expected != actual:
+                  problems.append(f'{env_var}={expected!r} but Django uses '
+                                  f'{actual!r}')
+
+          if problems:
+              print('::error::DATABASE ISOLATION NOT PROVEN')
+              for problem in problems:
+                  print('::error::' + problem)
+              sys.exit(1)
+          print('ISOLATION       : PostgreSQL CI database confirmed')
+          PY
+
+      - name: Run migrations (dedicated PostgreSQL CI database)
+        # Uses the project's existing migration history; no migration was
+        # changed to work around unrelated drift.
+        run: python manage.py migrate --noinput
+
+      - name: Run PostgreSQL concurrency suite — run 1 of 3
+        shell: bash
+        run: |
+          set -o pipefail
+          python manage.py test apps.menu.tests_phase11_pg \
+            --settings=kape_de_manubag.test_postgres_settings \
+            --verbosity=2 --noinput 2>&1 | tee pg-run-1.log
+
+      - name: Run PostgreSQL concurrency suite — run 2 of 3
+        shell: bash
+        run: |
+          set -o pipefail
+          python manage.py test apps.menu.tests_phase11_pg \
+            --settings=kape_de_manubag.test_postgres_settings \
+            --verbosity=2 --noinput 2>&1 | tee pg-run-2.log
+
+      - name: Run PostgreSQL concurrency suite — run 3 of 3
+        shell: bash
+        run: |
+          set -o pipefail
+          python manage.py test apps.menu.tests_phase11_pg \
+            --settings=kape_de_manubag.test_postgres_settings \
+            --verbosity=2 --noinput 2>&1 | tee pg-run-3.log
+
+      - name: Assert every run collected and passed all five scenarios
+        # A run is only acceptable when all five tests ran (not skipped) and
+        # the suite reported a clean OK.
+        shell: bash
+        run: |
+          status=0
+          for i in 1 2 3; do
+            log="pg-run-$i.log"
+            echo "── verifying $log ──"
+            if ! grep -Eq '^Ran 5 tests? in ' "$log"; then
+              echo "::error::$log did not collect exactly 5 tests"
+              status=1
+            fi
+            if [ "$(grep -c ' \.\.\. ok$' "$log")" -ne 5 ]; then
+              echo "::error::$log did not report 5 passing tests"
+              status=1
+            fi
+            if ! grep -q '^OK$' "$log"; then
+              echo "::error::$log did not end with an unskipped OK"
+              status=1
+            fi
+            if grep -qi 'skipped' "$log"; then
+              echo "::error::$log contains a skip — PostgreSQL not exercised"
+              status=1
+            fi
+          done
+          exit "$status"
+
+      - name: Upload PostgreSQL run logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase12-postgresql-run-logs
+          path: pg-run-*.log
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ── SQLite regression — separate job, separate process environment ─────────
+  sqlite-regression:
+    name: SQLite regression (unchanged test settings)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      DEBUG: "1"
+      SECRET_KEY: "ci-sqlite-regression-key-not-for-production"
+      # Deliberately NO POSTGRES_* variables: this job must stay on SQLite.
+      DJANGO_SETTINGS_MODULE: kape_de_manubag.test_settings
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Verify this job is on SQLite, not PostgreSQL
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+
+          import django
+          from django.conf import settings
+
+          django.setup()
+
+          from django.db import connection
+
+          db = settings.DATABASES['default']
+          print('ENGINE        :', db['ENGINE'])
+          print('NAME          :', db['NAME'])
+          print('DJANGO VENDOR :', connection.vendor)
+
+          problems = []
+          if db['ENGINE'] != 'django.db.backends.sqlite3':
+              problems.append(f"ENGINE is {db['ENGINE']!r}, expected SQLite")
+          if connection.vendor != 'sqlite':
+              problems.append(f'Django vendor is {connection.vendor!r}')
+          for key in ('POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD',
+                      'POSTGRES_HOST', 'POSTGRES_PORT'):
+              if os.environ.get(key):
+                  problems.append(f'{key} is set in the SQLite job')
+
+          if problems:
+              print('::error::SQLite regression job is not isolated from '
+                    'PostgreSQL configuration')
+              for problem in problems:
+                  print('::error::' + problem)
+              sys.exit(1)
+          print('ISOLATION     : SQLite confirmed')
+          PY
+
+      - name: Django system check (SQLite)
+        run: python manage.py check
+
+      - name: Run migrations (SQLite)
+        run: python manage.py migrate --noinput
+
+      - name: Run Phase 1 / 1.1, menu, inventory and order regression tests
+        shell: bash
+        run: |
+          set -o pipefail
+          python manage.py test \
+            apps.menu \
+            apps.inventory \
+            apps.orders \
+            --settings=kape_de_manubag.test_settings \
+            --verbosity=1 --noinput 2>&1 | tee sqlite-regression.log
+
+      - name: Upload SQLite regression log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase12-sqlite-regression-log
+          path: sqlite-regression.log
+          if-no-files-found: warn
+          retention-days: 30
