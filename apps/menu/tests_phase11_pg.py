@@ -47,7 +47,7 @@ import threading
 import time
 from decimal import Decimal
 
-from django.db import connection, transaction
+from django.db import DatabaseError, connection, transaction
 from django.test import TransactionTestCase
 from django.utils import timezone
 
@@ -336,7 +336,20 @@ class ReservationBlocksCutoverTests(TransactionTestCase):
 class OverlappingInventoryCutoverTests(TransactionTestCase):
     """Scenario D: two multi-product cutovers whose plans share inventory
     items must serialise (Products ascending, then Items ascending) and
-    must not deadlock."""
+    must not deadlock.
+
+    The batches overlap on the shared product (Echo), so the service's
+    all-or-nothing semantics leave two legal interleavings:
+
+      * Outcome A — worker 1 wins Echo's Product lock and converts both
+        products; worker 2 revalidates under the lock and its batch is
+        rejected whole;
+      * Outcome B — worker 2 converts Echo first; worker 1's batch is
+        rejected whole and Delta is never touched.
+
+    The assertions below hold for both, so the test proves lock-ordering and
+    batch atomicity without forcing a particular thread to win.
+    """
 
     @_require_postgresql
     def test_overlapping_cutovers_serialise_without_deadlock(self):
@@ -386,19 +399,65 @@ class OverlappingInventoryCutoverTests(TransactionTestCase):
 
         self.assertFalse(t1.is_alive(), 'batch-1 thread deadlocked')
         self.assertFalse(t2.is_alive(), 'batch-2 thread deadlocked')
+        self.assertNotIn(None, results, 'a worker recorded no outcome')
 
+        delta, echo = made
         for product in made:
             product.refresh_from_db()
-            self.assertEqual(product.inventory_tracking_mode, 'ingredient')
-        audit_rows = AuditLog.objects.filter(
-            action=CUTOVER_AUDIT_ACTION).count()
-        self.assertEqual(audit_rows, 2,
-                         f'expected one audit row per product, got {audit_rows}')
-        # The loser of the race on the shared product is rejected cleanly
-        # — never a duplicate audit row or partial write.
-        losers = [r for r in results if not r[0]]
-        for _ok, exc in losers:
-            self.assertIsInstance(exc, TrackingModeChangeError)
+
+        # Whoever wins the race for Echo's Product row, Echo is converted by
+        # exactly one batch; Delta's mode follows from the winning interleaving.
+        self.assertEqual(echo.inventory_tracking_mode, 'ingredient',
+                         f'Echo must be ingredient after both batches, '
+                         f'got {results}')
+        self.assertIn(delta.inventory_tracking_mode, ('legacy', 'ingredient'))
+
+        successes = [r for r in results if r[0]]
+        failures = [r for r in results if not r[0]]
+        self.assertEqual(len(successes), 1,
+                         f'expected exactly one winning batch, got {results}')
+        self.assertEqual(len(failures), 1,
+                         f'expected exactly one rejected batch, got {results}')
+
+        # The rejected batch is always the one that lost Echo: it is rejected
+        # wholesale by the locked revalidation, never partially applied.
+        failed_exc = failures[0][1]
+        self.assertIsInstance(failed_exc, TrackingModeChangeError)
+        self.assertIn('already', str(failed_exc).lower())
+        self.assertIn(str(echo.pk), str(failed_exc))
+
+        audit_rows = list(
+            AuditLog.objects.filter(action=CUTOVER_AUDIT_ACTION).order_by('pk'))
+        audit_object_ids = [row.object_id for row in audit_rows]
+        converted = [
+            product for product in made
+            if product.inventory_tracking_mode == 'ingredient'
+        ]
+
+        # Exactly one audit row per converted product — never a duplicate for
+        # the shared product, and never a row for a product left legacy.
+        self.assertEqual(
+            len(audit_rows), len(converted),
+            f'expected one audit row per converted product: converted='
+            f'{[p.pk for p in converted]}, rows={audit_object_ids}')
+        self.assertEqual(len(audit_object_ids), len(set(audit_object_ids)),
+                         f'duplicate cutover audit row: {audit_object_ids}')
+        self.assertEqual(
+            sorted(audit_object_ids), sorted(str(p.pk) for p in converted),
+            'audit rows must reference exactly the converted products')
+
+        if delta.inventory_tracking_mode == 'ingredient':
+            # Outcome A: worker 1 converted the whole batch; worker 2 lost.
+            self.assertEqual(set(successes[0][1].product_ids),
+                             {delta.pk, echo.pk})
+            self.assertEqual(sorted(audit_object_ids),
+                             sorted([str(delta.pk), str(echo.pk)]))
+        else:
+            # Outcome B: worker 2 converted Echo; worker 1's [Delta, Echo]
+            # batch was rejected before writing Delta, leaving no partial write.
+            self.assertEqual(set(successes[0][1].product_ids), {echo.pk})
+            self.assertEqual(audit_object_ids, [str(echo.pk)])
+            self.assertNotIn(str(delta.pk), audit_object_ids)
 
 
 class MultiProductAtomicFailureTests(TransactionTestCase):
@@ -430,16 +489,47 @@ class MultiProductAtomicFailureTests(TransactionTestCase):
             AuditLog.objects.filter(action=CUTOVER_AUDIT_ACTION).count(), 0)
 
         # The same atomicity holds when the AUDIT write fails mid-batch.
+        # `log_action` is imported inside `change_inventory_tracking_mode()`, so
+        # it is never an attribute of `apps.menu.services`; the failure has to
+        # be injected at the real persistence call, `AuditLog.objects.create`,
+        # and it must be a DatabaseError: that is the only failure `strict=True`
+        # re-raises (audit/services.py:73-79), and therefore the only one that
+        # proves the surrounding transaction is rolled back.
         ready2 = _make_ready_product('Golf')[0]
-        from apps.menu import services as menu_services
+        ready3 = _make_ready_product('Hotel')[0]
+
+        real_create = AuditLog.objects.create
+        audit_writes = []
+
+        def _fail_on_second_audit(*args, **kwargs):
+            """Persist the first audit row for real, then fail.
+
+            The first product is therefore saved AND audited before the second
+            product's audit write fails, which is what makes the rollback
+            assertion below meaningful: the surviving-state check has to undo
+            an already-written audit row, not merely skip one.
+            """
+            audit_writes.append(kwargs.get('action'))
+            if len(audit_writes) == 1:
+                return real_create(*args, **kwargs)
+            raise DatabaseError('audit store down')
+
         with mock.patch.object(
-                menu_services, 'log_action',
-                side_effect=RuntimeError('audit store down')):
-            with self.assertRaises(RuntimeError):
+                AuditLog.objects, 'create',
+                side_effect=_fail_on_second_audit), \
+                self.assertLogs('apps.audit', level='ERROR'):
+            with self.assertRaises(DatabaseError):
                 with transaction.atomic():
                     change_inventory_tracking_mode(
-                        [ready2.pk], 'ingredient', actor=actor)
-        ready2.refresh_from_db()
-        self.assertEqual(ready2.inventory_tracking_mode, 'legacy')
+                        [ready2.pk, ready3.pk], 'ingredient', actor=actor)
+
+        # Both audit writes were attempted: one succeeded, one raised.
         self.assertEqual(
-            AuditLog.objects.filter(action=CUTOVER_AUDIT_ACTION).count(), 0)
+            audit_writes, [CUTOVER_AUDIT_ACTION, CUTOVER_AUDIT_ACTION])
+        ready2.refresh_from_db()
+        ready3.refresh_from_db()
+        self.assertEqual(ready2.inventory_tracking_mode, 'legacy')
+        self.assertEqual(ready3.inventory_tracking_mode, 'legacy')
+        self.assertEqual(
+            AuditLog.objects.filter(action=CUTOVER_AUDIT_ACTION).count(), 0,
+            'the first product\'s audit row must roll back with the batch')
