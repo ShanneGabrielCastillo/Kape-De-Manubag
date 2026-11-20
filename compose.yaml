@@ -1,0 +1,39 @@
+# compose.yaml — local development configuration for Kape De Manubag.
+#
+# Usage:
+#   docker compose up --build     # build & start → http://localhost:8000
+#   docker compose down           # stop & remove the container
+#   docker compose logs -f web    # follow server output
+#
+# The project directory is bind-mounted at /app, so:
+#   * code edits are picked up live (Django StatReloader polls the mount)
+#   * db.sqlite3, media/ and logs/ stay on the host — the existing database
+#     and uploaded files are never copied into the image, migrated or reset
+#   * .env is injected via env_file and additionally re-read by
+#     kape_de_manubag/settings.py (load_dotenv with override=True)
+
+services:
+  web:
+    build: .
+    image: kape-de-manubag:dev
+    container_name: kape-de-manubag-web
+    env_file: .env
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"   # keep Linux .pyc files off the Windows mount
+      PYTHONUNBUFFERED: "1"          # stream runserver logs in real time
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    command: python manage.py runserver 0.0.0.0:8000
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/health/', timeout=5)"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
