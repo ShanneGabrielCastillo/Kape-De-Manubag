@@ -808,65 +808,33 @@ def _validate_cutover_products(products):
     return reports
 
 
-def _validate_rollback_products(products):
-    """Rollback gate: no open ingredient lines or reservations remain."""
-    from apps.orders.models import (
-        OrderIngredientReservation,
-        OrderIngredientReservationItem,
-        OrderItem,
-    )
-
-    for product in products:
-        if product.inventory_tracking_mode != 'ingredient':
-            raise TrackingModeChangeError(
-                f'Product {product.pk} is not ingredient-tracked; cannot roll back.')
-
-        open_lines = (
-            OrderItem.objects
-            .filter(
-                product=product,
-                inventory_mode='ingredient',
-                order__status__in=ACTIVE_ORDER_STATUSES,
-            )
-            .select_related('order')
-            .order_by('pk')
-        )
-        if open_lines.exists():
-            numbers = ', '.join(
-                f'{item.order.order_number} ({item.order.status})'
-                for item in open_lines
-            )
-            raise TrackingModeChangeError(
-                f'Product {product.pk} has open ingredient order lines: {numbers}.')
-
-        reservations = (
-            OrderIngredientReservationItem.objects
-            .filter(
-                reservation__status=OrderIngredientReservation.STATUS_RESERVED,
-            )
-            .filter(Q(order_item__product=product) | Q(source_recipe__product=product))
-            .select_related('reservation')
-        )
-        if reservations.exists():
-            ids = sorted(set(reservations.values_list('reservation_id', flat=True)))
-            raise TrackingModeChangeError(
-                f'Product {product.pk} has outstanding reservation(s) {ids}; '
-                'settle or release them before rollback.')
+# Phase 7D-2A: ``_validate_rollback_products()`` was removed together with
+# the ingredient-to-legacy rollback capability it guarded.  Ingredient
+# tracking is the permanent direction for active products; the legacy
+# POS/menu/cart compatibility branches that remain are historical-only and
+# must never become reachable again through this service.  Historical legacy
+# orders are still settled independently through the cancellation
+# compatibility services (on_status_changed / legacy_restore_by_disposition).
 
 
 def change_inventory_tracking_mode(product_ids, target_mode, *, actor=None,
                                    reason=''):
     """Switch explicitly requested products to ``target_mode``, audited.
 
-    For ``target_mode='ingredient'`` the full readiness assessment runs before
-    any write and again after the Product and InventoryItem locks are held.
-    For ``target_mode='legacy'`` the rollback gate only permits products with no
-    open ingredient lines or outstanding reservations.
+    Phase 7D-2A: only **legacy → ingredient** cutovers are supported.
+    Ingredient-to-legacy rollback is RETIRED: ingredient tracking is the
+    permanent direction for active products.  A ``target_mode='legacy'``
+    request is rejected before any lock, validation, or database mutation.
+
+    For ``target_mode='ingredient'`` the full readiness assessment runs
+    before any write and again after the Product and InventoryItem locks
+    are held.
 
     Args:
         product_ids: explicit iterable of product primary keys. Duplicates,
             non-integers, an empty list, and missing ids are rejected.
-        target_mode: ``'ingredient'`` or ``'legacy'``.
+        target_mode: only ``'ingredient'`` is accepted; ``'legacy'`` is
+            rejected (rollback retired).
         actor: the user recorded on the audit row (``None`` is allowed).
         reason: optional free text appended to the audit detail.
 
@@ -874,7 +842,8 @@ def change_inventory_tracking_mode(product_ids, target_mode, *, actor=None,
         :class:`TrackingModeChangeResult` describing every switched product.
 
     Raises:
-        TrackingModeChangeError: validation failed; nothing was written.
+        TrackingModeChangeError: validation failed (including the retired
+            rollback request) — nothing was written.
         DatabaseError: a write or the strict audit row failed; the transaction
             rolled back.
     """
@@ -890,6 +859,18 @@ def change_inventory_tracking_mode(product_ids, target_mode, *, actor=None,
         raise TrackingModeChangeError(
             f'Invalid tracking mode {target_mode!r}; expected one of '
             f'{sorted(valid_modes)}.')
+
+    # Phase 7D-2A: reject ingredient-to-legacy rollback BEFORE any database
+    # mutation — before the transaction, the Product locks, and the readiness
+    # validation.  The rejection is therefore guaranteed side-effect-free.
+    # Historical legacy orders remain settleable through the cancellation
+    # compatibility services; this policy only stops NEW legacy conversions.
+    if target_mode == 'legacy':
+        raise TrackingModeChangeError(
+            'Rollback to legacy inventory tracking is retired. Ingredient '
+            'tracking is the permanent direction for active products; '
+            'historical legacy orders are still settled through the '
+            'cancellation compatibility services.')
 
     with transaction.atomic():
         # Lock Product rows first, in ascending primary-key order.
@@ -910,23 +891,22 @@ def change_inventory_tracking_mode(product_ids, target_mode, *, actor=None,
             raise TrackingModeChangeError(
                 f'Product ids {already} are already in {target_mode!r} mode.')
 
-        if target_mode == CUTOVER_TARGET_INGREDIENT:
-            ordered = [by_id[pid] for pid in ids]
-            # First pass rejects obviously incomplete configurations before
-            # taking any InventoryItem locks.
-            _validate_cutover_products(ordered)
+        # Phase 7D-2A: only ingredient cutovers reach this point — every
+        # legacy request was rejected above, before the transaction opened.
+        ordered = [by_id[pid] for pid in ids]
+        # First pass rejects obviously incomplete configurations before
+        # taking any InventoryItem locks.
+        _validate_cutover_products(ordered)
 
-            item_ids = set()
-            for product in ordered:
-                item_ids.update(_collect_plan_item_ids(product))
+        item_ids = set()
+        for product in ordered:
+            item_ids.update(_collect_plan_item_ids(product))
 
-            # Lock level 3 in ascending pk order using the shared helper.
-            lock_inventory_items(item_ids)
+        # Lock level 3 in ascending pk order using the shared helper.
+        lock_inventory_items(item_ids)
 
-            # Revalidate everything under the Product + InventoryItem locks.
-            _validate_cutover_products(ordered)
-        else:
-            _validate_rollback_products([by_id[pid] for pid in ids])
+        # Revalidate everything under the Product + InventoryItem locks.
+        _validate_cutover_products(ordered)
 
         detail_suffix = f' ({reason})' if reason else ''
         changes = []

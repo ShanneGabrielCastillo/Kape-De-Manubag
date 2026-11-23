@@ -339,6 +339,7 @@
     {# ══════════════════════════════════════════════════════════════════════ #}
     {# Section 04 — Inventory Management                                    #}
     {# ══════════════════════════════════════════════════════════════════════ #}
+    {% if show_legacy_stock_fields %}
     <section class="pf-section" aria-labelledby="section-inventory-heading">
       <div class="pf-section__header">
         <span class="pf-section__number" aria-hidden="true">04</span>
@@ -376,6 +377,29 @@
         </div>
       </div>{# /.pf-section__body #}
     </section>
+    {% else %}
+    {# Phase 7C-1: ingredient-tracked products never show finished-product #}
+    {# stock controls — their availability comes from the ingredient ledger. #}
+    <section class="pf-section" aria-labelledby="section-inventory-heading">
+      <div class="pf-section__header">
+        <span class="pf-section__number" aria-hidden="true">04</span>
+        <div>
+          <h2 class="pf-section__title" id="section-inventory-heading">Inventory Management</h2>
+          <p class="pf-section__desc">Stock and availability come from the ingredient &amp; packaging ledger.</p>
+        </div>
+      </div>
+      <div class="pf-section__body">
+        <p class="pf-help-text">
+          This product is ingredient-tracked. Adjust ingredient and packaging
+          quantities from the
+          <a href="{% url 'inventory:ingredient_list' %}">Ingredients</a> and
+          <a href="{% url 'inventory:packaging_list' %}">Packaging</a> inventory
+          screens; what can be sold is derived from its approved recipe and
+          packaging configuration.
+        </p>
+      </div>{# /.pf-section__body #}
+    </section>
+    {% endif %}
 
     {# ── Form actions ──────────────────────────────────────────────────── #}
     <div class="pf-actions">

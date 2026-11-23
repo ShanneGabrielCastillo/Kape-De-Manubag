@@ -913,13 +913,20 @@ def _cat_label(cat) -> str:
 def _sellable_units(product):
     """Customer-facing sellable units for one product (chatbot context).
 
-    Legacy products: stock_quantity (unchanged behaviour). Ingredient
-    products: the most units available across the product's configured
-    sizes — the chatbot has no size intent, so the conservative aggregate
-    is "any configured size orderable"; 0 when the recipe configuration is
-    incomplete (never recommended). Sizes mirror the menu card
-    (apps.menu.views.configured_sizes_for_product — kept local to avoid a
-    cross-app view import)."""
+    Legacy products: stock_quantity — RETAINED in Phase 7D-2B (runtime-
+    unreachable since rollback retirement, Phase 7D-2A: no supported
+    workflow can create or activate a legacy product; the chatbot lists
+    active products only). The chatbot test suite pins its fixtures to
+    legacy mode to exercise recommendation semantics, so this branch is
+    load-bearing for tests. Removing it requires converting those fixtures
+    to ingredient mode with complete recipe/packaging configurations.
+
+    Ingredient products: the most units available across the product's
+    configured sizes — the chatbot has no size intent, so the conservative
+    aggregate is "any configured size orderable"; 0 when the recipe
+    configuration is incomplete (never recommended). Sizes mirror the menu
+    card (apps.menu.views.configured_sizes_for_product — kept local to
+    avoid a cross-app view import)."""
     from apps.inventory.services import get_available_units
 
     if product.inventory_tracking_mode != 'ingredient':

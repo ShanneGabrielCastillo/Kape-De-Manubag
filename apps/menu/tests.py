@@ -259,6 +259,7 @@ class CategoryTypeChatbotIntegrationTest(TestCase):
             is_active=True,
             is_available=True,
             stock_quantity=50,
+            inventory_tracking_mode='legacy',
         )
 
     def test_new_drink_category_appears_in_drink_filter(self):

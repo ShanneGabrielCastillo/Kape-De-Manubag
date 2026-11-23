@@ -84,20 +84,11 @@
             </div>
             <div class="product-card-footer">
               <span class="product-price" id="price-{{ product.pk }}">₱{{ product.price }}</span>
-              {% if product.inventory_tracking_mode == 'ingredient' %}
-              {# Phase 8B: availability derives from the ingredient ledger, #}
-              {# never from the frozen legacy stock_quantity.              #}
+              {# Phase 8B/7D-2B: availability derives from the ingredient    #}
+              {# ledger (server-driven unavailable list) — the legacy        #}
+              {# stock_quantity card branch was removed (unreachable since   #}
+              {# rollback retirement, Phase 7D-2A).                          #}
               {% if product.pk in ingredient_unavailable_pks %}
-              <span class="out-of-stock-label">Out of Stock</span>
-              {% else %}
-              <form class="add-to-cart-form" action="{% url 'orders:add_to_cart' product.pk %}" method="post" style="display:inline">
-                {% csrf_token %}
-                <input type="hidden" name="quantity" value="1">
-                <input type="hidden" name="size" id="size-input-{{ product.pk }}" value="none">
-                <button type="submit" class="add-btn" title="Add to cart">+</button>
-              </form>
-              {% endif %}
-              {% elif product.stock_quantity == 0 %}
               <span class="out-of-stock-label">Out of Stock</span>
               {% else %}
               <form class="add-to-cart-form" action="{% url 'orders:add_to_cart' product.pk %}" method="post" style="display:inline">
@@ -241,7 +232,6 @@ document.querySelectorAll('.size-selector').forEach(sel => {
       if (label) label.remove();
     }
   });
-  });
 });
 
 // ── Live availability polling ──────────────────────────────────────────────
@@ -263,13 +253,13 @@ document.querySelectorAll('.size-selector').forEach(sel => {
     kdmStockInfo[id] = info;
     const card = document.querySelector(`.product-card[data-product-id="${id}"]`);
     if (!card) return;
-    // Phase 8B: ingredient products gate on derived availability
-    // (out_of_stock, computed per size server-side); legacy products keep
-    // the stock_quantity gate. Additive fields — legacy payloads unchanged.
+    // Phase 8B/7D-2B: availability is the server-computed `out_of_stock`
+    // flag for every mode (the protected /api/product-stock/ endpoint
+    // derives it per size for ingredient products and from stock_quantity
+    // for legacy ones). The client-side legacy fallback was removed with
+    // the legacy card branch (rollback retired, Phase 7D-2A).
     const out = !info.is_active || !info.is_available ||
-        (info.inventory_tracking_mode === 'ingredient'
-            ? info.out_of_stock === true
-            : info.stock_quantity <= 0);
+        info.out_of_stock === true;
     card.classList.toggle('product-card--out', out);
     const form  = card.querySelector('.add-to-cart-form');
     const label = card.querySelector('.out-of-stock-label');

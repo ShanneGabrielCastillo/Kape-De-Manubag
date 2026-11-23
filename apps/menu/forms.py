@@ -30,18 +30,30 @@ class ProductForm(forms.ModelForm):
             )
         self.fields['category'].queryset = categories
 
-        # Phase 8B (Rev 3 §E.3b): legacy stock_quantity is frozen for
-        # ingredient-tracked products — their stock lives in the ingredient
-        # ledger (InventoryItem / IngredientMovementLog). The field is
-        # disabled in the UI, and Django's disabled-field handling ignores
-        # submitted values server-side, so the persisted balance is never
-        # silently overwritten.
-        if self.instance.pk and self.instance.inventory_tracking_mode == (
-                'ingredient'):
-            self.fields['stock_quantity'].disabled = True
-            self.fields['stock_quantity'].help_text = (
-                'Managed by the ingredient ledger — adjust through the '
-                'ingredient inventory screen.')
+        # Phase 7C-1: legacy finished-product stock controls are relevant
+        # only to products still tracked by the legacy ledger. New products
+        # default to ingredient tracking (and the mode is not editable here),
+        # so an ordinary create/edit must neither present nor write these
+        # frozen fields. Disabled fields ignore submitted values server-side,
+        # so a crafted POST cannot overwrite stock_quantity or
+        # low_stock_threshold for an ingredient-tracked product.
+        #
+        # Phase 8B (Rev 3 §E.3b): the same frozen-field rule has always
+        # applied to ingredient products' stock_quantity; this extends it to
+        # the low-stock threshold and to product creation.
+        tracking_mode = (
+            self.instance.inventory_tracking_mode
+            if self.instance.pk else Product.INVENTORY_TRACKING_INGREDIENT
+        )
+        self.show_legacy_stock_fields = (
+            tracking_mode == Product.INVENTORY_TRACKING_LEGACY
+        )
+        if not self.show_legacy_stock_fields:
+            for field_name in ('stock_quantity', 'low_stock_threshold'):
+                self.fields[field_name].disabled = True
+                self.fields[field_name].help_text = (
+                    'Managed by the ingredient ledger — adjust stock through '
+                    'the ingredient inventory screen.')
 
     class Meta:
         model = Product

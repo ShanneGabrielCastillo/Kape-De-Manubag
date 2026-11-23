@@ -56,6 +56,7 @@ def _legacy_product(name='Legacy Latte', stock=10, category=None):
     return Product.objects.create(
         category=category, name=name, price='50.00',
         stock_quantity=stock,
+        inventory_tracking_mode=Product.INVENTORY_TRACKING_LEGACY,
     )
 
 
@@ -669,39 +670,45 @@ class ProductStockE3BTests(E3BTestBase):
 class ReconciliationAndRestockE3BTests(E3BTestBase):
 
     def test_restock_rejects_ingredient_product(self):
-        # §E.3b: legacy restocking is disabled for ingredient-tracked
-        # products — their stock lives in the ingredient ledger.
+        # §E.3b, superseded by Phase 7B-3A: the restock endpoint is RETIRED
+        # entirely — ingredient-tracked products were already rejected (400)
+        # and now every POST is a non-mutating 410.
         product = _ingredient_product('E3B Restock Block', on_hand=1000)
         resp = self.client.post(
             reverse('inventory:restock', args=[product.pk]),
             {'quantity': '10'},
         )
-        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.status_code, 410)
         data = resp.json()
         self.assertFalse(data['success'])
-        self.assertIn('ingredient', data['error'].lower())
+        self.assertIn('retired', data['error'].lower())
         # Stock unchanged (frozen non-authoritative field, fixture sets 0).
         product.refresh_from_db()
         self.assertEqual(product.stock_quantity, 0)
 
     def test_restock_allows_legacy_product(self):
-        # Legacy products restock exactly as before.
+        # Phase 7B-3A: retired for legacy products too — no mutation.
         product = _legacy_product(stock=10, category=_category('E3B Legacy'))
         resp = self.client.post(
             reverse('inventory:restock', args=[product.pk]),
             {'quantity': '5'},
         )
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 410)
+        self.assertFalse(resp.json()['success'])
         product.refresh_from_db()
-        self.assertEqual(product.stock_quantity, 15)
+        self.assertEqual(product.stock_quantity, 10)
 
-    def test_inventory_list_shows_ingredient_mode(self):
-        # §E.3b: the inventory list displays the tracking mode so staff can
-        # distinguish ledgers (view passes the products; template renders).
+    def test_inventory_list_excludes_ingredient_mode(self):
+        # Phase 7B-3A: the legacy inventory list is RETIRED — /inventory/
+        # redirects to the ingredient screen, which never lists PRODUCTS
+        # (only InventoryItem rows; no data-product-id cards).
         product = _ingredient_product('E3B List Ingredient', on_hand=1000)
         resp = self.client.get(reverse('inventory:list'))
-        self.assertEqual(resp.status_code, 200)
-        self.assertIn(product, resp.context['products'])
+        self.assertEqual(resp.status_code, 302)
+        followed = self.client.get(reverse('inventory:list'), follow=True)
+        self.assertEqual(followed.status_code, 200)
+        html = followed.content.decode()
+        self.assertNotIn('data-product-id', html)
 
     def test_ingredient_reconciliation_uses_ledger_not_stock(self):
         # The Phase 7.5 reconciliation reads the ledger, not stock_quantity —

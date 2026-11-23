@@ -1,6 +1,7 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.db.models import Count
@@ -231,7 +232,14 @@ def _save_form_or_render(request, form_class, *, template, title, list_url,
         log_action(request.user, action, obj, detail=log_detail)
         messages.success(request, success_message)
         return redirect(list_url)
-    context = {'form': form, 'title': title}
+    context = {
+        'form': form,
+        'title': title,
+        # Phase 7C-1: the template only renders the legacy finished-product
+        # stock inputs when the product actually uses the legacy ledger.
+        'show_legacy_stock_fields': getattr(
+            form, 'show_legacy_stock_fields', False),
+    }
     if extra_context:
         context.update(extra_context)
     return render(request, template, context)
@@ -243,7 +251,18 @@ def _log_inventory_update(request, product, old_stock):
     Only actual movements are logged: creating a product with an initial
     stock, or an edit that changes the stock level. Edits that leave stock
     untouched produce no entry.
+
+    Phase 7C-1: this is a LEGACY-ledger writer only. Ingredient-tracked
+    products record their movements in IngredientMovementLog and their
+    Product.stock_quantity is frozen/non-authoritative (Rev 3 §C.4, §E.3b),
+    so writing an InventoryLog row for them would fabricate obsolete
+    finished-product history (previously a misleading "Initial stock" row on
+    every product creation). The guard is the authoritative behaviour and
+    does not depend on the form hiding the fields.
     """
+    if product.inventory_tracking_mode != Product.INVENTORY_TRACKING_LEGACY:
+        return
+
     new_stock = product.stock_quantity
     if old_stock is None:
         if new_stock <= 0:
@@ -355,7 +374,16 @@ def product_toggle_active(request, pk):
                    detail=f'active_orders={counts["active"]}')
         status = 'deactivated'
     else:
-        product.activate()
+        try:
+            product.activate()
+        except ValidationError as exc:
+            # Phase 7D-4: legacy-tracked products are historical and cannot
+            # be reactivated. The error is returned as a controlled failure;
+            # the product list JS already renders ``error`` in a toast.
+            return JsonResponse(
+                {'success': False, 'error': ' '.join(exc.messages)},
+                status=400,
+            )
         log_action(request.user, 'product.reactivate', product)
         status = 'reactivated'
     return JsonResponse({'success': True, 'status': status, 'is_active': product.is_active})

@@ -26,6 +26,7 @@ from apps.chatbot.service import (
     ALLOWED_LANGUAGES,
     DEFAULT_LANGUAGE,
     _has_price_constraint,
+    _sellable_units,
 )
 
 
@@ -52,6 +53,11 @@ def _make_category(name, is_meal=True, is_active=True, category_type=None):
 
 
 def _make_product(name, price, category, is_active=True, is_available=True, stock=100):
+    # Phase 7D-2B Step 0: these fixtures predate the ingredient ledger and
+    # test recommendation/availability semantics against the LEGACY ledger
+    # (stock_quantity gating).  The mode must be explicit — since migration
+    # menu/0009 the model default is 'ingredient', which would zero every
+    # fixture's sellable units (no recipe configured) and break 87 tests.
     return Product.objects.create(
         name=name,
         price=Decimal(str(price)),
@@ -59,6 +65,7 @@ def _make_product(name, price, category, is_active=True, is_available=True, stoc
         is_active=is_active,
         is_available=is_available,
         stock_quantity=stock,
+        inventory_tracking_mode='legacy',
     )
 
 
@@ -3358,3 +3365,35 @@ class TakeoutFaqVsProductSearchTest(TestCase):
         from apps.chatbot.service import extract_product_name
         name = extract_product_name("What drinks do you have?")
         self.assertIsNone(name)
+
+
+# ── Phase 7D-2B — retained legacy availability fallback contract ─────────────
+
+class SellableUnitsLedgerContractTests(TestCase):
+    """Phase 7D-2B documents (and guards) the two `_sellable_units` branches.
+
+    The legacy branch is RUNTIME-UNREACHABLE since Phase 7D-2A retired
+    ingredient-to-legacy rollback (no supported workflow can create or
+    activate a legacy product; the chatbot lists active products only).
+    It is retained because the recommendation test fixtures are pinned to
+    legacy mode (their original, pre-ingredient semantics); removing it
+    requires converting those fixtures to ingredient mode with complete
+    recipe/packaging configurations."""
+
+    def test_legacy_product_returns_frozen_stock_quantity(self):
+        product = _make_product(
+            'SG Legacy Probe', 50, Category.objects.create(
+                name='SG Legacy Cat', slug='sg-legacy-cat'),
+            stock=13)
+        self.assertEqual(product.inventory_tracking_mode, 'legacy')
+        self.assertEqual(_sellable_units(product), 13)
+
+    def test_ingredient_product_without_config_is_not_recommendable(self):
+        product = Product.objects.create(
+            name='SG Ingr Probe', price=Decimal('50.00'),
+            category=Category.objects.create(
+                name='SG Ingr Cat', slug='sg-ingr-cat'),
+            stock_quantity=0, inventory_tracking_mode='ingredient',
+        )
+        # No recipe configured → derived availability is 0 (never raises).
+        self.assertEqual(_sellable_units(product), 0)

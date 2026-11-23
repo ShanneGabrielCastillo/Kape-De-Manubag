@@ -1,7 +1,11 @@
 """
 Sample Data Seeder for Kape De Manubag System
-Run: python manage.py shell < sample_data/seed_data.py
-Or use the management command: python manage.py seed_data
+Run: python manage.py seed_data
+
+Seeds demo menu data only (categories, products, settings). It never creates
+user accounts: provision administrators with ``manage.py createsuperuser``
+(or ``create_superuser_env`` on a deployment) and create staff through the
+staff-management screen. This keeps the seed safe to run on any database.
 """
 
 import os
@@ -13,36 +17,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'kape_de_manubag.settings')
 django.setup()
 
-from apps.accounts.models import CustomUser
 from apps.menu.models import Category, Product
 
-print("🌱 Seeding database...")
-
-# ── Create Admin User ──
-if not CustomUser.objects.filter(username='admin').exists():
-    admin = CustomUser.objects.create_superuser(
-        username='admin',
-        email='admin@kapedemanubag.com',
-        password='admin123',
-        first_name='Admin',
-        last_name='KDM',
-        role='admin'
-    )
-    print("✅ Admin user created: admin / admin123")
-else:
-    print("ℹ️  Admin user already exists")
-
-# ── Create Cashier ──
-if not CustomUser.objects.filter(username='cashier1').exists():
-    cashier = CustomUser.objects.create_user(
-        username='cashier1',
-        email='cashier@kapedemanubag.com',
-        password='cashier123',
-        first_name='Maria',
-        last_name='Santos',
-        role='cashier'
-    )
-    print("✅ Cashier created: cashier1 / cashier123")
+print("🌱 Seeding demo data (no user accounts)...")
 
 # ── Categories ──
 categories_data = [
@@ -160,10 +137,9 @@ for pd in products_data:
         if created:
             print(f"  ✅ Product: {product.name} — ₱{product.price}")
 
-print("\n🎉 Seeding complete!")
-print("\n📋 Login Credentials:")
-print("   Admin:   admin / admin123")
-print("   Cashier: cashier1 / cashier123")
+print("\n🎉 Seeding complete! No user accounts were created.")
+print("   Provision an administrator with: python manage.py createsuperuser")
+print("   Create staff accounts from the dashboard: /accounts/staff/create/")
 print("\n🌐 Start server: python manage.py runserver")
 print("   Menu:      http://127.0.0.1:8000/")
 print("   Dashboard: http://127.0.0.1:8000/dashboard/")

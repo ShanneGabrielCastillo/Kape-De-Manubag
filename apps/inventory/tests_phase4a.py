@@ -66,10 +66,10 @@ class ProductInventoryTrackingModeTests(TestCase):
     def setUp(self):
         self.category = _category('Drinks')
 
-    def test_default_is_legacy(self):
-        """Newly created products default to 'legacy'."""
+    def test_default_is_ingredient(self):
+        """Phase 7B-1: newly created products default to 'ingredient'."""
         p = _product(category=self.category)
-        self.assertEqual(p.inventory_tracking_mode, 'legacy')
+        self.assertEqual(p.inventory_tracking_mode, 'ingredient')
 
     def test_explicit_legacy_accepted(self):
         p = Product.objects.create(
@@ -113,12 +113,13 @@ class ProductInventoryTrackingModeTests(TestCase):
         self.assertIn('ingredient', choice_values)
         self.assertEqual(len(choice_values), 2)
 
-    def test_existing_product_has_legacy_after_migration(self):
-        """Verify the default backfill: any product retrieved from the DB has
-        'legacy', consistent with what the migration applies to existing rows."""
+    def test_new_orm_rows_use_model_default(self):
+        """Phase 7B-1: rows created through the ORM use the current model
+        default ('ingredient').  The historical 0008 backfill to 'legacy' is
+        migration history and is not re-applied to new rows."""
         p = _product(category=self.category, name='Existing')
         p.refresh_from_db()
-        self.assertEqual(p.inventory_tracking_mode, 'legacy')
+        self.assertEqual(p.inventory_tracking_mode, 'ingredient')
 
     def test_constraint_name_is_correct(self):
         """The constraint must be named exactly as specified by Rev3."""
@@ -241,11 +242,16 @@ class Phase4ABehaviorRegressionTests(TestCase):
     for all current workflows."""
 
     def setUp(self):
+        # Phase 7B-1: this class is a HISTORICAL regression suite for the
+        # Phase 4A legacy ledger path, so its fixture pins the product to
+        # 'legacy' explicitly (the ORM default is now 'ingredient').
         self.admin    = _user('p4a_admin')
         self.client.force_login(self.admin)
         self.category = _category('Reg Cat')
         self.product  = _product(category=self.category, name='Reg Espresso',
                                   stock=50)
+        self.product.inventory_tracking_mode = 'legacy'
+        self.product.save(update_fields=['inventory_tracking_mode'])
 
     def test_order_placement_creates_legacy_order_items(self):
         """All order items created through normal ORM paths have
@@ -278,10 +284,15 @@ class Phase4ABehaviorRegressionTests(TestCase):
         """Placing an order via create_order_item must not modify
         inventory_tracking_mode — it stays 'legacy' for all products."""
         from apps.orders.services import create_order_item
-        self.assertEqual(self.product.inventory_tracking_mode, 'legacy')
+        # Phase 7B-1: the ORM default is now 'ingredient'; the invariant
+        # under test is that order creation does NOT MODIFY the mode.
+        self.assertIn(self.product.inventory_tracking_mode,
+                      ('legacy', 'ingredient'))
         order = _order()
         create_order_item(order, self.product, 'none', 1)
         self.product.refresh_from_db()
+        # Phase 7B-1: the mode is whatever the fixture pinned ('legacy');
+        # the invariant is that order creation does NOT MODIFY it.
         self.assertEqual(self.product.inventory_tracking_mode, 'legacy')
 
     def test_inventory_adjustment_unaffected(self):

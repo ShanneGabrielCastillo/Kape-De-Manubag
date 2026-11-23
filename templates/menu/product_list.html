@@ -299,7 +299,8 @@
   <div class="table-wrapper">
     <table class="table-products" data-mobile-cards="true" data-card-builder="products">
       <thead>
-        <tr><th data-role="primary">Product</th><th data-role="secondary">Category</th><th data-role="amount">Price</th><th data-role="secondary">Stock</th><th data-role="status">Status</th><th data-role="actions">Actions</th></tr>
+        {# Phase 7B-3A: legacy Stock column removed — finished-product stock is no longer managed manually. #}
+        <tr><th data-role="primary">Product</th><th data-role="secondary">Category</th><th data-role="amount">Price</th><th data-role="status">Status</th><th data-role="actions">Actions</th></tr>
       </thead>
       <tbody>
         {% for product in products %}
@@ -308,14 +309,12 @@
             data-name="{{ product.name|escape }}"
             data-price="₱{{ product.price }}"
             data-category="{{ product.category.name|escape }}"
-            data-stock="{{ product.stock_quantity }}"
-            data-stock-status="{{ product.stock_status }}"
+            data-tracking-mode="{{ product.inventory_tracking_mode }}"
             data-is-active="{{ product.is_active|yesno:'true,false' }}"
             data-img="{% product_image_url product %}"
             data-active-orders="{{ product.active_order_count|default:0 }}"
             data-total-orders="{{ product.total_order_count|default:0 }}"
             data-edit-url="{% url 'menu:product_edit' product.pk %}"
-            data-stock-url="{% url 'inventory:restock' product.pk %}"
             data-toggle-url="{% url 'menu:product_toggle_active' product.pk %}"
             data-is-available="{{ product.is_available|yesno:'true,false' }}"
         >
@@ -332,11 +331,6 @@
           </td>
           <td>{{ product.category.name }}</td>
           <td style="font-weight:700;color:var(--caramel)">₱{{ product.price }}</td>
-          <td>
-            <span class="stock-indicator {% if product.stock_status == 'critical' %}stock-critical{% elif product.stock_status == 'low' %}stock-low{% else %}stock-ok{% endif %}">
-              {{ product.stock_quantity }}
-            </span>
-          </td>
           <td>
             <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start">
               <span class="badge {% if product.is_active %}badge-ready{% else %}badge-cancelled{% endif %}">
@@ -361,7 +355,6 @@
           <td>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
               <a href="{% url 'menu:product_edit' product.pk %}" class="btn btn-sm btn-outline">Edit</a>
-              <a href="{% url 'inventory:restock' product.pk %}" class="btn btn-sm btn-outline">Stock</a>
               <button class="btn btn-sm {% if product.is_active %}{% if product.active_order_count %}btn-warning{% else %}btn-danger{% endif %}{% else %}btn-caramel{% endif %} toggle-active-btn"
                       data-id="{{ product.pk }}" data-name="{{ product.name|escape }}"
                       data-url="{% url 'menu:product_toggle_active' product.pk %}"
@@ -373,7 +366,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="6" style="text-align:center;color:#aaa;padding:40px">No products found.</td></tr>
+        <tr><td colspan="5" style="text-align:center;color:#aaa;padding:40px">No products found.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -491,12 +484,6 @@ document.addEventListener('click', function(e) {
   // Placeholder URL resolved via Django's static file storage (avoids hard-coded path)
   const PM_PLACEHOLDER = '{% static "images/placeholder.svg" %}';
 
-  function stockClass(status) {
-    if (status === 'critical') return 'stock-critical';
-    if (status === 'low')      return 'stock-low';
-    return 'stock-ok';
-  }
-
   function buildProductCards() {
     const table = document.querySelector('table[data-card-builder="products"]');
     if (!table) return;
@@ -538,8 +525,6 @@ document.addEventListener('click', function(e) {
       const isAvailable = d.isAvailable === 'true';
       const activeOrders  = parseInt(d.activeOrders || '0', 10);
       const totalOrders   = parseInt(d.totalOrders  || '0', 10);
-      const stockQty      = parseInt(d.stock || '0', 10);
-      const stockStatus   = d.stockStatus || 'ok';
 
       // Deactivate/Reactivate button class mirrors the table
       let toggleClass = 'btn-caramel';
@@ -578,17 +563,18 @@ document.addEventListener('click', function(e) {
         </div>
         <div class="pm-divider"></div>
         <div class="pm-meta">
-          <div class="pm-stock-row">
-            <span class="pm-stock-label"><i data-lucide="package" class="btn-icon" aria-hidden="true"></i> Stock</span>
-            <span class="pm-stock-sep"></span>
-            <span class="pm-stock-val ${stockClass(stockStatus)}">${stockQty}</span>
-          </div>
+          ${d.trackingMode === 'ingredient'
+            ? `<div class="pm-stock-row">
+                 <span class="pm-stock-label"><i data-lucide="flask-conical" class="btn-icon" aria-hidden="true"></i> Ingredient-tracked</span>
+                 <span class="pm-stock-sep"></span>
+                 <span class="pm-stock-val stock-ok">—</span>
+               </div>`
+            : ''}
           ${orderBadgeHtml}
         </div>
         <div class="pm-divider"></div>
         <div class="pm-actions">
           <a href="${escHtml(d.editUrl || '')}" class="btn btn-sm btn-outline"><i data-lucide="pencil" class="btn-icon" aria-hidden="true"></i> Edit</a>
-          <a href="${escHtml(d.stockUrl || '')}" class="btn btn-sm btn-outline"><i data-lucide="package" class="btn-icon" aria-hidden="true"></i> Stock</a>
           <button class="btn btn-sm ${toggleClass} toggle-active-btn"
                   data-id="${escHtml(d.productId)}"
                   data-name="${escHtml(d.name || '')}"

@@ -18,7 +18,8 @@ These tests cover the dry-run assessment and the audited cutover service:
   * dry-run does not mutate state
   * exactly one audit row per successful product
   * Product → InventoryItem ordered locking call
-  * rollback from ingredient to legacy
+  * rollback from ingredient to legacy — RETIRED in Phase 7D-2A: the
+    service now rejects 'legacy' targets before any lock or write
 
 All fixtures are synthetic and live only in Django's test database.
 """
@@ -598,33 +599,85 @@ class CutoverOperationTests(TestCase):
         self.assertEqual(list(locked_ids), sorted(locked_ids))
         self.assertIn(config['ingredient'].pk, locked_ids)
 
-    def test_rollback_is_supported_and_audited(self):
-        product = _product(mode='ingredient')
-        _configure(product)
+    def test_rollback_is_retired_and_rejected_before_any_mutation(self):
+        """Phase 7D-2A: ingredient-to-legacy rollback is RETIRED.
 
-        result = change_inventory_tracking_mode(
-            [product.pk], 'legacy', actor=self.admin, reason='rollback')
+        A 'legacy' target is rejected with an explicit error BEFORE any
+        lock, validation, or write — no tracking-mode change, no ledger
+        movement, no reservation change, no audit row.
+        """
+        from apps.inventory.models import IngredientMovementLog
+        from apps.inventory.services import lock_inventory_items
+        from apps.orders.models import OrderIngredientReservation
 
-        product.refresh_from_db()
-        self.assertEqual(product.inventory_tracking_mode, 'legacy')
-        self.assertEqual(result.target_mode, 'legacy')
-        self.assertEqual(AuditLog.objects.filter(
-            action=CUTOVER_AUDIT_ACTION).count(), 1)
-
-    def test_rollback_with_open_reservation_is_rejected(self):
         product = _product(mode='ingredient')
         config = _configure(product)
-        _reservation_line(
+        ingredient = config['ingredient']
+        ingredient.refresh_from_db()
+        before = {
+            'on_hand': ingredient.on_hand_quantity,
+            'reserved': ingredient.reserved_quantity,
+            'movements': IngredientMovementLog.objects.count(),
+            'reservations': OrderIngredientReservation.objects.count(),
+            'audit': AuditLog.objects.count(),
+        }
+
+        # The rejection must fire before the service takes ANY lock —
+        # proving it precedes the transaction entirely (no partial state).
+        with mock.patch(
+            'apps.inventory.services.lock_inventory_items',
+            wraps=lock_inventory_items,
+        ) as lock_mock:
+            with self.assertRaises(TrackingModeChangeError) as ctx:
+                change_inventory_tracking_mode(
+                    [product.pk], 'legacy', actor=self.admin,
+                    reason='should never run')
+        lock_mock.assert_not_called()
+
+        self.assertIn('retired', str(ctx.exception))
+        product.refresh_from_db()
+        ingredient.refresh_from_db()
+        self.assertEqual(product.inventory_tracking_mode, 'ingredient')
+        self.assertEqual(ingredient.on_hand_quantity, before['on_hand'])
+        self.assertEqual(ingredient.reserved_quantity, before['reserved'])
+        self.assertEqual(
+            IngredientMovementLog.objects.count(), before['movements'])
+        self.assertEqual(
+            OrderIngredientReservation.objects.count(), before['reservations'])
+        self.assertEqual(AuditLog.objects.count(), before['audit'])
+        self.assertEqual(
+            AuditLog.objects.filter(action=CUTOVER_AUDIT_ACTION).count(), 0)
+
+    def test_rollback_with_open_reservation_rejected_by_retirement(self):
+        """Phase 7D-2A: even a product the OLD gate would have examined (open
+        reservation) is rejected by the retirement check itself — there is no
+        rollback path left, and the reservation survives untouched."""
+        from apps.inventory.models import IngredientMovementLog
+        from apps.orders.models import OrderIngredientReservation
+
+        product = _product(mode='ingredient')
+        config = _configure(product)
+        reservation = _reservation_line(
             product, config['recipes']['none'], config['ingredient'],
             status='reserved',
         )
 
-        with self.assertRaises(TrackingModeChangeError):
+        with self.assertRaises(TrackingModeChangeError) as ctx:
             change_inventory_tracking_mode(
                 [product.pk], 'legacy', actor=self.admin)
 
+        self.assertIn('retired', str(ctx.exception))
         product.refresh_from_db()
         self.assertEqual(product.inventory_tracking_mode, 'ingredient')
+        reservation.refresh_from_db()
+        self.assertEqual(
+            reservation.status, OrderIngredientReservation.STATUS_RESERVED)
+        config['ingredient'].refresh_from_db()
+        self.assertEqual(
+            config['ingredient'].on_hand_quantity, Decimal('1000.000'))
+        self.assertEqual(
+            config['ingredient'].reserved_quantity, Decimal('0.000'))
+        self.assertEqual(IngredientMovementLog.objects.count(), 0)
         self.assertEqual(AuditLog.objects.count(), 0)
 
 

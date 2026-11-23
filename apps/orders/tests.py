@@ -31,7 +31,7 @@ class CheckoutAtomicityTests(TestCase):
         self.category = Category.objects.create(name='Drinks', slug='drinks')
         self.product = Product.objects.create(
             category=self.category, name='Iced Coffee', price='60.00',
-            stock_quantity=10,
+            stock_quantity=10, inventory_tracking_mode='legacy',
         )
 
     def _cart_with(self, quantity):
@@ -103,13 +103,14 @@ class CheckoutAtomicityTests(TestCase):
         }, follow=True)
         # The customer sees which product, how much is available and how much
         # was requested -- and nothing was created.
-        # The checkout catches ValueError from deduct_inventory_for_order and
-        # redirects back to cart with the error message.
+        # The checkout catches the coordinator's ValueError (raised inside
+        # place_order_inventory) and redirects back to cart with the error
+        # message.
         # Check we landed back on the cart page with an error message.
         self.assertEqual(Order.objects.count(), 0)
         self.product.refresh_from_db()
         self.assertEqual(self.product.stock_quantity, 1)
-        # The ValueError message from deduct_inventory_for_order mentions the
+        # The ValueError message from the coordinator mentions the
         # product name and stock details.
         response_text = response.content.decode()
         self.assertIn('Iced Coffee', response_text)
@@ -146,7 +147,7 @@ class PosOrderAtomicityTests(TestCase):
         self.category = Category.objects.create(name='Drinks', slug='drinks')
         self.product = Product.objects.create(
             category=self.category, name='Iced Coffee', price='60.00',
-            stock_quantity=10,
+            stock_quantity=10, inventory_tracking_mode='legacy',
         )
 
     def _post_pos(self, quantity=2, **item_overrides):
@@ -493,7 +494,7 @@ class DuplicateOrderProtectionTests(TestCase):
         self.category = Category.objects.create(name='Drinks', slug='drinks')
         self.product = Product.objects.create(
             category=self.category, name='Iced Coffee', price='60.00',
-            stock_quantity=50,
+            stock_quantity=50, inventory_tracking_mode='legacy',
         )
 
     # ── POS ────────────────────────────────────────────────────────────────
@@ -620,7 +621,7 @@ class CancellationAtomicityTests(TestCase):
         self.category = Category.objects.create(name='Drinks', slug='drinks')
         self.product = Product.objects.create(
             category=self.category, name='Iced Coffee', price='60.00',
-            stock_quantity=10,
+            stock_quantity=10, inventory_tracking_mode='legacy',
         )
 
     def _deducted_order(self, quantity=2):
@@ -697,7 +698,9 @@ class CancellationAtomicityTests(TestCase):
 
 
 class RestockAtomicityTests(TestCase):
-    """Manual restock: stock change + inventory log + audit log."""
+    """Phase 7B-3A — the legacy restock endpoint is RETIRED: it must never
+    change finished-product stock, never write InventoryLog rows, and never
+    answer a POST with success (410 Gone + explicit error instead)."""
 
     def setUp(self):
         self.cashier = CustomUser.objects.create_user(
@@ -707,37 +710,33 @@ class RestockAtomicityTests(TestCase):
         self.category = Category.objects.create(name='Drinks', slug='drinks')
         self.product = Product.objects.create(
             category=self.category, name='Iced Coffee', price='60.00',
-            stock_quantity=10,
+            stock_quantity=10, inventory_tracking_mode='legacy',
         )
 
     def test_restock_updates_stock_and_logs(self):
+        # Retired: even a cashier POST with a valid quantity is a no-op.
         response = self.client.post(
             reverse('inventory:restock', args=[self.product.pk]),
             {'quantity': 5},
         )
-        data = response.json()
-        self.assertTrue(data['success'])
-        self.assertEqual(data['new_qty'], 15)
+        self.assertEqual(response.status_code, 410)
+        self.assertFalse(response.json()['success'])
         self.product.refresh_from_db()
-        self.assertEqual(self.product.stock_quantity, 15)
-        log = InventoryLog.objects.get(product=self.product, action='restock')
-        self.assertEqual(log.quantity_change, 5)
-        self.assertEqual(log.quantity_before, 10)
-        self.assertEqual(log.quantity_after, 15)
-        self.assertEqual(log.source, 'manual_adjustment')
-        self.assertEqual(log.reason, 'Restock')
+        self.assertEqual(self.product.stock_quantity, 10)
+        self.assertEqual(InventoryLog.objects.count(), 0)
 
     def test_restock_rolls_back_on_log_failure(self):
+        # Retired: there is no mutation path left to roll back — the ledger
+        # must remain untouched even if a log write would fail.
         with mock.patch.object(
             InventoryLog.objects, 'create',
             side_effect=RuntimeError('log write failed'),
         ):
-            with self.assertRaises(RuntimeError):
-                self.client.post(
-                    reverse('inventory:restock', args=[self.product.pk]),
-                    {'quantity': 5},
-                )
-        # The stock increase was rolled back -- no untracked stock.
+            response = self.client.post(
+                reverse('inventory:restock', args=[self.product.pk]),
+                {'quantity': 5},
+            )
+        self.assertEqual(response.status_code, 410)
         self.product.refresh_from_db()
         self.assertEqual(self.product.stock_quantity, 10)
         self.assertEqual(InventoryLog.objects.count(), 0)
@@ -747,6 +746,7 @@ class RestockAtomicityTests(TestCase):
             reverse('inventory:restock', args=[self.product.pk]),
             {'quantity': 0},
         )
+        self.assertEqual(response.status_code, 410)
         self.assertFalse(response.json()['success'])
         self.product.refresh_from_db()
         self.assertEqual(self.product.stock_quantity, 10)
@@ -769,7 +769,7 @@ class StockAvailabilityGuardTests(TestCase):
         self.category = Category.objects.create(name='Drinks', slug='drinks')
         self.product = Product.objects.create(
             category=self.category, name='Iced Coffee', price='60.00',
-            stock_quantity=3,
+            stock_quantity=3, inventory_tracking_mode='legacy',
         )
 
     # ── add_to_cart ────────────────────────────────────────────────────────
@@ -928,23 +928,57 @@ class StockAvailabilityGuardTests(TestCase):
 
     # ── POS page rendering (client contract) ───────────────────────────────
 
+    def _ingredient_card_product(self, name, on_hand, qty='10.000'):
+        """Phase 7D-2B: the POS grid renders ingredient products only (the
+        legacy stock card branches were removed). Build a complete
+        ingredient product for the card-contract tests."""
+        from apps.inventory.models import (
+            InventoryItem, ProductPackagingRule, Recipe, RecipeItem,
+        )
+        product = Product.objects.create(
+            category=self.category, name=name, price='60.00',
+            stock_quantity=0, inventory_tracking_mode='ingredient',
+        )
+        item = InventoryItem.objects.create(
+            name=f'STOCKGUARD {name}', item_type='ingredient', base_unit='g',
+            on_hand_quantity=Decimal(str(on_hand)),
+        )
+        recipe = Recipe.objects.create(
+            product=product, size='none', order_type_scope=Recipe.SCOPE_ALL,
+            status=Recipe.STATUS_APPROVED, revision=1,
+            approved_at=timezone.now(), approval_note='StockGuard fixture',
+        )
+        RecipeItem.objects.create(
+            recipe=recipe, inventory_item=item, quantity=Decimal(qty))
+        for order_type in ('dine_in', 'takeout'):
+            ProductPackagingRule.objects.create(
+                product=product, size='none', order_type=order_type,
+                no_packaging=True,
+            )
+        return product
+
     def test_pos_page_embeds_stock_on_product_cards(self):
+        # Phase 7D-2B: the embedded figure is the DERIVED availability
+        # (floor(100/10) = 10), never a frozen stock_quantity.
+        product = self._ingredient_card_product('SG Card Ok', on_hand=100)
         self.client.force_login(self.cashier)
         response = self.client.get(reverse('orders:pos'))
-        self.assertContains(response, f'data-product-id="{self.product.pk}"')
-        self.assertContains(response, 'data-stock="3"')
+        self.assertContains(response, f'data-product-id="{product.pk}"')
+        self.assertContains(response, 'data-stock="10"')
+        self.assertContains(response, 'data-tracking-mode="ingredient"')
 
     def test_pos_page_disables_out_of_stock_card(self):
+        # Phase 7D-2B: a derived-zero ingredient product renders the out
+        # card (complete config, floor(5/10) = 0 units).
+        product = self._ingredient_card_product('SG Card Out', on_hand=5)
         self.client.force_login(self.cashier)
-        self.product.stock_quantity = 0
-        self.product.save(update_fields=['stock_quantity'])
         response = self.client.get(reverse('orders:pos'))
-        # The card is visibly disabled, carries the stock for the JS gate,
-        # and shows a clear label.
         self.assertContains(response, 'pos-item--out')
         self.assertContains(response, 'data-stock="0"')
         self.assertContains(response, 'data-out="1"')
         self.assertContains(response, 'Out of Stock')
+        # The legacy stock card must be gone from the template entirely.
+        self.assertNotContains(response, 'product.stock_quantity')
 
 
 class PosSearchTests(TestCase):
@@ -965,12 +999,19 @@ class PosSearchTests(TestCase):
         )
         self.client.force_login(self.cashier)
 
-    def _catalog(self, categories=2, products_per_category=3):
+    def _catalog(self, categories=2, products_per_category=3,
+                 mode='ingredient'):
+        # Phase 7D-2B: the POS grid renders ingredient products only, so
+        # the DOM tests use ingredient fixtures (an unsized product with no
+        # recipe renders as an out-card whose NAME is still in the DOM for
+        # client-side search). The query-count test passes mode='legacy'
+        # explicitly — see its comment.
         for i in range(categories):
             cat = Category.objects.create(name=f'Cat {i}', slug=f'cat-{i}')
             for j in range(products_per_category):
                 Product.objects.create(
                     category=cat, name=f'Drink {i}-{j}', price='50.00',
+                    inventory_tracking_mode=mode,
                 )
 
     def test_pos_renders_search_input_and_all_tab(self):
@@ -998,6 +1039,15 @@ class PosSearchTests(TestCase):
         # for 500 -- the prefetch does one query per dataset, never one per
         # product. (The catalog is rebuilt in-place with raw deletes to
         # bypass the product soft-delete guard.)
+        #
+        # Phase 7D-2B: this test isolates the PREFETCH cost contract using
+        # legacy-mode fixtures, which skip the Phase 8B per-product
+        # availability annotation loop in cashier_pos (a knowingly accepted
+        # per-ingredient-product cost, documented in the Phase 7B-3B audit
+        # §C; batching it is a separate future optimization). With
+        # ingredient fixtures the query count is base + ~3 per product by
+        # design, so the flat-prefetch assertion is made on products that
+        # take the skip path.
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
 
@@ -1007,7 +1057,8 @@ class PosSearchTests(TestCase):
             self.assertEqual(response.status_code, 200)
             return len(ctx)
 
-        self._catalog(categories=2, products_per_category=5)   # 10 products
+        self._catalog(categories=2, products_per_category=5,
+                      mode='legacy')                        # 10 products
         # Warm up (first request in a fresh DB performs one-time session/
         # middleware setup queries that are not related to catalog size).
         self.client.get(reverse('orders:pos'))
@@ -1016,7 +1067,8 @@ class PosSearchTests(TestCase):
         with connection.cursor() as cur:
             cur.execute('DELETE FROM menu_product')
             cur.execute('DELETE FROM menu_category')
-        self._catalog(categories=10, products_per_category=50)  # 500 products
+        self._catalog(categories=10, products_per_category=50,
+                      mode='legacy')                        # 500 products
         large_catalog_queries = count_queries()
 
         self.assertEqual(small_catalog_queries, large_catalog_queries)
@@ -1037,7 +1089,7 @@ class PosDraftStatusTests(TestCase):
         self.category = Category.objects.create(name='Drinks', slug='drinks')
         self.product = Product.objects.create(
             category=self.category, name='Iced Coffee', price='60.00',
-            stock_quantity=10,
+            stock_quantity=10, inventory_tracking_mode='legacy',
         )
 
     def _create_order_with_token(self, token):
@@ -1108,7 +1160,7 @@ class NewOrderRealtimePayloadTests(TestCase):
         self.category = Category.objects.create(name='Coffee', slug='coffee-rt')
         self.product = Product.objects.create(
             category=self.category, name='Espresso', price='60.00',
-            stock_quantity=50,
+            stock_quantity=50, inventory_tracking_mode='legacy',
         )
 
     def _drain(self, q):
@@ -1177,7 +1229,7 @@ class PaymentFirstFlowTests(TestCase):
         self.category = Category.objects.create(name='Drinks', slug='drinks-pf')
         self.product = Product.objects.create(
             category=self.category, name='Latte', price='75.00',
-            stock_quantity=20,
+            stock_quantity=20, inventory_tracking_mode='legacy',
         )
 
     def _customer_order(self, quantity=1):
@@ -1736,7 +1788,7 @@ class GCashPaymentDetailTest(TestCase):
         self.category = Category.objects.create(name='Drinks', slug='drinks-detail')
         self.product = Product.objects.create(
             category=self.category, name='Matcha Latte', price='90.00',
-            stock_quantity=10,
+            stock_quantity=10, inventory_tracking_mode='legacy',
         )
 
     def _gcash_pending_order(self):
@@ -1892,7 +1944,7 @@ class CustomerReceiptTests(TestCase):
         )
         self.product = Product.objects.create(
             category=self.category, name='Iced Latte', price='75.00',
-            stock_quantity=20,
+            stock_quantity=20, inventory_tracking_mode='legacy',
         )
 
     # ── Helpers ────────────────────────────────────────────────────────────
@@ -2165,7 +2217,7 @@ class PaidAtTimestampTests(TestCase):
         )
         self.product = Product.objects.create(
             category=self.category, name='Latte', price='80.00',
-            stock_quantity=50,
+            stock_quantity=50, inventory_tracking_mode='legacy',
         )
         self.client.force_login(self.cashier)
 
@@ -2623,7 +2675,7 @@ class OrderListAjaxTests(TestCase):
         self.category = Category.objects.create(name='Drinks', slug='drinks')
         self.product = Product.objects.create(
             category=self.category, name='Iced Coffee', price='60.00',
-            stock_quantity=10,
+            stock_quantity=10, inventory_tracking_mode='legacy',
         )
 
     def _order(self, customer_name='Test Customer', status='awaiting_payment'):

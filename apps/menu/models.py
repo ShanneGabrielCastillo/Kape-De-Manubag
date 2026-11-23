@@ -276,7 +276,10 @@ class Product(models.Model):
     #               existing and new products until explicitly switched).
     # 'ingredient' — new ingredient-based reservation system (Phase 5B+).
     #
-    # This field is set only by the cutover/rollback service (Phase 8).
+    # This field is set only by the cutover service (Phase 8).  Phase 7D-2A:
+    # ingredient-to-legacy rollback is RETIRED — only legacy→ingredient
+    # cutovers are supported; ingredient tracking is the permanent direction
+    # for active products.
     # It must NEVER be exposed on generic product forms or admin editing
     # screens. The application behavior is unchanged until Phase 5A+ reads it.
     INVENTORY_TRACKING_LEGACY     = 'legacy'
@@ -288,12 +291,17 @@ class Product(models.Model):
     inventory_tracking_mode = models.CharField(
         max_length=10,
         choices=INVENTORY_TRACKING_CHOICES,
-        default=INVENTORY_TRACKING_LEGACY,
+        # Phase 7B-1: new products are ingredient-tracked by default so
+        # ordinary creation paths cannot silently reintroduce legacy
+        # finished-product inventory. Existing rows keep their stored mode;
+        # changes to existing products remain the cutover service's job.
+        default=INVENTORY_TRACKING_INGREDIENT,
         db_index=True,
         help_text=(
             'Which inventory ledger tracks this product. '
-            '"legacy" uses the existing stock_quantity system. '
-            '"ingredient" uses the ingredient-based reservation system (future). '
+            '"legacy" uses the existing stock_quantity system (transition '
+            'only — new products are ingredient-tracked). '
+            '"ingredient" uses the ingredient-based reservation system. '
             'Changed only by the inventory cutover service — never through '
             'the product edit form.'
         ),
@@ -323,6 +331,12 @@ class Product(models.Model):
         categories -- the menu and POS present products grouped by category.
         """
         super().clean()
+        # Phase 7D-4: the Django admin change form edits ``is_active``
+        # directly and never calls ``activate()``. Reusing the same
+        # transition rule here turns a crafted/ticked reactivation into a
+        # normal form error instead of a silent write.
+        if self._would_reactivate_legacy_product():
+            raise ValidationError(LEGACY_PRODUCT_REACTIVATION_ERROR)
         if not self.name:
             return
         self.name = self.name.strip()
@@ -337,6 +351,20 @@ class Product(models.Model):
                     f'"{self.category}" category. Please choose a different name.'
                 ),
             })
+
+    def _would_reactivate_legacy_product(self):
+        """True when a form save would flip an inactive legacy product back
+        to active.
+
+        Guards the Django admin change form, whose editable ``is_active``
+        checkbox saves the model directly and therefore never calls
+        ``activate()``. Only the transition is blocked; edits to an active
+        legacy product and edits that leave it inactive are unaffected.
+        """
+        if (self.inventory_tracking_mode != self.INVENTORY_TRACKING_LEGACY
+                or not self.is_active or not self.pk):
+            return False
+        return not Product.objects.filter(pk=self.pk, is_active=True).exists()
 
     def _duplicate_name_in_category(self):
         """True when another product in this category uses the same name,
@@ -444,7 +472,17 @@ class Product(models.Model):
         self.save(update_fields=['is_active', 'deactivated_at', 'updated_at'])
 
     def activate(self):
-        """Re-activate a deactivated product."""
+        """Re-activate a deactivated product.
+
+        Phase 7D-4: legacy-tracked products are historical. They may be
+        deactivated and edited, but not brought back into service; only an
+        explicit, audited conversion may make them sellable again. The check
+        runs before any field is mutated, so a rejected call cannot leave
+        partial state or touch ``deactivated_at``.
+        """
+        if (self.inventory_tracking_mode == self.INVENTORY_TRACKING_LEGACY
+                and not self.is_active):
+            raise ValidationError(LEGACY_PRODUCT_REACTIVATION_ERROR)
         self.is_active = True
         self.deactivated_at = None
         self.save(update_fields=['is_active', 'deactivated_at', 'updated_at'])
@@ -477,7 +515,8 @@ class Product(models.Model):
                 name='product_stock_non_negative',
             ),
             # Phase 4A: inventory tracking mode must be one of two defined values.
-            # The field is set only by the cutover/rollback service (Phase 8);
+            # The field is set only by the cutover service (Phase 8; rollback to
+            # legacy retired in Phase 7D-2A);
             # all records default to 'legacy' and this constraint is the DB-level
             # backstop against invalid writes.
             models.CheckConstraint(
@@ -493,6 +532,16 @@ class Product(models.Model):
 PRODUCT_SOFT_DELETE_ERROR = (
     'Products cannot be deleted from the database. Deactivate them instead; '
     'their order and report history stays intact.'
+)
+
+# Phase 7D-4: shared by ``Product.activate()`` (direct callers) and
+# ``Product.clean()`` (the Django admin change form, which saves the model
+# without going through ``activate()``).
+LEGACY_PRODUCT_REACTIVATION_ERROR = (
+    'This product uses legacy inventory tracking and cannot be reactivated. '
+    'Convert it to ingredient tracking (configure its recipes and packaging, '
+    'then run the cutover) or leave it deactivated. Historical orders, '
+    'inventory logs and reports are not affected.'
 )
 
 CATEGORY_DELETE_ERROR = (
