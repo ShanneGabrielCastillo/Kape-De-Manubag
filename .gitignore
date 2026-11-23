@@ -22,13 +22,23 @@ local_settings.py
 db.sqlite3
 db.sqlite3-shm
 db.sqlite3-wal
+# Local database backups (may contain password hashes and operational data)
+backups/
+db.sqlite3.backup-*
+db.sqlite3.*.bak
+db.sqlite3.*.bak-shm
+db.sqlite3.*.bak-wal
 staticfiles/
 media/*
 !media/.gitkeep
 data_export.json
 
-# Environment variables — NEVER commit this
+# Environment variables — NEVER commit real values.
+# Templates stay trackable; every other .env* file is ignored.
 .env
+.env.*
+!.env.example
+!.env.prod.example
 
 # OS files
 .DS_Store

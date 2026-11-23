@@ -123,6 +123,9 @@ SECRET_KEY=generate-a-50-char-random-string-here
 DEBUG=False
 ALLOWED_HOSTS=yourusername.pythonanywhere.com
 CSRF_TRUSTED_ORIGINS=https://yourusername.pythonanywhere.com
+# PythonAnywhere has no DATABASE_URL; SQLite must be opted into explicitly
+# when DEBUG=False, otherwise the app refuses to start by design.
+ALLOW_SQLITE_IN_PRODUCTION=1
 ```
 
 To generate a secret key, run this in the Bash console:
@@ -143,11 +146,12 @@ source venv/bin/activate
 # Run all migrations
 python manage.py migrate
 
-# Create admin superuser
-python manage.py createsuperuser
+# Seed demo data (categories, products, system settings only — no accounts)
+python manage.py seed_data
 
-# Seed initial data (categories, products, system settings)
-python manage.py shell < sample_data/seed_data.py
+# Create the administrator with unique credentials (interactive; the seed
+# script never creates an administrator or cashier account)
+python manage.py createsuperuser
 
 # Collect static files into /staticfiles/
 python manage.py collectstatic --noinput
@@ -325,6 +329,9 @@ ls ~/kape_de_manubag_system/media/
 ```
 .env must contain:
 CSRF_TRUSTED_ORIGINS=https://yourusername.pythonanywhere.com
+# PythonAnywhere has no DATABASE_URL; SQLite must be opted into explicitly
+# when DEBUG=False, otherwise the app refuses to start by design.
+ALLOW_SQLITE_IN_PRODUCTION=1
 
 After editing .env, click Reload in the Web tab.
 ```
@@ -379,8 +386,8 @@ pip install --upgrade pip
 pip install -r requirements.txt
 nano .env                                  # create .env with your values
 python manage.py migrate
-python manage.py createsuperuser
-python manage.py shell < sample_data/seed_data.py
+python manage.py seed_data                          # demo data only; no accounts
+python manage.py createsuperuser                    # unique administrator credentials
 python manage.py collectstatic --noinput
 ```
 

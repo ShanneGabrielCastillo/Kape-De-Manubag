@@ -28,12 +28,21 @@ threads = 4
 # Workers: Render sets WEB_CONCURRENCY automatically (1 on free tier).
 workers = int(os.environ.get("WEB_CONCURRENCY", 1))
 
-# Timeout: gthread workers must not time out SSE connections (which are
-# intentionally long-lived). Set to 0 to disable the worker timeout.
-timeout = 0
+# Timeout: worker-heartbeat watchdog. With gthread, this measures whether the
+# worker process is still communicating, not how long an individual request
+# takes, so long-lived SSE streams are not capped by it. 0 would disable the
+# watchdog entirely and let a wedged worker live forever. Override with
+# GUNICORN_TIMEOUT. SSE behaviour must still be verified in the Phase 7B-3
+# local Docker rehearsal.
+timeout = int(os.environ.get("GUNICORN_TIMEOUT", "120"))
 
 # Keep-alive: how long to wait for the next request on a keep-alive connection.
 keepalive = 5
 
 # Bind address: Render exposes the port via the PORT environment variable.
 bind = f"0.0.0.0:{os.environ.get('PORT', '10000')}"
+
+# Access/error logs to the container's stdout/stderr so `docker logs` and
+# platform log collectors see them. Gunicorn treats "-" as stdout/stderr.
+accesslog = "-"
+errorlog = "-"

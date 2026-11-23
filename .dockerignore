@@ -1,8 +1,11 @@
 # .dockerignore — keep secrets, runtime data and host-only clutter out of
 # the image build context and its layers.
 
-# ── Secrets: never baked into image layers ───────────────────────────────
+# ── Secrets: never baked into image layers or build context ─────────────
+# Covers .env and variants such as .env.prod / .env.production. Templates are
+# not needed at runtime, so they are excluded too.
 .env
+.env.*
 
 # ── Runtime data: provided via the compose bind mount, never copied ──────
 # The existing SQLite database must never be reset, replaced or baked in.
