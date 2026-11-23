@@ -1,0 +1,77 @@
+{% extends "base_admin.html" %}
+{% load static %}
+
+{% block page_title %}Two-Factor Authentication{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:720px">
+  <div class="card-header" style="display:flex;align-items:center;gap:10px">
+    <i data-lucide="shield-check" style="width:22px;height:22px" aria-hidden="true"></i>
+    <h3 style="margin:0">Two-Factor Authentication</h3>
+  </div>
+  <div class="card-body">
+
+    {% if mfa_enabled %}
+    <p style="font-size:0.9rem;color:#6b5d4d;line-height:1.6">
+      <strong style="color:var(--green-accent)">Enabled.</strong>
+      Sign-in requires a code from your authenticator app.
+      You have <strong>{{ unused_codes }}</strong> unused recovery code{{ unused_codes|pluralize }}.
+    </p>
+
+    <div style="border-top:1px solid #eee;margin:18px 0"></div>
+
+    <h4 style="margin:0 0 8px">Regenerate recovery codes</h4>
+    <p style="font-size:0.85rem;color:#8a7a68;line-height:1.6">
+      Replaces all unused codes. Existing codes stop working immediately. Requires
+      a current authenticator or recovery code.
+    </p>
+    <form method="post" action="{% url 'accounts:mfa_regenerate_recovery_codes' %}" autocomplete="off">
+      {% csrf_token %}
+      <div class="form-group" style="max-width:260px">
+        <label class="form-label" for="id_regen_code">Authenticator code</label>
+        <input type="text" name="code" id="id_regen_code" class="form-control"
+               inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required
+               placeholder="000000" autocomplete="one-time-code">
+      </div>
+      <button type="submit" class="btn btn-outline">Regenerate codes</button>
+    </form>
+
+    <div style="border-top:1px solid #eee;margin:22px 0"></div>
+
+    <h4 style="margin:0 0 8px">Disable two-factor authentication</h4>
+    <p style="font-size:0.85rem;color:#8a7a68;line-height:1.6">
+      This removes your authenticator and all recovery codes. Requires a current
+      authenticator or recovery code, plus a recent verification.
+    </p>
+    <form method="post" action="{% url 'accounts:mfa_disable' %}" autocomplete="off"
+          onsubmit="return confirm('Disable two-factor authentication for your account?');">
+      {% csrf_token %}
+      <div class="form-group" style="max-width:260px">
+        <label class="form-label" for="id_disable_code">Authenticator code</label>
+        <input type="text" name="code" id="id_disable_code" class="form-control"
+               inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required
+               placeholder="000000" autocomplete="one-time-code">
+      </div>
+      <button type="submit" class="btn btn-outline" style="color:var(--red-accent);border-color:var(--red-accent)">
+        Disable MFA
+      </button>
+    </form>
+
+    {% if not recently_verified %}
+    <p style="font-size:0.8rem;color:#a0978a;margin-top:14px">
+      For your security, these actions require a recent verification.
+      <a href="{% url 'accounts:mfa_challenge' %}?next={% url 'accounts:mfa_manage' %}"
+         style="color:var(--caramel);font-weight:600">Verify again</a>.
+    </p>
+    {% endif %}
+
+    {% else %}
+    <p style="font-size:0.9rem;color:#6b5d4d;line-height:1.6">
+      <strong>Not enabled.</strong> Add an authenticator app to protect this
+      account with a one-time code at sign-in.
+    </p>
+    <a href="{% url 'accounts:mfa_setup' %}" class="btn btn-primary">Set up two-factor authentication</a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

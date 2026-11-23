@@ -210,6 +210,23 @@
     </div>
   </div>
 
+  {# Two-factor authentication card (Phase 5D) #}
+  <div class="card">
+    <div class="card-header"><h3><i data-lucide="shield-check" class="btn-icon" aria-hidden="true"></i> Two-Factor Authentication</h3></div>
+    <div class="card-body" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+      <p style="margin:0;font-size:0.88rem;color:#888">
+        {% if mfa_enabled %}
+        Enabled — sign-in requires a code from your authenticator app.
+        {% else %}
+        Add an authenticator app for an extra layer of security at sign-in.
+        {% endif %}
+      </p>
+      <a href="{% url 'accounts:mfa_manage' %}" class="btn btn-outline" style="white-space:nowrap;flex-shrink:0">
+        {% if mfa_enabled %}Manage MFA{% else %}Set Up MFA{% endif %}
+      </a>
+    </div>
+  </div>
+
 </div><!-- /.profile-layout -->
 
 {# Hidden form for Remove Photo — POSTs remove_photo=1 to profile_view #}

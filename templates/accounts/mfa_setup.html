@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Set up two-factor authentication — Kape De Manubag{% endblock %}
+
+{% block body %}
+<div class="login-page">
+  <div class="login-card" style="max-width:520px">
+    <div class="login-brand">
+      <h1>🔐 Two-Factor Authentication</h1>
+      <p>Protect your staff account with an authenticator app</p>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-error" style="margin-bottom:1rem">{{ error }}</div>
+    {% endif %}
+
+    {% if confirm_password %}
+    <p style="font-size:0.9rem;color:#6b5d4d;line-height:1.6">
+      For your security, confirm your current password before setting up an
+      authenticator. This proves the request comes from you, not just from a
+      signed-in browser session.
+    </p>
+
+    <form method="post" autocomplete="off">
+      {% csrf_token %}
+      <div class="form-group">
+        <label class="form-label" for="id_password">Current password</label>
+        <input type="password" name="password" id="id_password" class="form-control" required
+               autocomplete="current-password" autofocus>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Continue</button>
+    </form>
+
+    <p style="text-align:center;margin-top:16px;font-size:0.8rem;color:#a0978a">
+      Password confirmation is valid for a few minutes.
+      <a href="{% url 'accounts:profile' %}" style="color:var(--caramel);font-weight:600">Cancel</a>
+    </p>
+
+    {% else %}
+    <ol style="color:#8a7a68;font-size:0.88rem;line-height:1.7;margin:0 0 16px 18px">
+      <li>Open Google Authenticator, Microsoft Authenticator, Aegis or any TOTP app.</li>
+      <li>Scan the QR code below (or enter the key manually).</li>
+      <li>Enter the 6-digit code shown in the app to finish.</li>
+    </ol>
+
+    <div style="text-align:center;margin-bottom:14px">
+      <img src="{{ qr_data_uri }}" alt="Authenticator QR code" width="220" height="220"
+           style="border-radius:12px;border:4px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.08)">
+    </div>
+
+    <div style="text-align:center;margin-bottom:18px">
+      <p style="font-size:0.78rem;color:#a0978a;margin:0 0 6px">Manual entry key</p>
+      <code style="display:inline-block;word-break:break-all;background:var(--cream);padding:8px 12px;border-radius:8px;font-size:0.9rem;letter-spacing:1px">{{ secret }}</code>
+      <p style="font-size:0.78rem;color:#a0978a;margin:6px 0 0">Account: {{ account_name }}</p>
+    </div>
+
+    <form method="post" autocomplete="off">
+      {% csrf_token %}
+      <div class="form-group">
+        <label class="form-label" for="id_code">6-digit code</label>
+        <input type="text" name="code" id="id_code" class="form-control" required
+               inputmode="numeric" pattern="[0-9]{6}" maxlength="6"
+               placeholder="000000" autofocus autocomplete="one-time-code">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Verify and enable</button>
+    </form>
+
+    <p style="text-align:center;margin-top:16px;font-size:0.8rem;color:#a0978a">
+      Two-factor authentication is not enabled until you verify a code.
+      <a href="{% url 'accounts:profile' %}" style="color:var(--caramel);font-weight:600">Cancel</a>
+    </p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,5 +1,8 @@
 Django==4.2.16
 Pillow==10.4.0
+cryptography==50.0.2
+django-otp==1.5.4
+qrcode[pil]==8.0
 python-dotenv==1.0.1
 openpyxl==3.1.5
 whitenoise==6.7.0

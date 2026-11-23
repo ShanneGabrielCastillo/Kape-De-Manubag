@@ -129,6 +129,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'apps.accounts.middleware.ActiveUserMiddleware',
     'apps.accounts.middleware.SessionIdleTimeoutMiddleware',
+    'apps.accounts.middleware.MFAEnforcementMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
@@ -154,31 +155,67 @@ TEMPLATES = [
 WSGI_APPLICATION = 'kape_de_manubag.wsgi.application'
 
 # ── Database ──────────────────────────────────────────────────────────────────
-# Uses PostgreSQL in production (DATABASE_URL set) and SQLite for local dev.
-_database_url = os.environ.get('DATABASE_URL')
+# Selection rules (Phase 7B-1):
+#   DATABASE_URL set                                -> PostgreSQL
+#   DEBUG=True, no DATABASE_URL                     -> SQLite (development)
+#   DEBUG=False, no DATABASE_URL, explicit opt-in   -> SQLite (deliberate)
+#   DEBUG=False, no DATABASE_URL, no opt-in         -> refuse to start
+#   DATABASE_URL AND ALLOW_SQLITE_IN_PRODUCTION     -> refuse (ambiguous)
+#
+# SQLITE_PATH only chooses where the SQLite file lives. It never authorizes
+# SQLite in production; ALLOW_SQLITE_IN_PRODUCTION does that explicitly.
+_database_url = (os.environ.get('DATABASE_URL') or '').strip()
+_allow_sqlite_in_production = _env_bool('ALLOW_SQLITE_IN_PRODUCTION')
+_sqlite_path = (os.environ.get('SQLITE_PATH') or '').strip() or (BASE_DIR / 'db.sqlite3')
 
-if _database_url:
-    # Production: PostgreSQL on Render (or any DATABASE_URL provider).
-    # dj-database-url parses the URL into the Django DATABASES dict.
-    import dj_database_url
-    DATABASES = {
-        'default': dj_database_url.config(
-            default=_database_url,
-            conn_max_age=600,       # persistent connections — reuse instead of reconnect per request
-            conn_health_checks=True,
+
+def _build_databases(debug, database_url, sqlite_path, allow_sqlite_in_production):
+    """Return the DATABASES setting for the given deployment inputs.
+
+    Kept as a pure function so the selection rules can be tested without
+    touching a real database or re-reading the environment.
+    """
+    if database_url:
+        if allow_sqlite_in_production:
+            raise ImproperlyConfigured(
+                'DATABASE_URL and ALLOW_SQLITE_IN_PRODUCTION=1 are both set. '
+                'That is ambiguous: choose PostgreSQL (unset '
+                'ALLOW_SQLITE_IN_PRODUCTION) or SQLite (unset DATABASE_URL). '
+            )
+        # PostgreSQL via dj-database-url (default persistent connections).
+        import dj_database_url
+        return {
+            'default': dj_database_url.config(
+                default=database_url,
+                conn_max_age=600,       # persistent connections — reuse instead of reconnect per request
+                conn_health_checks=True,
+            )
+        }
+
+    if not debug and not allow_sqlite_in_production:
+        raise ImproperlyConfigured(
+            'DATABASE_URL is not set and ALLOW_SQLITE_IN_PRODUCTION is not '
+            'enabled. Production (DEBUG=False) refuses to fall back to SQLite '
+            'silently. Set DATABASE_URL for PostgreSQL, or set '
+            'ALLOW_SQLITE_IN_PRODUCTION=1 to use SQLite deliberately '
+            '(SQLITE_PATH chooses the file location).'
         )
-    }
-else:
-    # Local development: SQLite with WAL mode (set in dashboard AppConfig.ready())
-    DATABASES = {
+
+    # SQLite: WAL mode is enabled per connection in dashboard AppConfig.ready().
+    return {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
+            'NAME': sqlite_path,
             'OPTIONS': {
                 'timeout': 20,
             },
         }
     }
+
+
+DATABASES = _build_databases(
+    DEBUG, _database_url, _sqlite_path, _allow_sqlite_in_production
+)
 
 # ── Password validation ───────────────────────────────────────────────────────
 AUTH_PASSWORD_VALIDATORS = [
@@ -253,6 +290,42 @@ LOGOUT_REDIRECT_URL = '/accounts/login/'
 LOGIN_MAX_ATTEMPTS_PER_USERNAME = 5
 LOGIN_MAX_ATTEMPTS_PER_IP = 10
 LOGIN_LOCKOUT_MINUTES = 15
+
+# Password-reset request throttling (Phase 5C). Limits are per keyed-email
+# hash and per client IP with a shared sliding window; reset emails are
+# low-volume operational mail, so the per-address quota is small while the
+# per-IP quota tolerates several staff sharing one office address.
+# See apps/accounts/reset_throttle.py for details.
+RESET_MAX_PER_EMAIL = 3
+RESET_MAX_PER_IP = 10
+RESET_THROTTLE_MINUTES = 15
+
+# ── Multi-factor authentication (Phase 5D) ────────────────────────────────────
+# TOTP for staff accounts. Secrets are Fernet-encrypted at rest; set
+# MFA_ENCRYPTION_KEY in production (generate it with:
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+# When DEBUG=False the key is REQUIRED: startup fails fast (system check
+# accounts.E001) instead of silently deriving one. Local development and the
+# test suite may derive a dedicated key from SECRET_KEY instead; that fallback
+# is allowed by MFA_ALLOW_SECRET_KEY_FALLBACK (defaults to DEBUG, i.e. on for
+# development and off for production) and is surfaced by system check
+# accounts.W001 when it is used outside DEBUG. A SECRET_KEY rotation makes
+# fallback-encrypted authenticators unreadable -- recovery codes still work,
+# and `manage.py mfa_reset <username>` restores access.
+MFA_ENCRYPTION_KEY = os.environ.get('MFA_ENCRYPTION_KEY', '')
+MFA_ALLOW_SECRET_KEY_FALLBACK = _env_bool('MFA_ALLOW_SECRET_KEY_FALLBACK', DEBUG)
+# How long a successful password confirmation permits enrollment (seconds).
+MFA_ENROLL_REAUTH_SECONDS = int(os.environ.get('MFA_ENROLL_REAUTH_SECONDS', '600'))
+MFA_MAX_ATTEMPTS_PER_USER = int(os.environ.get('MFA_MAX_ATTEMPTS_PER_USER', '5'))
+MFA_MAX_ATTEMPTS_PER_IP = int(os.environ.get('MFA_MAX_ATTEMPTS_PER_IP', '10'))
+MFA_LOCKOUT_MINUTES = int(os.environ.get('MFA_LOCKOUT_MINUTES', '15'))
+MFA_CHALLENGE_TIMEOUT_SECONDS = int(os.environ.get('MFA_CHALLENGE_TIMEOUT_SECONDS', '300'))
+MFA_SETUP_SECRET_TIMEOUT_SECONDS = int(os.environ.get('MFA_SETUP_SECRET_TIMEOUT_SECONDS', '900'))
+MFA_SESSION_MAX_AGE_SECONDS = int(os.environ.get('MFA_SESSION_MAX_AGE_SECONDS', str(12 * 60 * 60)))
+MFA_RECOVERY_CODE_COUNT = int(os.environ.get('MFA_RECOVERY_CODE_COUNT', '10'))
+# Hard-require enrollment before /admin/ access. Off during rollout so the
+# existing administrator is not locked out; enable once every admin has enrolled.
+MFA_REQUIRE_ADMIN_ENROLLMENT = _env_bool('MFA_REQUIRE_ADMIN_ENROLLMENT', False)
 
 # ── Anonymous customer order rate limiting ────────────────────────────────────
 # Maximum number of successful orders an anonymous customer session may place
@@ -356,6 +429,11 @@ if not DEBUG:
 # console (WARNING and above) so nothing is duplicated on stdout.
 LOG_DIR = BASE_DIR / 'logs'
 
+# When LOG_TO_STDOUT is enabled, logs go to stdout/stderr and no log directory
+# is created and no rotating file handlers are opened. This is the supported
+# mode for read-only container filesystems (Docker production).
+LOG_TO_STDOUT = _env_bool('LOG_TO_STDOUT')
+
 
 class _LevelFilter(logging.Filter):
     """Keep only records whose level falls within ``[min_level, max_level]``.
@@ -396,7 +474,41 @@ LOGGING = {
     'loggers': {},
 }
 
-if DEBUG:
+if LOG_TO_STDOUT:
+    # ── Stdout mode (containers, read-only filesystems) ────────────────────
+    # One handler, no files, no duplicate handlers. Levels match the
+    # production file setup: framework INFO, request/security WARNING,
+    # root WARNING.
+    LOGGING['handlers'] = {
+        'console': {'class': 'logging.StreamHandler', 'formatter': 'verbose'},
+    }
+    LOGGING['loggers'] = {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'django.security': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'django.server': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+    }
+    LOGGING['root'] = {
+        'handlers': ['console'],
+        'level': 'WARNING',
+    }
+elif DEBUG:
     # ── Development ────────────────────────────────────────────────────────
     # Everything goes to the console. django.server keeps the familiar
     # per-request lines; django.request surfaces 5xx + unhandled exceptions

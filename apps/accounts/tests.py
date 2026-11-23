@@ -366,6 +366,96 @@ class BruteForceTests(TestCase):
         self.assertEqual(FailedLoginAttempt.objects.count(), 0)
 
 
+class AdminLoginBruteForceTests(TestCase):
+    """The standard Django Admin login uses the shared brute-force guard."""
+
+    LOCKED_MSG = 'Too many failed login attempts.'
+    URL = '/admin/login/'
+
+    def setUp(self):
+        self.admin = CustomUser.objects.create_superuser(
+            username='admin_login_user', password=PASSWORD, role='admin',
+        )
+        self.non_staff = _create_user('admin_login_cashier', 'cashier')
+
+    def _post(self, username, password, ip='127.0.0.1', next_url=None):
+        data = {'username': username, 'password': password}
+        if next_url:
+            data['next'] = next_url
+        return self.client.post(self.URL, data, REMOTE_ADDR=ip)
+
+    def _row(self, scope, value):
+        return FailedLoginAttempt.objects.get(scope=scope, value=value)
+
+    def test_repeated_failures_trigger_admin_lockout(self):
+        for _ in range(5):
+            response = self._post('admin_login_user', 'wrong-password')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            self._row('username', 'admin_login_user').attempts, 5,
+        )
+        self.assertEqual(self._row('ip', '127.0.0.1').attempts, 5)
+
+    def test_correct_credentials_rejected_while_locked(self):
+        for _ in range(5):
+            self._post('admin_login_user', 'wrong-password')
+
+        response = self._post('admin_login_user', PASSWORD)
+
+        self.assertEqual(response.status_code, 429)
+        self.assertContains(response, self.LOCKED_MSG, status_code=429)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_successful_admin_login_clears_counters(self):
+        self._post('admin_login_user', 'wrong-password')
+        self._post('admin_login_user', 'wrong-password')
+        self.assertEqual(FailedLoginAttempt.objects.count(), 2)  # user + IP rows
+
+        response = self._post(
+            'admin_login_user', PASSWORD, next_url=reverse('admin:index'),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('_auth_user_id', self.client.session)
+        self.assertEqual(FailedLoginAttempt.objects.count(), 0)
+
+    def test_unknown_username_locks_out_like_known_username(self):
+        for _ in range(5):
+            self._post('ghost_admin_user', 'wrong-password', ip='10.20.30.40')
+        unknown = self._post(
+            'ghost_admin_user', PASSWORD, ip='10.20.30.40',
+        )
+
+        for _ in range(5):
+            self._post('admin_login_user', 'wrong-password', ip='10.20.30.41')
+        known = self._post(
+            'admin_login_user', PASSWORD, ip='10.20.30.41',
+        )
+
+        self.assertEqual(unknown.status_code, 429)
+        self.assertEqual(known.status_code, 429)
+        self.assertContains(unknown, self.LOCKED_MSG, status_code=429)
+        self.assertContains(known, self.LOCKED_MSG, status_code=429)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_successful_admin_login_preserves_next_redirect(self):
+        target = reverse('admin:accounts_customuser_changelist')
+
+        response = self._post('admin_login_user', PASSWORD, next_url=target)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, target)
+
+    def test_non_staff_user_cannot_enter_admin(self):
+        self.assertFalse(self.non_staff.is_staff)
+
+        response = self._post('admin_login_cashier', PASSWORD)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+
 class RoleManagementTests(TestCase):
     """Role-change validation: last-administrator protection and authorization.
 
@@ -411,6 +501,16 @@ class RoleManagementTests(TestCase):
         self.client.force_login(self.admin)
         response = self.client.post(f'/accounts/staff/{self.admin.pk}/toggle/')
         self.assertEqual(response.json()['success'], False)
+
+    def test_get_request_cannot_toggle_staff(self):
+        """GET must be rejected: staff activation/deactivation requires POST."""
+        self.client.force_login(self.admin)
+        response = self.client.get(f'/accounts/staff/{self.cashier.pk}/toggle/')
+
+        self.assertEqual(response.status_code, 405)
+        self.cashier.refresh_from_db()
+        self.assertTrue(self.cashier.is_active)
+        self.assertIsNone(self.cashier.deactivated_at)
 
     def test_admin_can_deactivate_cashier(self):
         self.client.force_login(self.admin)
@@ -1335,3 +1435,1074 @@ class StaffListAjaxTests(TestCase):
         region_pos = content.find('id="results-region"')
         self.assertGreater(region_pos, filter_bar_pos,
             'filter-bar must appear before results-region (i.e. is not nested inside it)')
+
+
+
+# ── Phase 5C — password-reset request throttling ──────────────────────────────
+
+from unittest import mock  # noqa: E402  (used by the resend patches below)
+
+from apps.accounts.models import PasswordResetAttempt  # noqa: E402
+
+
+class PasswordResetThrottleTests(TestCase):
+    """Phase 5C: reset requests are throttled per keyed-email-hash and per
+    IP. The outward response never reveals eligibility or throttling, and
+    throttled requests never send mail. All email delivery is mocked — no
+    real email can leave the test environment."""
+
+    URL = '/accounts/password/reset/'
+    DONE_URL = '/accounts/password/reset/done/'
+
+    def setUp(self):
+        self.admin = CustomUser.objects.create_user(
+            username='reset_admin', password=PASSWORD, role='admin',
+            email='Reset.Admin@Example.COM',
+        )
+        # Patch the resend SDK at the module attribute the view imports.
+        patcher = mock.patch('resend.Emails.send')
+        self.send_mock = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _post(self, email, ip='192.0.2.1'):
+        return self.client.post(
+            self.URL, {'email': email}, REMOTE_ADDR=ip)
+
+    def _backdate(self, minutes):
+        """Age every counter past the window (cooldown expiry simulation)."""
+        past = timezone.now() - timedelta(minutes=minutes)
+        PasswordResetAttempt.objects.update(last_attempt_at=past)
+
+    # 1. Eligible email can request a reset within the allowed limit.
+
+    def test_eligible_email_sends_reset_within_limit(self):
+        for _ in range(2):                     # limit is 3 per email
+            response = self._post('reset.admin@example.com')
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(response.url, self.DONE_URL)
+        self.assertEqual(self.send_mock.call_count, 2)
+
+    # 2. Unknown email receives the same outward response as an eligible one.
+
+    def test_unknown_email_same_response_and_no_email(self):
+        known = self._post('reset.admin@example.com')
+        unknown = self._post('ghost@example.com')
+        self.assertEqual(known.status_code, unknown.status_code)
+        self.assertEqual(known.url, unknown.url)
+        # Only the eligible address produced an email.
+        self.assertEqual(self.send_mock.call_count, 1)
+        # The email goes to the ACCOUNT's stored address (the view looks
+        # the user up by email and sends to user.email).
+        self.assertEqual(self.send_mock.call_args.args[0]['to'],
+                         [self.admin.email])
+
+    # 3. Ineligible / inactive accounts receive the same outward response.
+
+    def test_ineligible_and_inactive_same_response_and_no_email(self):
+        CustomUser.objects.create_user(
+            username='reset_customer', password=PASSWORD, role='customer',
+            email='customer@example.com',
+        )
+        CustomUser.objects.create_user(
+            username='reset_inactive', password=PASSWORD, role='cashier',
+            email='inactive@example.com', is_active=False,
+        )
+        for email in ('customer@example.com', 'inactive@example.com'):
+            response = self._post(email)
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(response.url, self.DONE_URL)
+        self.assertEqual(self.send_mock.call_count, 0)
+
+    # 4. Repeated requests for one email eventually stop sending emails.
+
+    def test_per_email_limit_stops_emails(self):
+        for _ in range(3):                     # exactly the per-email limit
+            self._post('reset.admin@example.com')
+        self.assertEqual(self.send_mock.call_count, 3)
+        # The 4th request: same outward redirect, no additional email.
+        throttled = self._post('reset.admin@example.com')
+        self.assertEqual(throttled.status_code, 302)
+        self.assertEqual(throttled.url, self.DONE_URL)
+        self.assertEqual(self.send_mock.call_count, 3)
+
+    # 5. Repeated requests from one IP eventually stop reset-email sends.
+
+    def test_per_ip_limit_stops_emails(self):
+        for i in range(10):                    # exactly the per-IP limit
+            self._post(f'staff{i}@example.com', ip='203.0.113.9')
+        self.assertEqual(self.send_mock.call_count, 0)  # none were eligible
+        # The 11th, now for the ELIGIBLE account, is throttled by IP: no
+        # lookup happens and no email is sent.
+        throttled = self._post(
+            'reset.admin@example.com', ip='203.0.113.9')
+        self.assertEqual(throttled.status_code, 302)
+        self.assertEqual(throttled.url, self.DONE_URL)
+        self.assertEqual(self.send_mock.call_count, 0)
+
+    # 6. Different email addresses from one IP share the IP limit.
+
+    def test_ip_limit_applies_across_emails(self):
+        for i in range(10):
+            self._post(f'other{i}@example.com', ip='198.51.100.7')
+        row = PasswordResetAttempt.objects.get(
+            scope='ip', value='198.51.100.7')
+        self.assertEqual(row.attempts, 10)
+        # A different fresh email from the same IP is still throttled.
+        response = self._post('brandnew@example.com', ip='198.51.100.7')
+        self.assertEqual(response.url, self.DONE_URL)
+        self.assertEqual(self.send_mock.call_count, 0)
+
+    # 7. Email normalization is consistent for the per-email limit.
+
+    def test_email_normalization_shared_counter(self):
+        self._post('reset.admin@example.com')
+        self._post('  Reset.Admin@Example.COM ')     # same address, typed
+        self._post('RESET.ADMIN@example.com')        # differently each time
+        # One keyed email-scope row, attempts == 3 (at the limit)...
+        rows = PasswordResetAttempt.objects.filter(scope='email')
+        self.assertEqual(rows.count(), 1)
+        self.assertEqual(rows[0].attempts, 3)
+        # ...so all three actually sent (each request is checked BEFORE the
+        # counter increments — the limit bites on the NEXT request) and a
+        # differently-cased 4th is throttled with no extra email.
+        self.assertEqual(self.send_mock.call_count, 3)
+        throttled = self._post('reset.ADMIN@example.com')
+        self.assertEqual(throttled.url, self.DONE_URL)
+        self.assertEqual(self.send_mock.call_count, 3)
+        # The stored identifier is a keyed hash, never the raw address.
+        self.assertNotIn('reset.admin', rows[0].value)
+        self.assertEqual(len(rows[0].value), 64)
+
+    # 8. A throttled request does not generate or send another email.
+
+    def test_throttled_request_never_touches_users_or_email(self):
+        for _ in range(3):
+            self._post('reset.admin@example.com')
+        with mock.patch(
+            'apps.accounts.views.CustomUser.objects.filter'
+        ) as lookup_mock:
+            throttled = self._post('reset.admin@example.com')
+        self.assertEqual(throttled.url, self.DONE_URL)
+        lookup_mock.assert_not_called()       # no account lookup at all
+        self.assertEqual(self.send_mock.call_count, 3)
+
+    # 9. Requests can be made again after the cooldown expires.
+
+    def test_window_expiry_allows_requests_again(self):
+        for _ in range(3):
+            self._post('reset.admin@example.com')
+        self._post('reset.admin@example.com')            # throttled
+        self.assertEqual(self.send_mock.call_count, 3)
+        self._backdate(minutes=16)                        # > 15-minute window
+        response = self._post('reset.admin@example.com')
+        self.assertEqual(response.url, self.DONE_URL)
+        self.assertEqual(self.send_mock.call_count, 4)    # sent again
+        row = PasswordResetAttempt.objects.get(scope='email')
+        self.assertEqual(row.attempts, 1)                 # fresh window
+
+    # 10. Existing reset-token behavior remains functional.
+
+    def test_reset_token_flow_still_works(self):
+        self._post('reset.admin@example.com')
+        self.assertEqual(self.send_mock.call_count, 1)
+        body = self.send_mock.call_args.args[0]['text']
+        # Extract the reset URL from the rendered email body.
+        start = body.index('http')
+        end = body.index('\n', start) if '\n' in body[start:] else len(body)
+        reset_url = body[start:end].strip()
+        path = reset_url.split('/accounts/', 1)[1].rstrip('/')
+        uidb64, token = path.split('/')[-2:]
+
+        from django.contrib.auth import get_user_model
+        from django.contrib.auth.tokens import default_token_generator
+        from django.utils.encoding import force_str
+        from django.utils.http import urlsafe_base64_decode
+        user = get_user_model().objects.get(
+            pk=force_str(urlsafe_base64_decode(uidb64)))
+        self.assertEqual(user.pk, self.admin.pk)
+        self.assertTrue(default_token_generator.check_token(user, token))
+
+        # The confirm page renders the valid form (not the invalid-link page).
+        response = self.client.get(f'/accounts/password/reset/{uidb64}/{token}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'invalid')  # no invalid-link marker
+
+
+# ── Phase 5D — multi-factor authentication ───────────────────────────────────
+
+import base64  # noqa: E402
+import io  # noqa: E402
+import logging  # noqa: E402
+from unittest import mock  # noqa: E402
+
+from cryptography.fernet import Fernet  # noqa: E402
+from django.contrib.auth.hashers import identify_hasher  # noqa: E402
+from django.contrib.auth.tokens import default_token_generator  # noqa: E402
+from django.contrib.sessions.models import Session  # noqa: E402
+from django.core.exceptions import ImproperlyConfigured  # noqa: E402
+from django.core.management import call_command  # noqa: E402
+from django.core.management.base import CommandError  # noqa: E402
+from django.test import Client, SimpleTestCase  # noqa: E402
+from django.utils.encoding import force_bytes  # noqa: E402
+from django.utils.http import urlsafe_base64_encode  # noqa: E402
+from django_otp.oath import TOTP  # noqa: E402
+
+from apps.accounts import checks, mfa  # noqa: E402
+from apps.accounts.models import (  # noqa: E402
+    MFARecoveryCode, MFAVerificationAttempt, StaffMFADevice,
+)
+from apps.audit.models import AuditLog  # noqa: E402
+
+
+class _LogCapture(logging.Handler):
+    def __init__(self):
+        super().__init__(level=logging.DEBUG)
+        self.messages = []
+
+    def emit(self, record):
+        self.messages.append(record.getMessage())
+
+
+@override_settings(
+    PASSWORD_HASHERS=[
+        'django.contrib.auth.hashers.MD5PasswordHasher',
+    ],
+    # The test runner forces DEBUG=False, so the SECRET_KEY-derived key is
+    # explicitly allowed here; production requires MFA_ENCRYPTION_KEY.
+    MFA_ALLOW_SECRET_KEY_FALLBACK=True,
+)
+class MFATests(TestCase):
+    """Phase 5D: TOTP enrolment, login challenge, recovery, management.
+
+    All codes are generated locally with django-otp's TOTP primitive; no
+    network, email or external service is used. The fast password hasher is
+    enabled for this class only (recovery-code hashing + login speed);
+    production hashers are untouched.
+    """
+
+    LOGIN_URL = '/accounts/login/'
+    CHALLENGE_URL = '/accounts/mfa/challenge/'
+
+    def setUp(self):
+        self.admin = CustomUser.objects.create_superuser(
+            username='mfa_admin', password=PASSWORD, role='admin',
+        )
+        self.cashier = _create_user('mfa_cashier', 'cashier')
+        self.customer = _create_user('mfa_customer', 'customer')
+
+    # ── helpers ──────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _code(secret, drift=0):
+        padded = secret + '=' * (-len(secret) % 8)
+        totp = TOTP(base64.b32decode(padded), drift=drift)
+        return f'{totp.token():06d}'
+
+    def _enroll(self, user=None):
+        """Create a confirmed device + recovery codes directly via the service."""
+        user = user or self.admin
+        secret = mfa.generate_secret()
+        _device, codes = mfa.activate_device(user, secret)
+        return mfa.get_device(user), secret, codes
+
+    def _begin_enrollment(self, user=None, password=PASSWORD):
+        """Sign in and confirm the current password to start enrollment."""
+        self.client.force_login(user or self.admin)
+        return self.client.post(
+            reverse('accounts:mfa_setup'), {'password': password})
+
+    def _login(self, username, password=PASSWORD, ip='192.0.2.10', next_url=None):
+        data = {'username': username, 'password': password}
+        if next_url is not None:
+            data['next'] = next_url
+        return self.client.post(self.LOGIN_URL, data, REMOTE_ADDR=ip)
+
+    def _challenge(self, *, code=None, recovery=None, ip='192.0.2.10'):
+        data = {}
+        if code is not None:
+            data['code'] = code
+        if recovery is not None:
+            data['recovery_code'] = recovery
+        return self.client.post(self.CHALLENGE_URL, data, REMOTE_ADDR=ip)
+
+    def _session_secret(self):
+        data = self.client.session['mfa_setup_secret']
+        return mfa.decrypt_secret(data['token'])
+
+    def _mark_session_verified(self, user=None, age=0):
+        user = user or self.admin
+        session = self.client.session
+        session['mfa_verified'] = {'uid': user.pk, 'at': int(time.time()) - age}
+        session.save()
+
+    # ── 1-6: enrolment ───────────────────────────────────────────────────────
+
+    def test_setup_requires_authentication(self):
+        response = self.client.get(reverse('accounts:mfa_setup'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response.url)
+
+    def test_customer_cannot_enroll(self):
+        self.client.force_login(self.customer)
+        self.assertEqual(
+            self.client.get(reverse('accounts:mfa_setup')).status_code, 403)
+        self.assertEqual(
+            self.client.post(reverse('accounts:mfa_setup'), {'code': '000000'}).status_code,
+            403,
+        )
+        self.assertFalse(StaffMFADevice.objects.exists())
+
+    @override_settings(MFA_SETUP_SECRET_TIMEOUT_SECONDS=900)
+    def test_setup_generates_secret_but_does_not_enable_mfa(self):
+        self.client.force_login(self.admin)
+        gate = self.client.get(reverse('accounts:mfa_setup'))
+        self.assertEqual(gate.status_code, 200)
+        self.assertContains(gate, 'Current password')
+        self.assertNotIn('mfa_setup_secret', self.client.session)
+
+        begin = self.client.post(
+            reverse('accounts:mfa_setup'), {'password': PASSWORD})
+        self.assertEqual(begin.status_code, 302)
+
+        first = self.client.get(reverse('accounts:mfa_setup'))
+        self.assertEqual(first.status_code, 200)
+        secret = self._session_secret()
+        self.assertContains(first, secret)                  # owner sees own key
+        self.assertFalse(StaffMFADevice.objects.exists())   # not enabled
+        # Reloading keeps the same pending secret (stable QR/scan).
+        self.client.get(reverse('accounts:mfa_setup'))
+        self.assertEqual(self._session_secret(), secret)
+        # The secret is encrypted at rest in the session, never plaintext.
+        token = self.client.session['mfa_setup_secret']['token']
+        self.assertNotIn(secret, token)
+
+    def test_valid_code_activates_mfa_and_issues_recovery_codes(self):
+        self._begin_enrollment()
+        self.client.get(reverse('accounts:mfa_setup'))
+        secret = self._session_secret()
+
+        response = self.client.post(
+            reverse('accounts:mfa_setup'), {'code': self._code(secret)})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Recovery Codes')
+        device = StaffMFADevice.objects.get(user=self.admin)
+        self.assertIsNotNone(device.confirmed_at)
+        self.assertNotIn(secret, device.secret_encrypted)
+        self.assertEqual(mfa.decrypt_secret(device.secret_encrypted), secret)
+        self.assertEqual(
+            MFARecoveryCode.objects.filter(user=self.admin).count(),
+            mfa.unused_recovery_code_count(self.admin),
+        )
+        self.assertTrue(mfa.session_is_verified(self._request_with_session()))
+        self.assertNotIn('mfa_setup_secret', self.client.session)
+
+    def test_invalid_code_does_not_activate_mfa(self):
+        self._begin_enrollment()
+        self.client.get(reverse('accounts:mfa_setup'))
+        secret = self._session_secret()
+
+        response = self.client.post(
+            reverse('accounts:mfa_setup'), {'code': self._code(secret, drift=5)})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(StaffMFADevice.objects.exists())
+        self.assertFalse(mfa.session_is_verified(self._request_with_session()))
+
+    def test_enrolment_is_rate_limited(self):
+        self._begin_enrollment()
+        self.client.get(reverse('accounts:mfa_setup'))
+        secret = self._session_secret()
+        bad = self._code(secret, drift=5)
+        for _ in range(5):
+            self.client.post(reverse('accounts:mfa_setup'), {'code': bad})
+        response = self.client.post(
+            reverse('accounts:mfa_setup'), {'code': self._code(secret)})
+        self.assertEqual(response.status_code, 429)
+        self.assertFalse(StaffMFADevice.objects.exists())
+
+    def test_secret_and_codes_never_logged_or_leaked(self):
+        capture = _LogCapture()
+        root = logging.getLogger()
+        old_level = root.level
+        root.addHandler(capture)
+        root.setLevel(logging.DEBUG)
+        try:
+            self._begin_enrollment()
+            self.client.get(reverse('accounts:mfa_setup'))
+            secret = self._session_secret()
+            code = self._code(secret)
+            self.client.post(reverse('accounts:mfa_setup'), {'code': code})
+
+            for url in (reverse('accounts:profile'),
+                        reverse('accounts:mfa_manage'),
+                        reverse('dashboard:index')):
+                body = self.client.get(url).content.decode()
+                self.assertNotIn(secret, body)
+            self.assertNotIn(secret, ' '.join(capture.messages))
+            self.assertNotIn(code, ' '.join(capture.messages))
+        finally:
+            root.removeHandler(capture)
+            root.setLevel(old_level)
+
+    # ── enrollment password confirmation (remediation) ───────────────────────
+
+    def test_enrollment_requires_current_password(self):
+        self.client.force_login(self.admin)
+        self.client.get(reverse('accounts:mfa_setup'))
+        self.assertNotIn('mfa_setup_secret', self.client.session)
+
+        wrong = self.client.post(
+            reverse('accounts:mfa_setup'), {'password': 'wrong-password'})
+        self.assertEqual(wrong.status_code, 400)
+        self.assertContains(wrong, 'not correct', status_code=400)
+        self.assertNotIn('mfa_setup_secret', self.client.session)
+        self.assertFalse(StaffMFADevice.objects.exists())
+
+        # A code POST without the password confirmation changes nothing.
+        self.client.post(reverse('accounts:mfa_setup'), {'code': '123456'})
+        self.assertNotIn('mfa_setup_secret', self.client.session)
+        self.assertFalse(StaffMFADevice.objects.exists())
+
+    def test_enrollment_password_confirmation_is_rate_limited(self):
+        self.client.force_login(self.admin)
+        for _ in range(5):
+            self.client.post(
+                reverse('accounts:mfa_setup'), {'password': 'wrong-password'})
+        response = self.client.post(
+            reverse('accounts:mfa_setup'), {'password': PASSWORD})
+        self.assertEqual(response.status_code, 429)
+        self.assertNotIn('mfa_setup_secret', self.client.session)
+        self.assertFalse(StaffMFADevice.objects.exists())
+
+    def test_get_cannot_start_enrollment(self):
+        self.client.force_login(self.admin)
+        for _ in range(2):
+            self.assertEqual(
+                self.client.get(reverse('accounts:mfa_setup')).status_code, 200)
+        self.assertNotIn('mfa_enroll_verified', self.client.session)
+        self.assertNotIn('mfa_setup_secret', self.client.session)
+        self.assertFalse(StaffMFADevice.objects.exists())
+
+    def test_inactive_user_cannot_enroll(self):
+        self.cashier.is_active = False
+        self.cashier.save(update_fields=['is_active'])
+        self.client.force_login(self.cashier)
+        # An inactive account is not authenticated by the middleware, so the
+        # request is redirected to login (or rejected with 403) -- never 200.
+        self.assertIn(
+            self.client.get(reverse('accounts:mfa_setup')).status_code,
+            (302, 403),
+        )
+        self.assertIn(
+            self.client.post(
+                reverse('accounts:mfa_setup'), {'password': PASSWORD}).status_code,
+            (302, 403),
+        )
+        self.assertFalse(StaffMFADevice.objects.exists())
+
+    def test_expired_enrollment_reauth_is_rejected(self):
+        self._begin_enrollment()
+        session = self.client.session
+        proof = dict(session['mfa_enroll_verified'])
+        proof['at'] = int(time.time()) - 3600      # past the 600 s window
+        session['mfa_enroll_verified'] = proof
+        session.save()
+
+        response = self.client.post(
+            reverse('accounts:mfa_setup'), {'code': '123456'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Current password')
+        self.assertNotIn('mfa_setup_secret', self.client.session)
+        self.assertFalse(StaffMFADevice.objects.exists())
+
+    def test_existing_device_cannot_be_replaced_with_password(self):
+        _device, secret, _codes = self._enroll()
+
+        response = self._begin_enrollment()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('accounts:mfa_manage'))
+        self.assertNotIn('mfa_setup_secret', self.client.session)
+        self.assertEqual(StaffMFADevice.objects.filter(user=self.admin).count(), 1)
+        stored = StaffMFADevice.objects.get(user=self.admin)
+        self.assertEqual(mfa.decrypt_secret(stored.secret_encrypted), secret)
+
+    def test_totp_permits_disable_then_reenroll(self):
+        _device, old_secret, _codes = self._enroll()
+        self.client.force_login(self.admin)
+        self._mark_session_verified()
+        self.client.post(
+            reverse('accounts:mfa_disable'), {'code': self._code(old_secret)})
+        self.assertFalse(StaffMFADevice.objects.filter(user=self.admin).exists())
+
+        self._begin_enrollment()
+        self.client.get(reverse('accounts:mfa_setup'))
+        new_secret = self._session_secret()
+        self.assertNotEqual(new_secret, old_secret)
+        response = self.client.post(
+            reverse('accounts:mfa_setup'), {'code': self._code(new_secret)})
+        self.assertEqual(response.status_code, 200)
+        # Query the row directly: ``self.admin.mfa_device`` may still be the
+        # stale (deleted) device object cached by ``_enroll``.
+        stored = StaffMFADevice.objects.get(user=self.admin)
+        self.assertEqual(mfa.decrypt_secret(stored.secret_encrypted), new_secret)
+
+    def test_recovery_code_permits_disable_then_reenroll(self):
+        _device, _secret, codes = self._enroll()
+        self.client.force_login(self.admin)
+        self._mark_session_verified()
+        response = self.client.post(
+            reverse('accounts:mfa_disable'), {'recovery_code': codes[0]})
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(StaffMFADevice.objects.filter(user=self.admin).exists())
+
+        self._begin_enrollment()
+        self.assertEqual(
+            self.client.get(reverse('accounts:mfa_setup')).status_code, 200)
+        self.assertIn('mfa_setup_secret', self.client.session)
+
+    # ── 7-15: login and admin flows ──────────────────────────────────────────
+
+    def test_password_alone_does_not_create_session_when_enrolled(self):
+        _device, secret, _codes = self._enroll()
+        response = self._login('mfa_admin')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, self.CHALLENGE_URL)
+        self.assertNotIn('_auth_user_id', self.client.session)
+        self.assertNotIn('mfa_verified', self.client.session)
+
+    def test_valid_totp_completes_login(self):
+        _device, secret, _codes = self._enroll()
+        self._login('mfa_admin')
+        response = self._challenge(code=self._code(secret))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('dashboard:index'))
+        self.assertIn('_auth_user_id', self.client.session)
+        self.assertTrue(mfa.session_is_verified(self._request_with_session()))
+        self.assertEqual(self.client.get(reverse('dashboard:index')).status_code, 200)
+        self.assertNotIn('mfa_pending', self.client.session)
+
+    def test_invalid_totp_is_rejected(self):
+        _device, secret, _codes = self._enroll()
+        self._login('mfa_admin')
+        response = self._challenge(code=self._code(secret, drift=5))
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_expired_challenge_is_rejected(self):
+        _device, secret, _codes = self._enroll()
+        self._login('mfa_admin')
+
+        session = self.client.session
+        pending = dict(session['mfa_pending'])
+        pending['issued'] = int(time.time()) - 400   # past the 300 s timeout
+        pending['sig'] = mfa._sign_pending(
+            pending['uid'], pending['nonce'], pending['issued'], pending['mode'])
+        session['mfa_pending'] = pending
+        session.save()
+
+        self.assertEqual(
+            self.client.get(self.CHALLENGE_URL).status_code, 302)  # back to login
+        response = self._challenge(code=self._code(secret))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response.url)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_tampered_pending_challenge_is_rejected(self):
+        _device, secret, _codes = self._enroll(self.cashier)
+        self.client.force_login(self.admin)
+        self.client.logout()
+
+        self._login('mfa_cashier')
+        self.assertIn('mfa_pending', self.client.session)
+        session = self.client.session
+        pending = dict(session['mfa_pending'])
+        pending['uid'] = self.admin.pk          # try to switch identity
+        session['mfa_pending'] = pending
+        session.save()
+
+        response = self._challenge(code=self._code(secret))
+        self.assertNotIn('_auth_user_id', self.client.session)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response.url)
+
+    def test_customer_login_unchanged(self):
+        response = self._login('mfa_customer')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('menu:index'))
+        self.assertIn('_auth_user_id', self.client.session)
+        self.assertNotIn('mfa_pending', self.client.session)
+
+    def test_nonstaff_and_unenrolled_cashier_cannot_reach_admin(self):
+        self.client.force_login(self.cashier)
+        response = self.client.get('/admin/')
+        self.assertIn(response.status_code, (302, 403))
+        self.assertNotEqual(response.status_code, 200)
+
+    def test_safe_next_is_preserved_and_external_next_rejected(self):
+        _device, secret, _codes = self._enroll()
+        self._login('mfa_admin', next_url=reverse('accounts:profile'))
+        response = self._challenge(code=self._code(secret))
+        self.assertEqual(response.url, reverse('accounts:profile'))
+
+        self.client.logout()
+        self._login('mfa_admin', next_url='https://evil.example/steal')
+        # The earlier code is spent (replay protection), so use the next step.
+        response = self._challenge(code=self._code(secret, drift=1))
+        self.assertEqual(response.url, reverse('dashboard:index'))
+        self.assertNotIn('evil.example', response.url)
+
+    def test_admin_login_lockout_still_applies_to_enrolled_admin(self):
+        self._enroll()
+        for _ in range(5):
+            response = self.client.post('/admin/login/', {
+                'username': 'mfa_admin', 'password': 'wrong-password',
+            }, REMOTE_ADDR='198.51.100.20')
+        self.assertEqual(response.status_code, 200)
+        response = self.client.post('/admin/login/', {
+            'username': 'mfa_admin', 'password': PASSWORD,
+        }, REMOTE_ADDR='198.51.100.20')
+        self.assertEqual(response.status_code, 429)
+        self.assertNotIn('mfa_pending', self.client.session)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_enrolled_admin_login_requires_totp_before_session(self):
+        _device, secret, _codes = self._enroll()
+
+        first = self.client.post('/admin/login/', {
+            'username': 'mfa_admin', 'password': PASSWORD,
+            'next': reverse('admin:index'),
+        })
+        self.assertEqual(first.status_code, 302)
+        self.assertEqual(first.url, self.CHALLENGE_URL)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+        second = self._challenge(code=self._code(secret))
+        self.assertEqual(second.status_code, 302)
+        self.assertEqual(second.url, reverse('admin:index'))
+        self.assertEqual(self.client.get('/admin/').status_code, 200)
+
+    def test_direct_admin_url_blocked_until_verified(self):
+        self._enroll()
+        self.client.force_login(self.admin)     # simulates a pre-MFA session
+        response = self.client.get('/admin/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(self.CHALLENGE_URL, response.url)
+        self.assertNotEqual(self.client.get('/admin/').status_code, 200)
+
+    def test_mfa_session_verification_expires(self):
+        self._enroll()
+        self.client.force_login(self.admin)
+        self._mark_session_verified(age=13 * 60 * 60)   # past the 12 h limit
+        response = self.client.get(reverse('accounts:profile'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(self.CHALLENGE_URL, response.url)
+
+    @override_settings(MFA_REQUIRE_ADMIN_ENROLLMENT=True)
+    def test_unenrolled_admin_is_sent_to_enrolment_when_required(self):
+        self.client.force_login(self.admin)
+        response = self.client.get('/admin/')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('accounts:mfa_setup'))
+
+    @override_settings(MFA_REQUIRE_ADMIN_ENROLLMENT=False)
+    def test_unenrolled_admin_keeps_existing_access_by_default(self):
+        self.client.force_login(self.admin)
+        self.assertEqual(self.client.get('/admin/').status_code, 200)
+
+    # ── pending-eligibility consistency (remediation) ────────────────────────
+
+    def _admin_login(self, username, password=PASSWORD):
+        return self.client.post('/admin/login/', {
+            'username': username, 'password': password,
+        }, REMOTE_ADDR='198.51.100.30')
+
+    def test_cashier_with_mfa_is_challenged_on_app_login(self):
+        _device, secret, _codes = self._enroll(self.cashier)
+        response = self._login('mfa_cashier')
+        self.assertEqual(response.url, self.CHALLENGE_URL)
+        self.assertNotIn('_auth_user_id', self.client.session)
+        completed = self._challenge(code=self._code(secret))
+        self.assertEqual(completed.status_code, 302)
+        self.assertIn('_auth_user_id', self.client.session)
+
+    def test_kitchen_staff_with_mfa_is_challenged_on_app_login(self):
+        kitchen = _create_user('mfa_kitchen', 'kitchen_staff')
+        _device, secret, _codes = self._enroll(kitchen)
+        response = self._login('mfa_kitchen')
+        self.assertEqual(response.url, self.CHALLENGE_URL)
+        completed = self._challenge(code=self._code(secret))
+        self.assertEqual(completed.status_code, 302)
+        self.assertIn('_auth_user_id', self.client.session)
+
+    def test_superuser_with_customer_role_can_complete_admin_mfa(self):
+        # Django Admin eligibility (is_staff/is_superuser) and the pending
+        # challenge must agree; a role-label mismatch must not strand them.
+        su = CustomUser.objects.create_superuser(
+            username='mfa_super_customer', password=PASSWORD, role='customer')
+        _device, secret, _codes = self._enroll(su)
+
+        first = self._admin_login('mfa_super_customer')
+        self.assertEqual(first.status_code, 302)
+        self.assertEqual(first.url, self.CHALLENGE_URL)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+        second = self._challenge(code=self._code(secret))
+        self.assertEqual(second.status_code, 302)
+        self.assertEqual(second.url, reverse('admin:index'))
+        self.assertEqual(self.client.get('/admin/').status_code, 200)
+
+    def test_ordinary_customer_cannot_use_staff_mfa(self):
+        response = self._admin_login('mfa_customer')
+        self.assertEqual(response.status_code, 200)   # rejected by admin form
+        self.assertNotIn('mfa_pending', self.client.session)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+        # Customer login stays password-only.
+        response = self._login('mfa_customer')
+        self.assertEqual(response.url, reverse('menu:index'))
+        self.assertIn('_auth_user_id', self.client.session)
+
+    # ── 16-20: recovery codes ────────────────────────────────────────────────
+
+    def test_recovery_code_works_once_and_reuse_is_rejected(self):
+        _device, _secret, codes = self._enroll()
+        self._login('mfa_admin')
+        response = self._challenge(recovery=codes[0])
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('_auth_user_id', self.client.session)
+        self.assertEqual(
+            MFARecoveryCode.objects.filter(
+                user=self.admin, used_at__isnull=False).count(), 1)
+
+        self.client.logout()
+        self._login('mfa_admin')
+        reuse = self._challenge(recovery=codes[0])
+        self.assertEqual(reuse.status_code, 400)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_invalid_recovery_code_is_rejected(self):
+        _device, _secret, _codes = self._enroll()
+        self._login('mfa_admin')
+        response = self._challenge(recovery='AAAA-BBBB-CCCC-DDDD')
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_recovery_attempts_are_rate_limited(self):
+        _device, secret, codes = self._enroll()
+        self._login('mfa_admin')
+        for _ in range(5):
+            self._challenge(recovery='AAAA-BBBB-CCCC-DDDD')
+        response = self._challenge(recovery=codes[0])
+        self.assertEqual(response.status_code, 429)   # even the valid code waits
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_recovery_codes_are_hashed_at_rest(self):
+        _device, _secret, codes = self._enroll()
+        stored = list(MFARecoveryCode.objects.filter(user=self.admin))
+        self.assertEqual(len(stored), mfa.unused_recovery_code_count(self.admin))
+        for row in stored:
+            normalized = mfa.normalize_recovery_code(codes[0])
+            self.assertNotIn(normalized, row.code_hash)
+            self.assertNotEqual(row.code_hash, normalized)
+            identify_hasher(row.code_hash)          # a real password hash
+        # None of the checks above consumed a code.
+        self.assertEqual(
+            MFARecoveryCode.objects.filter(
+                user=self.admin, used_at__isnull=False).count(), 0)
+        # A different user cannot use these codes.
+        self.assertFalse(mfa.consume_recovery_code(self.cashier, codes[0]))
+
+    # ── 21-23: disable / regenerate / audit ──────────────────────────────────
+
+    def test_disable_requires_recent_verification_and_valid_code(self):
+        _device, secret, _codes = self._enroll()
+        self.client.force_login(self.admin)
+
+        # No recent verification at all -> redirected to re-verify.
+        response = self.client.post(
+            reverse('accounts:mfa_disable'), {'code': self._code(secret)})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(self.CHALLENGE_URL, response.url)
+        self.assertTrue(StaffMFADevice.objects.filter(user=self.admin).exists())
+
+        # Verified, but a wrong code -> still enabled.
+        self._mark_session_verified()
+        self.client.post(reverse('accounts:mfa_disable'),
+                         {'code': self._code(secret, drift=5)})
+        self.assertTrue(StaffMFADevice.objects.filter(user=self.admin).exists())
+
+    def test_valid_code_disables_mfa_and_audits(self):
+        _device, secret, _codes = self._enroll()
+        self.client.force_login(self.admin)
+        self._mark_session_verified()
+
+        response = self.client.post(
+            reverse('accounts:mfa_disable'), {'code': self._code(secret)})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(StaffMFADevice.objects.filter(user=self.admin).exists())
+        self.assertFalse(MFARecoveryCode.objects.filter(user=self.admin).exists())
+        self.assertNotIn('mfa_verified', self.client.session)
+        self.assertTrue(AuditLog.objects.filter(action='mfa.disable').exists())
+        # After disabling, login is password-only again.
+        self.client.logout()
+        response = self._login('mfa_admin')
+        self.assertEqual(response.status_code, 302)
+        self.assertNotIn('mfa_pending', self.client.session)
+
+    def test_regenerate_recovery_codes_requires_valid_code(self):
+        _device, secret, old_codes = self._enroll()
+        self.client.force_login(self.admin)
+        self._mark_session_verified()
+
+        self.client.post(
+            reverse('accounts:mfa_regenerate_recovery_codes'),
+            {'code': self._code(secret, drift=5)},
+        )
+        self.assertTrue(mfa.consume_recovery_code(self.admin, old_codes[0]))
+
+        response = self.client.post(
+            reverse('accounts:mfa_regenerate_recovery_codes'),
+            {'code': self._code(secret, drift=0)},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Recovery Codes')
+        self.assertFalse(mfa.consume_recovery_code(self.admin, old_codes[1]))
+        self.assertTrue(AuditLog.objects.filter(action='mfa.recovery.regenerate').exists())
+
+    def test_unenrolled_staff_cannot_touch_other_users_mfa(self):
+        _device, _secret, codes = self._enroll(self.admin)
+        self.client.force_login(self.cashier)
+        self._mark_session_verified(self.cashier)
+
+        self.client.post(reverse('accounts:mfa_disable'), {'recovery_code': codes[0]})
+        self.assertTrue(StaffMFADevice.objects.filter(user=self.admin).exists())
+        self.assertFalse(
+            MFARecoveryCode.objects.filter(user=self.admin, used_at__isnull=False).exists())
+
+    def test_management_command_resets_mfa_and_audits(self):
+        self._enroll(self.admin)
+        call_command('mfa_reset', 'mfa_admin', '--yes')
+        self.assertFalse(StaffMFADevice.objects.filter(user=self.admin).exists())
+        self.assertFalse(MFARecoveryCode.objects.filter(user=self.admin).exists())
+        log = AuditLog.objects.get(action='mfa.reset')
+        self.assertIn('mfa_admin', log.detail)
+
+    def test_audit_entries_never_contain_secrets_or_codes(self):
+        _device, secret, codes = self._enroll()
+        self.client.force_login(self.admin)
+        self._mark_session_verified()
+        self.client.post(reverse('accounts:mfa_disable'), {'code': self._code(secret)})
+
+        entries = AuditLog.objects.filter(action__startswith='mfa.')
+        self.assertTrue(entries.exists())
+        blob = ' '.join(
+            f'{e.detail} {e.object_repr}' for e in entries)
+        self.assertNotIn(secret, blob)
+        for code in codes:
+            self.assertNotIn(code, blob)
+
+    def test_password_reset_does_not_disable_mfa(self):
+        self._enroll()
+        uid = urlsafe_base64_encode(force_bytes(self.admin.pk))
+        token = default_token_generator.make_token(self.admin)
+        response = self.client.post(
+            reverse('accounts:password_reset_confirm',
+                    kwargs={'uidb64': uid, 'token': token}),
+            {'new_password1': 'NewStrongPass!2026',
+             'new_password2': 'NewStrongPass!2026'},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(StaffMFADevice.objects.filter(user=self.admin).exists())
+        # And the new password still requires MFA at login.
+        response = self._login('mfa_admin', password='NewStrongPass!2026')
+        self.assertEqual(response.url, self.CHALLENGE_URL)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    # ── replay protection ────────────────────────────────────────────────────
+
+    def test_totp_code_cannot_be_replayed(self):
+        _device, secret, _codes = self._enroll()
+        code = self._code(secret)
+        self._login('mfa_admin')
+        self.assertEqual(self._challenge(code=code).status_code, 302)
+        self.client.logout()
+
+        self._login('mfa_admin')
+        replay = self._challenge(code=code)
+        self.assertEqual(replay.status_code, 400)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_totp_newer_step_accepted_and_older_step_rejected(self):
+        device, secret, _codes = self._enroll()
+        self.assertIsNotNone(
+            mfa.verify_device_code(device, self._code(secret)))
+        # A previous-step code is now below the consumed timestep.
+        self.assertIsNone(
+            mfa.verify_device_code(device, self._code(secret, drift=-1)))
+        # The next step is still accepted.
+        self.assertIsNotNone(
+            mfa.verify_device_code(device, self._code(secret, drift=1)))
+
+    def test_stale_device_cannot_consume_the_same_timestep(self):
+        """The conditional UPDATE is the replay gate, not in-memory state.
+
+        SQLite cannot express two real PostgreSQL transactions here, so this
+        reproduces the race directly: two device objects are loaded before
+        either consumes the step. Only the first conditional UPDATE matches;
+        the stale second object must fail even though its in-memory
+        ``last_used_timestep`` still allows the code.
+        """
+        _device, secret, _codes = self._enroll()
+        code = self._code(secret)
+        # Two independent loads of the same row, both before either consumes
+        # the step (a reverse OneToOne access would return the same cached
+        # object, so query the model directly).
+        first = StaffMFADevice.objects.get(user=self.admin)
+        second = StaffMFADevice.objects.get(user=self.admin)
+
+        self.assertIsNotNone(mfa.verify_device_code(first, code))
+        self.assertIsNone(mfa.verify_device_code(second, code))
+        self.assertEqual(
+            StaffMFADevice.objects.get(pk=first.pk).last_used_timestep,
+            first.last_used_timestep,
+        )
+
+    def test_regeneration_rolls_back_when_creation_fails(self):
+        _device, _secret, old_codes = self._enroll()
+        with mock.patch.object(
+            mfa, 'make_password', side_effect=RuntimeError('boom'),
+        ):
+            with self.assertRaises(RuntimeError):
+                mfa.regenerate_recovery_codes(self.admin)
+
+        self.assertEqual(
+            MFARecoveryCode.objects.filter(user=self.admin).count(),
+            len(old_codes),
+        )
+        self.assertTrue(mfa.consume_recovery_code(self.admin, old_codes[0]))
+
+    def test_regenerated_codes_work_once(self):
+        _device, _secret, old_codes = self._enroll()
+        new_codes = mfa.regenerate_recovery_codes(self.admin)
+
+        self.assertFalse(mfa.consume_recovery_code(self.admin, old_codes[0]))
+        self.assertTrue(mfa.consume_recovery_code(self.admin, new_codes[0]))
+        self.assertFalse(mfa.consume_recovery_code(self.admin, new_codes[0]))
+
+    def test_management_command_revokes_only_the_target_sessions(self):
+        self._enroll(self.admin)
+        self.client.force_login(self.admin)
+        target_key = self.client.session.session_key
+        other_client = Client()
+        other_client.force_login(self.cashier)
+        other_key = other_client.session.session_key
+        self.assertTrue(Session.objects.filter(session_key=target_key).exists())
+
+        call_command('mfa_reset', 'mfa_admin', '--yes')
+
+        self.assertFalse(Session.objects.filter(session_key=target_key).exists())
+        self.assertTrue(Session.objects.filter(session_key=other_key).exists())
+
+    @override_settings(
+        SESSION_ENGINE='django.contrib.sessions.backends.signed_cookies')
+    def test_session_revocation_reports_unsupported_backend(self):
+        from apps.accounts.management.commands.mfa_reset import (
+            revoke_user_sessions,
+        )
+        # Must not claim success for a backend it cannot enumerate.
+        self.assertIsNone(revoke_user_sessions(self.admin))
+
+    @mock.patch('builtins.input', return_value='n')
+    def test_management_command_requires_confirmation(self, _input):
+        self._enroll(self.admin)
+        out = io.StringIO()
+        call_command('mfa_reset', 'mfa_admin', stdout=out)
+        self.assertIn('Aborted', out.getvalue())
+        self.assertTrue(StaffMFADevice.objects.filter(user=self.admin).exists())
+        self.assertTrue(MFARecoveryCode.objects.filter(user=self.admin).exists())
+
+    def test_management_command_unknown_user_fails_safely(self):
+        with self.assertRaises(CommandError):
+            call_command('mfa_reset', 'no-such-user', '--yes')
+
+    def test_management_command_preserves_password_role_and_active(self):
+        self._enroll(self.admin)
+        before = (self.admin.password, self.admin.role, self.admin.is_active)
+        call_command('mfa_reset', 'mfa_admin', '--yes')
+        self.admin.refresh_from_db()
+        self.assertEqual(
+            (self.admin.password, self.admin.role, self.admin.is_active), before)
+
+    def test_management_command_never_prints_secrets_or_codes(self):
+        _device, secret, codes = self._enroll(self.admin)
+        out = io.StringIO()
+        call_command('mfa_reset', 'mfa_admin', '--yes', stdout=out)
+        printed = out.getvalue()
+        self.assertNotIn(secret, printed)
+        for code in codes:
+            self.assertNotIn(code, printed)
+
+    # ── test-only request adapter for session helpers ────────────────────────
+
+    def _request_with_session(self):
+        class _Request:
+            pass
+        request = _Request()
+        request.session = self.client.session
+        request.user = self.admin if '_auth_user_id' in self.client.session else None
+        return request
+
+
+class MFAEncryptionKeyTests(SimpleTestCase):
+    """Finding A: production must configure MFA_ENCRYPTION_KEY explicitly.
+
+    The test runner forces DEBUG=False, so these tests set DEBUG and the
+    fallback switch explicitly rather than inheriting them.
+    """
+
+    SECRET = 'JBSWY3DPEHPK3PXP'
+    VALID_KEY = Fernet.generate_key().decode()
+
+    @staticmethod
+    def _check():
+        return checks.mfa_encryption_key_check(None)
+
+    @override_settings(
+        DEBUG=False, MFA_ENCRYPTION_KEY='', MFA_ALLOW_SECRET_KEY_FALLBACK=False)
+    def test_missing_key_in_production_is_rejected(self):
+        with self.assertRaises(ImproperlyConfigured):
+            mfa.encrypt_secret(self.SECRET)
+        errors = self._check()
+        self.assertEqual([error.id for error in errors], ['accounts.E001'])
+
+    @override_settings(
+        DEBUG=False, MFA_ENCRYPTION_KEY=VALID_KEY,
+        MFA_ALLOW_SECRET_KEY_FALLBACK=False)
+    def test_configured_valid_key_works(self):
+        token = mfa.encrypt_secret(self.SECRET)
+        self.assertEqual(mfa.decrypt_secret(token), self.SECRET)
+        self.assertEqual(self._check(), [])
+
+    @override_settings(
+        DEBUG=True, MFA_ENCRYPTION_KEY='', MFA_ALLOW_SECRET_KEY_FALLBACK=True)
+    def test_development_fallback_still_works(self):
+        token = mfa.encrypt_secret(self.SECRET)
+        self.assertEqual(mfa.decrypt_secret(token), self.SECRET)
+        self.assertEqual(self._check(), [])
+
+    @override_settings(
+        DEBUG=False, MFA_ENCRYPTION_KEY='', MFA_ALLOW_SECRET_KEY_FALLBACK=True)
+    def test_fallback_outside_debug_is_a_warning(self):
+        token = mfa.encrypt_secret(self.SECRET)
+        self.assertEqual(mfa.decrypt_secret(token), self.SECRET)
+        self.assertEqual([w.id for w in self._check()], ['accounts.W001'])
+
+    @override_settings(
+        DEBUG=False, MFA_ENCRYPTION_KEY='not-a-fernet-key',
+        MFA_ALLOW_SECRET_KEY_FALLBACK=False)
+    def test_invalid_key_is_rejected_clearly(self):
+        with self.assertRaises(ImproperlyConfigured):
+            mfa.encrypt_secret(self.SECRET)
+        self.assertEqual([e.id for e in self._check()], ['accounts.E002'])

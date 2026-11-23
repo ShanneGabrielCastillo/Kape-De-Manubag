@@ -13,7 +13,8 @@ from django.template.loader import render_to_string
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode, url_has_allowed_host_and_scheme
 from django.conf import settings
-from . import bruteforce
+from django.views.decorators.http import require_POST
+from . import bruteforce, mfa, reset_throttle
 from .forms import (
     LoginForm, StaffCreateForm, ProfileUpdateForm,
     StaffPasswordChangeForm, PasswordResetRequestForm,
@@ -73,13 +74,26 @@ def login_view(request):
 
         if form.is_valid():
             user = form.get_user()
+            # Never follow a validated-only-at-this-point URL later: capture it
+            # now and re-validate it when the MFA challenge completes.
+            next_url = _get_safe_next_url(request)
+
+            # Phase 5D: staff who have enrolled in MFA must pass the TOTP (or
+            # recovery-code) step BEFORE any authenticated session exists.
+            # Accounts without a confirmed device keep the existing password
+            # login so the rollout cannot lock anyone out; admins without a
+            # device are still denied the Django Admin site by the MFA
+            # middleware until they enrol.
+            if mfa.is_staff_user(user) and mfa.has_confirmed_device(user):
+                mfa.start_pending(request, user, next_url=next_url, mode='login')
+                return redirect('accounts:mfa_challenge')
+
             login(request, user)
             bruteforce.clear_failed_attempts(request)
             messages.success(request, f'Welcome back, {user.first_name or user.username}!')
             # Only ever follow a validated internal 'next'; anything else falls
             # back to the role-appropriate landing page (prevents open redirects).
-            next_url = _get_safe_next_url(request) or _default_login_redirect(user)
-            return redirect(next_url)
+            return redirect(next_url or _default_login_redirect(user))
         else:
             # Record every failed submission -- for unknown usernames too --
             # so attackers cannot distinguish existing accounts from fake ones.
@@ -116,7 +130,10 @@ def profile_view(request):
             return redirect('accounts:profile')
     else:
         form = ProfileUpdateForm(instance=request.user)
-    return render(request, 'accounts/profile.html', {'form': form})
+    return render(request, 'accounts/profile.html', {
+        'form': form,
+        'mfa_enabled': mfa.has_confirmed_device(request.user),
+    })
 
 
 @login_required
@@ -163,6 +180,7 @@ def staff_create(request):
 
 @login_required
 @admin_required
+@require_POST
 def staff_toggle(request, pk):
     user = get_object_or_404(CustomUser, pk=pk)
     if user != request.user:
@@ -250,11 +268,31 @@ def password_reset_request(request):
     staff account (admin or cashier).  The response is always the same
     success page whether or not a match is found (anti-enumeration: the
     user cannot tell whether an email address is registered).
+
+    Phase 5C: submissions are throttled per keyed-email-hash and per IP
+    (see ``reset_throttle``).  The check runs before any account lookup or
+    email delivery, and a throttled request receives the exact same
+    redirect as any other — no email is sent and the response must not
+    reveal that anything was suppressed.
     """
     form = PasswordResetRequestForm(data=request.POST or None)
 
     if request.method == 'POST' and form.is_valid():
         email = form.cleaned_data['email']
+
+        # Brute-force guard: while throttled, reject before any account
+        # lookup or email delivery.  The outward flow is identical to a
+        # normal submission (same redirect target), so the requester cannot
+        # distinguish throttling from success.
+        remaining = reset_throttle.throttle_remaining(request, email)
+        if remaining is not None:
+            return redirect('accounts:password_reset_done')
+
+        # Count every accepted submission — eligible or not — so probing
+        # unknown addresses hits exactly the same counters as real ones.
+        # (Throttled requests above are deliberately not re-counted: a
+        # stale counter must never extend its own window.)
+        reset_throttle.register_reset_request(request, email)
 
         # Look up active staff only — customers do not use this portal.
         # Use filter().first() rather than get() to avoid DoesNotExist

@@ -6,8 +6,12 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from kape_de_manubag import health
+from apps.accounts.admin_login import admin_login
 
 urlpatterns = [
+    # Mount the guarded login ahead of the stock admin URLs so only the
+    # login entry point is wrapped; every other admin route is unchanged.
+    path('admin/login/', admin_login),
     path('admin/', admin.site.urls),
     path('health/', health.health_check, name='health'),
     path('', include('apps.menu.urls')),

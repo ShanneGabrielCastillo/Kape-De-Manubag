@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Recovery codes — Kape De Manubag{% endblock %}
+
+{% block body %}
+<div class="login-page">
+  <div class="login-card" style="max-width:560px">
+    <div class="login-brand">
+      <h1>🗝️ Recovery Codes</h1>
+      <p>Save these somewhere safe — they are shown only once</p>
+    </div>
+
+    <div class="alert alert-error" style="margin-bottom:1rem">
+      Each code can be used <strong>once</strong> to sign in if you lose your
+      authenticator. Store them offline (password manager or printed sheet).
+      They will not be shown again.
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:16px 0">
+      {% for code in codes %}
+      <code style="background:var(--cream);padding:10px 12px;border-radius:8px;font-size:0.9rem;letter-spacing:1px;text-align:center">{{ code }}</code>
+      {% endfor %}
+    </div>
+
+    <a href="{% url 'accounts:mfa_manage' %}" class="btn btn-primary btn-block">
+      I have saved my codes
+    </a>
+  </div>
+</div>
+{% endblock %}

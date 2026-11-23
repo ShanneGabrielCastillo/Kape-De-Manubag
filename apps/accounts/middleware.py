@@ -9,11 +9,15 @@ Two middlewares live here:
 """
 
 import time
+from urllib.parse import quote
 
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import SESSION_KEY, logout
 from django.shortcuts import redirect
+from django.urls import reverse
+
+from . import mfa
 
 
 class ActiveUserMiddleware:
@@ -52,6 +56,65 @@ class ActiveUserMiddleware:
 # timestamp (epoch seconds, so it round-trips safely through Django's JSON
 # session serializer).
 LAST_ACTIVITY_KEY = 'last_activity'
+
+
+# Paths that must stay reachable while an MFA step is pending, otherwise the
+# challenge screen itself (or logout) would redirect in a loop.
+MFA_EXEMPT_PREFIXES = (
+    '/accounts/login/',
+    '/accounts/logout/',
+    '/accounts/mfa/',
+    '/admin/login/',
+    '/admin/logout/',
+    '/health/',
+    '/static/',
+    '/media/',
+    '/favicon.ico',
+)
+
+
+class MFAEnforcementMiddleware:
+    """Block MFA-enrolled accounts from any page until the session is verified.
+
+    * An authenticated account with a confirmed device whose session has not
+      passed MFA (or whose verification is older than
+      ``MFA_SESSION_MAX_AGE_SECONDS``) is redirected to the challenge view.
+      This is what stops direct navigation to ``/admin/`` or any staff URL.
+    * Accounts without a confirmed device are only blocked from ``/admin/``,
+      and only when ``MFA_REQUIRE_ADMIN_ENROLLMENT`` is enabled. It defaults
+      to off so the rollout cannot lock out the existing administrator; turn
+      it on once every admin has enrolled.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        user = getattr(request, 'user', None)
+        if (
+            user is not None
+            and user.is_authenticated
+            and (mfa.is_staff_user(user) or mfa.requires_admin_mfa(user))
+            and not request.path.startswith(MFA_EXEMPT_PREFIXES)
+        ):
+            device = mfa.get_device(user)
+            if device is None or not device.confirmed_at:
+                if (
+                    request.path.startswith('/admin/')
+                    and getattr(settings, 'MFA_REQUIRE_ADMIN_ENROLLMENT', False)
+                ):
+                    messages.error(
+                        request,
+                        'Set up two-factor authentication before using the admin site.',
+                    )
+                    return redirect('accounts:mfa_setup')
+            elif not mfa.session_is_verified(request):
+                target = (
+                    f"{reverse('accounts:mfa_challenge')}"
+                    f"?next={quote(request.get_full_path())}"
+                )
+                return redirect(target)
+        return self.get_response(request)
 
 
 class SessionIdleTimeoutMiddleware:

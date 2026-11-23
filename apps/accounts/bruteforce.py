@@ -119,6 +119,12 @@ def get_lockout_remaining(request):
     return remaining
 
 
+def clear_failed_attempts_for(username, ip):
+    """Reset counters for a known username/IP (e.g. after an MFA challenge)."""
+    values = [normalize_username(username), (ip or '').strip()]
+    FailedLoginAttempt.objects.filter(value__in=[v for v in values if v]).delete()
+
+
 def clear_failed_attempts(request):
     """Reset counters for a successful login (username and IP rows).
 

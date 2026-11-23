@@ -32,8 +32,8 @@ cp .env.example .env
 # Run migrations
 python manage.py migrate
 
-# Seed sample data (categories, products, users)
-python manage.py shell < sample_data/seed_data.py
+# Seed demo menu data (categories and products; creates no accounts)
+python manage.py seed_data
 
 # Start the server
 python manage.py runserver
@@ -49,14 +49,25 @@ python manage.py runserver
 | http://127.0.0.1:8000/orders/pos/ | POS Terminal |
 | http://127.0.0.1:8000/admin/ | Django Admin |
 
-## 🔑 Default Credentials
+## 🔑 Account Provisioning
 
-| Role | Username | Password |
-|------|----------|----------|
-| Admin | admin | admin123 |
-| Cashier | cashier1 | cashier123 |
+The seed script creates **no user accounts**, and the project ships no default
+credentials. Create the first administrator with Django's standard command:
 
-> ⚠️ Change passwords in production!
+```bash
+python manage.py createsuperuser
+```
+
+Choose a unique, strong password when prompted. Additional staff accounts
+(admin, cashier, kitchen staff) can then be created from the dashboard at
+`/accounts/staff/create/`, where role assignment and password validation are
+enforced.
+
+On a deployment that provisions the administrator from environment variables,
+run `python manage.py create_superuser_env` with
+`DJANGO_SUPERUSER_USERNAME` and `DJANGO_SUPERUSER_PASSWORD` set (and optionally
+`DJANGO_SUPERUSER_EMAIL`). The command validates the password and skips
+safely if the username already exists; it never resets an existing password.
 
 ## 👥 User Roles
 
