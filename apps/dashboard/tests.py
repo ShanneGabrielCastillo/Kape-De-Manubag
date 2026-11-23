@@ -7,7 +7,7 @@ down by tests:
 * the number of SQL queries executed for one dashboard load is bounded
   (regression guard against N+1 and per-day query loops),
 * every statistic shown stays correct (sales sums, order counts,
-  pending/preparing badges, top products, low stock, chart data),
+  pending/preparing badges, top products, ingredient low stock, chart data),
 * both admin and cashier dashboards render successfully (customers are
   redirected away),
 * the AJAX chart endpoint stays fast and correct for week and month.
@@ -61,28 +61,30 @@ CHART_URL = '/dashboard/chart-data/'
 
 # Bounded query budget for one dashboard page load. Measured breakdown on
 # the supported stack (Django 5.0, SQLite):
-#   9  view queries (sales stats, status counts, chart data, top products,
-#      recent orders, legacy low stock, ingredient low stock, movement
-#      summary, recent ingredient activity -- all single consolidated
-#      queries)
+#   8  view queries (sales stats, status counts, chart data, top products,
+#      recent orders, ingredient low stock, movement summary, recent
+#      ingredient activity -- all single consolidated queries)
 #   2  session SELECT + user SELECT (auth middleware)
 #   3  session UPDATE for the idle-timeout middleware's last-activity stamp
 #      (savepoint + UPDATE + release; only on the first request in a window)
-# Total: 14. The budget is exact (not a bound), so re-adding per-request
-# queries (e.g. unused context-stat COUNTs or a cart lookup for staff) fails
-# the suite. Because it is exact, re-verify the count after upgrading Django
-# or changing middleware (session-write behaviour can shift it by +/- 1).
+# Total: 13. The budget keeps one query of headroom (14); because it is
+# tight, re-adding per-request queries (e.g. unused context-stat COUNTs or a
+# cart lookup for staff) still fails the suite. Re-verify the count after
+# upgrading Django or changing middleware (session-write behaviour can shift
+# it by +/- 1).
 DASHBOARD_QUERY_BUDGET = 14
-# The chart endpoint needs only the session/user lookups plus ONE grouped
-# query per request. Measured at 3; the first authenticated request in an
-# idle-timeout window adds the session UPDATE (savepoint/update/release), so
-# the budget allows 6 for that worst case.
-CHART_QUERY_BUDGET = 6
-# The realtime summary endpoint runs the eight consolidated view queries
-# (sales stats, status counts, chart data, top products, legacy low stock,
-# ingredient low stock, movement summary, recent ingredient activity) plus
-# the same auth/session lookups as the page.
-# Budget: 8 view + 2 auth + 3 session UPDATE worst case = 13.
+# The chart endpoint needs only the session/user lookups, one MFA device
+# lookup from MFAEnforcementMiddleware, plus ONE grouped query per request.
+# Measured at 4; the first authenticated request in an idle-timeout window
+# adds the session UPDATE (savepoint/update/release), so the budget allows 7
+# for that worst case.
+CHART_QUERY_BUDGET = 7
+# The realtime summary endpoint runs the seven consolidated view queries
+# (sales stats, status counts, chart data, top products, ingredient low
+# stock, movement summary, recent ingredient activity) plus the same
+# auth/session lookups as the page.
+# Budget: 7 view + 2 auth + 3 session UPDATE worst case = 12; 13 is kept
+# for one query of headroom.
 SUMMARY_QUERY_BUDGET = 13
 SUMMARY_URL = '/dashboard/summary/'
 
@@ -109,7 +111,7 @@ def _seed_orders_and_items():
     """
     now = timezone.now()
     category = Category.objects.create(name='Drinks', slug='drinks')
-    low_product = Product.objects.create(
+    low_product = Product.objects.create(inventory_tracking_mode='legacy',
         category=category, name='Low Stock Item', price='50.00',
         stock_quantity=3, low_stock_threshold=10,
     )
@@ -159,11 +161,11 @@ class DashboardQueryPerformanceTests(TestCase):
     def _seed_sales_data(self):
         now = timezone.now()
         category = Category.objects.create(name='Drinks', slug='drinks')
-        Product.objects.create(
+        Product.objects.create(inventory_tracking_mode='legacy',
             category=category, name='Low Stock Item', price='50.00',
             stock_quantity=3, low_stock_threshold=10,
         )
-        Product.objects.create(
+        Product.objects.create(inventory_tracking_mode='legacy',
             category=category, name='Well Stocked Item', price='60.00',
             stock_quantity=100, low_stock_threshold=10,
         )
@@ -232,23 +234,6 @@ class DashboardQueryPerformanceTests(TestCase):
             f'dashboard executed {len(ctx.captured_queries)} queries',
         )
 
-    def test_many_low_stock_products_do_not_add_queries(self):
-        # 5 low-stock products: their category lookups (template renders
-        # product.category.name) must not add a query per product.
-        category = Category.objects.create(name='Drinks', slug='drinks')
-        for i in range(5):
-            Product.objects.create(
-                category=category, name=f'Low {i}', price='10.00',
-                stock_quantity=2, low_stock_threshold=10,
-            )
-        self.client.force_login(self.admin)
-        response, ctx = self._dashboard_get()
-        self.assertEqual(response.status_code, 200)
-        self.assertLessEqual(
-            len(ctx.captured_queries), DASHBOARD_QUERY_BUDGET,
-            f'dashboard executed {len(ctx.captured_queries)} queries',
-        )
-
     def test_chart_endpoint_query_count_is_bounded(self):
         self._seed_sales_data()
         self.client.force_login(self.admin)
@@ -282,7 +267,7 @@ class DashboardStatisticsTests(TestCase):
         self.week_start = self.today - timedelta(days=self.today.isoweekday() % 7)
         self.month_start = self.today.replace(day=1)
         # An extra, well-stocked product keeps the seed close to production.
-        Product.objects.create(
+        Product.objects.create(inventory_tracking_mode='legacy',
             category=self.category, name='Well Stocked Item', price='60.00',
             stock_quantity=100, low_stock_threshold=10,
         )
@@ -340,12 +325,15 @@ class DashboardStatisticsTests(TestCase):
             self.assertEqual(top[0]['total_revenue'], Decimal('260.00'))
         self.assertEqual(top[1]['product_name'], 'Latte')
 
-    def test_low_stock_list_is_correct(self):
+    def test_legacy_low_stock_card_is_retired(self):
+        """Phase 7C-2: the finished-product low-stock card and its dataset
+        are gone; ingredient low-stock is the only restock widget."""
         response = self.client.get(DASHBOARD_URL)
-        low = list(response.context['low_stock'])
-        self.assertEqual([p.pk for p in low], [self.low_product.pk])
-        # Category name must resolve without an extra query per product.
-        self.assertEqual(low[0].category.name, 'Drinks')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('low_stock', response.context)
+        body = response.content.decode()
+        self.assertNotIn('Low Stock — Finished Products', body)
+        self.assertNotIn('id="low-stock-list"', body)
 
     def test_chart_data_covers_last_seven_days(self):
         response = self.client.get(DASHBOARD_URL)
@@ -366,15 +354,12 @@ class DashboardStatisticsTests(TestCase):
         self.assertEqual(data, expected)
 
 
-class LegacyLowStockWidgetSeparationTests(TestCase):
-    """Phase 7.1 — the legacy low-stock widget must show only products still
-    tracked on the legacy stock ledger.
+class LegacyLowStockRetirementTests(TestCase):
+    """Phase 7C-2 — the finished-product low-stock card and the legacy
+    ``inventory_low`` realtime event are retired.
 
-    Ingredient-tracked products keep their (frozen, non-authoritative)
-    Product.stock_quantity but their real stock lives in the ingredient
-    ledger (InventoryItem with its own low_stock_threshold), so they must
-    never appear in this widget (Rev 3 §C.4, §E.3b). The ingredient widget
-    itself is covered by IngredientLowStockWidgetTests (Phase 7.2).
+    Ingredient low-stock is the authoritative restock widget (Rev 3 §C.4,
+    §E.3b) and is covered in depth by IngredientLowStockWidgetTests.
     """
 
     def setUp(self):
@@ -391,41 +376,39 @@ class LegacyLowStockWidgetSeparationTests(TestCase):
             inventory_tracking_mode=mode,
         )
 
-    def _get_low_stock_pks(self, url=DASHBOARD_URL):
-        response = self.client.get(url)
+    def test_page_has_no_legacy_low_stock_card(self):
+        self._make_product('Legacy Low')
+        response = self.client.get(DASHBOARD_URL)
         self.assertEqual(response.status_code, 200)
-        return [p.pk for p in response.context['low_stock']]
+        self.assertNotIn('low_stock', response.context)
+        body = response.content.decode()
+        self.assertNotIn('Low Stock — Finished Products', body)
+        self.assertNotIn('id="low-stock-list"', body)
 
-    def test_legacy_low_stock_product_included(self):
-        """A sellable legacy-tracked product below its threshold appears."""
-        legacy = self._make_product('Legacy Low')
-        self.assertIn(legacy.pk, self._get_low_stock_pks())
-
-    def test_ingredient_tracked_low_stock_product_excluded(self):
-        """An otherwise-qualifying ingredient-tracked product does not appear
-        in the legacy widget even though stock_quantity is below threshold."""
-        self._make_product('Ingredient Low',
-                           mode=Product.INVENTORY_TRACKING_INGREDIENT)
-        self.assertEqual(self._get_low_stock_pks(), [])
-
-    def test_mixed_modes_include_legacy_exclude_ingredient(self):
-        """With both modes present, only the legacy product is listed."""
-        legacy = self._make_product('Legacy Low')
-        self._make_product('Ingredient Low',
-                           mode=Product.INVENTORY_TRACKING_INGREDIENT)
-        self.assertEqual(self._get_low_stock_pks(), [legacy.pk])
-
-    def test_summary_endpoint_low_stock_matches_page(self):
-        """The realtime summary endpoint serialises low_stock from the same
-        consolidated loader — the exclusion must hold there too."""
-        legacy = self._make_product('Legacy Low')
-        self._make_product('Ingredient Low',
-                           mode=Product.INVENTORY_TRACKING_INGREDIENT)
+    def test_summary_has_no_legacy_low_stock_key(self):
+        self._make_product('Legacy Low')
         response = self.client.get(SUMMARY_URL)
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertIsNotNone(data['low_stock'])
-        self.assertEqual([row['pk'] for row in data['low_stock']], [legacy.pk])
+        self.assertNotIn('low_stock', data)
+        self.assertIn('ingredient_low_stock', data)
+
+    def test_ingredient_low_stock_still_present_with_legacy_product(self):
+        self._make_product('Legacy Low')
+        InventoryItem.objects.create(
+            name='Milk', item_type=InventoryItem.ITEM_TYPE_INGREDIENT,
+            base_unit=InventoryItem.BASE_UNIT_G,
+            on_hand_quantity=Decimal('1.000'),
+            reserved_quantity=Decimal('0.000'),
+            low_stock_threshold=Decimal('10.000'),
+        )
+        response = self.client.get(DASHBOARD_URL)
+        self.assertEqual(
+            [row['name'] for row in response.context['ingredient_low_stock']],
+            ['Milk'],
+        )
+        self.assertIn('ingredient-low-stock-list',
+                      response.content.decode())
 
 
 class IngredientLowStockWidgetTests(TestCase):
@@ -634,7 +617,7 @@ class IngredientLowStockWidgetTests(TestCase):
     # ── H. Error isolation ────────────────────────────────────────────────
 
     def test_page_renders_when_ingredient_widget_fails(self):
-        Product.objects.create(
+        Product.objects.create(inventory_tracking_mode='legacy',
             category=self.category, name='Legacy Low', price='50.00',
             stock_quantity=3, low_stock_threshold=10,
         )
@@ -651,9 +634,7 @@ class IngredientLowStockWidgetTests(TestCase):
         )
         self.assertIn('ingredient_low_stock', response.context['widget_errors'])
         self.assertEqual(response.context['ingredient_low_stock'], [])
-        self.assertEqual(
-            [p.name for p in response.context['low_stock']], ['Legacy Low'],
-        )
+        self.assertNotIn('low_stock', response.context)
 
     def test_summary_returns_null_only_for_failed_ingredient_widget(self):
         with mock.patch(
@@ -665,7 +646,7 @@ class IngredientLowStockWidgetTests(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIsNone(data['ingredient_low_stock'])
-        self.assertIsNotNone(data['low_stock'])
+        self.assertNotIn('low_stock', data)
         self.assertEqual(data['daily_sales'], 0.0)
         self.assertEqual(data['pending_count'], 0)
 
@@ -738,7 +719,6 @@ class DashboardEmptyStateTests(TestCase):
     EMPTY_MARKERS = [
         'No best-sellers yet',        # Top Products
         'No orders yet',              # Recent Orders
-        'All items well-stocked',     # Low Stock
         'No orders yet today',        # Today's orders stat hint
         'No orders this month',       # This month's orders stat hint
     ]
@@ -749,7 +729,7 @@ class DashboardEmptyStateTests(TestCase):
 
     def _seed(self):
         category = Category.objects.create(name='Drinks', slug='drinks')
-        Product.objects.create(
+        Product.objects.create(inventory_tracking_mode='legacy',
             category=category, name='Low Stock Item', price='50.00',
             stock_quantity=3, low_stock_threshold=10,
         )
@@ -774,7 +754,7 @@ class DashboardEmptyStateTests(TestCase):
         self.assertEqual(ctx['preparing_count'], 0)
         self.assertEqual(list(ctx['recent_orders']), [])
         self.assertEqual(list(ctx['top_products']), [])
-        self.assertEqual(list(ctx['low_stock']), [])
+        self.assertNotIn('low_stock', ctx)
         self.assertEqual(ctx['chart_data'], [0.0] * 7)
         content = response.content.decode()
         for marker in self.EMPTY_MARKERS:
@@ -863,11 +843,9 @@ class DashboardSummaryEndpointTests(TestCase):
             self.assertEqual(data['top_products'][0]['total_revenue'], 260.0)
         self.assertEqual(data['top_products'][1]['product_name'], 'Latte')
 
-        # Low stock (the only product under its threshold)
-        self.assertEqual(len(data['low_stock']), 1)
-        self.assertEqual(data['low_stock'][0]['name'], 'Low Stock Item')
-        self.assertEqual(data['low_stock'][0]['stock_quantity'], 3)
-        self.assertTrue(data['low_stock'][0]['is_critical'])
+        # The retired finished-product low-stock dataset is not serialised.
+        self.assertNotIn('low_stock', data)
+        self.assertIn('ingredient_low_stock', data)
 
     def test_summary_month_period_is_month_to_date(self):
         # The 'month' period is the current calendar month TO DATE (Rev 3
@@ -974,7 +952,7 @@ class DashboardErrorResilienceTests(TestCase):
     def _seed(self):
         now = timezone.now()
         category = Category.objects.create(name='Drinks', slug='drinks')
-        Product.objects.create(
+        Product.objects.create(inventory_tracking_mode='legacy',
             category=category, name='Low Stock Item', price='50.00',
             stock_quantity=3, low_stock_threshold=10,
         )
@@ -999,7 +977,7 @@ class DashboardErrorResilienceTests(TestCase):
         self.assertIn('Top products are temporarily unavailable', content)
         # ...while the healthy widgets still render real data.
         self.assertIn('1 order today', content)
-        self.assertIn('Low Stock Item', content)
+        self.assertIn('Test Customer', content)
         self.assertContains(response, 'id="recent-orders-body"')
 
     def test_page_renders_when_sales_stats_fail(self):
@@ -1011,19 +989,19 @@ class DashboardErrorResilienceTests(TestCase):
         self.assertEqual(content.count('>—<'), 4)
         self.assertIn('Unavailable', content)
         # ...and the rest of the dashboard is untouched.
-        self.assertIn('Low Stock Item', content)
         self.assertIn('Americano', content)
+        self.assertIn('ingredient-low-stock-list', content)
 
     def test_page_renders_when_multiple_widgets_fail(self):
-        with mock.patch('apps.dashboard.views._low_stock', side_effect=Exception('boom')), \
+        with mock.patch('apps.dashboard.views._top_products', side_effect=Exception('boom')), \
              mock.patch('apps.dashboard.views._chart_series', side_effect=Exception('boom')):
             response = self.client.get(DASHBOARD_URL)
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
-        self.assertIn('Low stock data is temporarily unavailable', content)
+        self.assertIn('Top products are temporarily unavailable', content)
         self.assertIn('Chart data is temporarily unavailable', content)
         # Healthy widgets unaffected.
-        self.assertIn('Americano', content)
+        self.assertIn('Test Customer', content)
         self.assertIn('1 order today', content)
 
     def test_chart_canvas_survives_chart_widget_failure(self):
@@ -1058,7 +1036,8 @@ class DashboardErrorResilienceTests(TestCase):
         self.assertIsNone(data['top_products'])
         self.assertEqual(data['daily_sales'], 100.0)
         self.assertEqual(data['daily_orders'], 1)
-        self.assertIsNotNone(data['low_stock'])
+        self.assertNotIn('low_stock', data)
+        self.assertIsNotNone(data['ingredient_low_stock'])
         self.assertEqual(data['pending_count'], 0)
 
     def test_summary_isolates_sales_stats_failure(self):
@@ -1070,7 +1049,7 @@ class DashboardErrorResilienceTests(TestCase):
         self.assertIsNone(data['total_orders'])
         # Independent widgets still work.
         self.assertEqual(data['top_products'][0]['product_name'], 'Americano')
-        self.assertIsNotNone(data['low_stock'])
+        self.assertIsNotNone(data['ingredient_low_stock'])
 
     def test_summary_failure_does_not_raise(self):
         # Even when ALL widgets fail, the endpoint returns 200 with nulls
@@ -1080,7 +1059,6 @@ class DashboardErrorResilienceTests(TestCase):
             '_status_counts': Exception('boom'),
             '_chart_series': Exception('boom'),
             '_top_products': Exception('boom'),
-            '_low_stock': Exception('boom'),
             '_ingredient_low_stock': Exception('boom'),
             '_ingredient_movement_summary': Exception('boom'),
             '_recent_ingredient_activity': Exception('boom'),
@@ -1090,7 +1068,7 @@ class DashboardErrorResilienceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         for key in ('daily_sales', 'daily_orders', 'pending_count',
-                    'chart_data', 'top_products', 'low_stock',
+                    'chart_data', 'top_products',
                     'ingredient_low_stock', 'ingredient_movement_summary',
                     'recent_ingredient_activity'):
             self.assertIsNone(data[key])
@@ -1136,7 +1114,7 @@ ALL_NAV_LABELS = [
     'POS Terminal',
     'Products',
     'Categories',
-    'Inventory',
+    'Stock Movements',
     'Sales Reports',
     'Staff Accounts',
     'Settings',
@@ -1249,8 +1227,11 @@ class SidebarNavigationActiveStateTests(TestCase):
     # ── Stock & Reports ────────────────────────────────────────────────────
 
     def test_inventory_activates_only_inventory(self):
+        # Phase 7B-3A: the sidebar entry is now "Stock Movements" (the
+        # retired Finished-Product Stock page was removed); it activates
+        # only on the historical /inventory/log/ page.
         self._assert_only_active(
-            reverse('inventory:list'), 'Inventory',
+            reverse('inventory:log'), 'Stock Movements',
         )
 
     def test_reports_activates_only_sales_reports(self):
@@ -1300,7 +1281,7 @@ class SidebarNavigationActiveStateTests(TestCase):
             (reverse('orders:order_list'),         'Order Management'),
             (reverse('dashboard:gcash_settings'),  'GCash Settings'),
             (reverse('orders:pos'),                'POS Terminal'),
-            (reverse('inventory:list'),            'Inventory'),
+            (reverse('inventory:log'),             'Stock Movements'),
             (reverse('reports:index'),             'Sales Reports'),
             (reverse('accounts:staff_list'),       'Staff Accounts'),
             (reverse('menu:product_list'),         'Products'),

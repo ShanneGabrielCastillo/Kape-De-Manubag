@@ -18,7 +18,6 @@ from django.utils import timezone
 from apps.accounts.decorators import admin_required, cashier_or_admin_required
 from apps.audit.services import log_action
 from apps.inventory.models import IngredientMovementLog, InventoryItem
-from apps.menu.models import CRITICAL_STOCK_THRESHOLD, Product
 from apps.orders.models import Order, OrderItem
 
 from .models import SystemSetting, GCashSettings
@@ -217,25 +216,6 @@ def _top_products(period='week'):
         .order_by('-total_qty')[:5]
     )
 
-
-def _low_stock():
-    """Low stock alerts — sellable products at or below their own restock
-    threshold (Product.objects.sellable().low_stock()).
-    select_related('category') avoids an N+1 when the template renders each
-    product's category name. Deactivated products are not sellable, so they
-    are excluded from restock alerts.
-
-    Phase 7.1: ingredient-tracked products are excluded from this legacy
-    widget. Their stock is managed by the ingredient ledger (InventoryItem
-    with its own low_stock_threshold), not by Product.stock_quantity, which
-    is frozen and non-authoritative for them (Rev 3 §C.4, §E.3b). The
-    ingredient low-stock widget is added in a later Phase 7 subphase."""
-    return list(
-        Product.objects.sellable().low_stock()
-        .exclude(inventory_tracking_mode=Product.INVENTORY_TRACKING_INGREDIENT)
-        .select_related('category')
-        .order_by('stock_quantity')[:5]
-    )
 
 
 def _format_quantity(value):
@@ -504,11 +484,6 @@ def _load_widgets(period='week', chart_label_fmt=None, *, include_recent=False):
         failed.add('top_products')
     widgets['top_products'] = top_products
 
-    low_stock, low_failed = _widget('low stock', [], _low_stock)
-    if low_failed:
-        failed.add('low_stock')
-    widgets['low_stock'] = low_stock
-
     ingredient_low_stock, ingredient_failed = _widget(
         'ingredient stock', [], _ingredient_low_stock,
     )
@@ -555,7 +530,7 @@ def dashboard_index(request):
 @cashier_or_admin_required
 def dashboard_summary(request):
     """JSON snapshot of every dashboard widget, fetched by the page ONLY when a
-    realtime event (new_order / status_changed / inventory_low) indicates the
+    realtime event (new_order / status_changed / ingredient_low) indicates the
     data may have changed. Reuses the same consolidated loader as the page
     render, so a refresh is ONE request (no per-widget polling)."""
     period = _validated_period(request)
@@ -567,7 +542,6 @@ def dashboard_summary(request):
     counts_failed = 'status_counts' in failed
     chart_failed = 'chart' in failed
     top_failed = 'top_products' in failed
-    low_failed = 'low_stock' in failed
     ingredient_low_failed = 'ingredient_low_stock' in failed
     movement_summary_failed = 'ingredient_movement_summary' in failed
     recent_activity_failed = 'recent_ingredient_activity' in failed
@@ -594,16 +568,6 @@ def dashboard_summary(request):
                 'total_revenue': float(t['total_revenue']),
             }
             for t in widgets['top_products']
-        ],
-        'low_stock': None if low_failed else [
-            {
-                'pk': p.pk,
-                'name': p.name,
-                'category': p.category.name,
-                'stock_quantity': p.stock_quantity,
-                'is_critical': p.stock_quantity <= CRITICAL_STOCK_THRESHOLD,
-            }
-            for p in widgets['low_stock']
         ],
         'ingredient_low_stock': None if ingredient_low_failed else [
             {

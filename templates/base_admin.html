@@ -90,11 +90,13 @@
       </a>
 
       <div class="nav-section-title">Stock &amp; Reports</div>
-      <a href="{% url 'inventory:list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'inventory' and request.resolver_match.url_name in 'list,restock,log' %}active{% endif %}"
-         aria-label="Inventory">
-        <span class="nav-icon"><i data-lucide="boxes" class="nav-icon" aria-hidden="true"></i></span>
-        <span class="nav-label">Inventory</span>
-        <span class="sidebar-tooltip" aria-hidden="true">Inventory</span>
+      {# Phase 7B-3A: the legacy Finished-Product Stock page is retired; #}
+      {# the sidebar entry now points at the historical Stock Movements log. #}
+      <a href="{% url 'inventory:log' %}" class="sidebar-link {% if request.resolver_match.app_name == 'inventory' and request.resolver_match.url_name == 'log' %}active{% endif %}"
+         aria-label="Stock Movements">
+        <span class="nav-icon"><i data-lucide="history" class="nav-icon" aria-hidden="true"></i></span>
+        <span class="nav-label">Stock Movements</span>
+        <span class="sidebar-tooltip" aria-hidden="true">Stock Movements (Legacy Ledger)</span>
       </a>
       <a href="{% url 'reports:index' %}" class="sidebar-link {% if request.resolver_match.app_name == 'reports' %}active{% endif %}"
          aria-label="Sales Reports">
@@ -141,32 +143,37 @@
         <span class="sidebar-tooltip" aria-hidden="true">Finance</span>
       </a>
 
-      <div class="nav-section-title">Ingredients</div>
+      {% with url_name=request.resolver_match.url_name %}
+      <div class="nav-section-title">Supply Management</div>
       {# Ingredient Inventory: accessible to admin and cashier (cashier_or_admin_required) #}
-      <a href="{% url 'inventory:ingredient_list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'inventory' and request.resolver_match.url_name in 'ingredient_list,ingredient_create,ingredient_adjust,ingredient_wastage' %}active{% endif %}"
-         aria-label="Ingredient Inventory">
+      <a href="{% url 'inventory:ingredient_list' %}" class="sidebar-link {% if url_name == 'ingredient_list' or url_name == 'ingredient_create' or url_name == 'ingredient_adjust' or url_name == 'ingredient_wastage' %}active{% endif %}"
+         aria-label="Ingredients Inventory">
         <span class="nav-icon"><i data-lucide="flask-conical" class="nav-icon" aria-hidden="true"></i></span>
-        <span class="nav-label">Ingredients</span>
-        <span class="sidebar-tooltip" aria-hidden="true">Ingredients</span>
+        <span class="nav-label">Ingredients Inventory</span>
+        <span class="sidebar-tooltip" aria-hidden="true">Ingredients Inventory</span>
       </a>
-
-      <div class="nav-section-title">Packaging</div>
+      {# Recipe Management: accessible to admin and cashier (cashier_or_admin_required) #}
+      <a href="{% url 'inventory:recipe_list' %}" class="sidebar-link {% if url_name == 'recipe_list' or url_name == 'recipe_create' or url_name == 'recipe_detail' or url_name == 'recipe_edit' or url_name == 'recipe_approve' or url_name == 'recipe_retire' or url_name == 'recipe_item_delete' or url_name == 'recipe_config_status' %}active{% endif %}"
+         aria-label="Recipe Management">
+        <span class="nav-icon"><i data-lucide="clipboard-list" class="nav-icon" aria-hidden="true"></i></span>
+        <span class="nav-label">Recipes</span>
+        <span class="sidebar-tooltip" aria-hidden="true">Recipes</span>
+      </a>
       {# Packaging Inventory: accessible to admin and cashier (cashier_or_admin_required) #}
-      <a href="{% url 'inventory:packaging_list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'inventory' and request.resolver_match.url_name in 'packaging_list,packaging_create,packaging_adjust,packaging_wastage' %}active{% endif %}"
+      <a href="{% url 'inventory:packaging_list' %}" class="sidebar-link {% if url_name == 'packaging_list' or url_name == 'packaging_create' or url_name == 'packaging_adjust' or url_name == 'packaging_wastage' %}active{% endif %}"
          aria-label="Packaging Inventory">
         <span class="nav-icon"><i data-lucide="package" class="nav-icon" aria-hidden="true"></i></span>
-        <span class="nav-label">Packaging</span>
-        <span class="sidebar-tooltip" aria-hidden="true">Packaging</span>
+        <span class="nav-label">Packaging Inventory</span>
+        <span class="sidebar-tooltip" aria-hidden="true">Packaging Inventory</span>
       </a>
-
-      <div class="nav-section-title">Purchases</div>
       {# Purchase Management: accessible to admin and cashier (cashier_or_admin_required) #}
-      <a href="{% url 'inventory:purchase_list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'inventory' and request.resolver_match.url_name in 'purchase_list,purchase_create,purchase_detail' %}active{% endif %}"
+      <a href="{% url 'inventory:purchase_list' %}" class="sidebar-link {% if url_name == 'purchase_list' or url_name == 'purchase_create' or url_name == 'purchase_detail' %}active{% endif %}"
          aria-label="Purchase Management">
         <span class="nav-icon"><i data-lucide="shopping-cart" class="nav-icon" aria-hidden="true"></i></span>
         <span class="nav-label">Purchases</span>
         <span class="sidebar-tooltip" aria-hidden="true">Purchases</span>
       </a>
+      {% endwith %}
 
       <div class="nav-section-title">Store</div>
       <a href="{% url 'menu:index' %}" class="sidebar-link" target="_blank"

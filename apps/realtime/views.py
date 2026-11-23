@@ -114,7 +114,7 @@ def customer_order_stream(request):
                     #   show the "Order Received" overlay and redirect to the tracker.
                     #
                     # All other event types (new_order, inventory_changed,
-                    # inventory_low) are irrelevant to the customer tracker
+                    # ingredient_low) are irrelevant to the customer tracker
                     # and must never be sent to unauthenticated clients.
 
                     evt  = event['event']

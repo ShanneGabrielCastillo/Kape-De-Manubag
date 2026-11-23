@@ -865,3 +865,56 @@ class FinanceHistoryFilterTests(TestCase):
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
         self.assertIn('filter-chips', content)
+
+
+# ── 8. Finance History AJAX tests ─────────────────────────────────────────────
+
+class FinanceHistoryAjaxTests(TestCase):
+    """AJAX partial-replacement: confirm id='results-region' is present in
+    Finance History responses and that the filter-chips go inside it."""
+
+    def setUp(self):
+        self.user = make_user(username='fh_ajax_user', role='cashier')
+        self.client = Client()
+        self.client.login(username='fh_ajax_user', password='testpass123')
+        self.url = reverse('finance:history')
+        # Create a record so the table has something to render.
+        make_finance(datetime.date(2024, 1, 15), previous_coh=Decimal('100.00'))
+
+    def test_results_region_present(self):
+        """GET /finance/history/ returns id="results-region"."""
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')
+
+    def test_results_region_present_with_q_filter(self):
+        """GET /finance/history/?q=2024-01 returns id="results-region"."""
+        response = self.client.get(self.url, {'q': '2024-01'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')
+
+    def test_results_region_present_with_month_filter(self):
+        """GET /finance/history/?month=2024-01 returns id="results-region"."""
+        response = self.client.get(self.url, {'month': '2024-01'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="results-region"')
+
+    def test_filter_chips_inside_results_region(self):
+        """filter-chips must appear after results-region opening tag in the HTML."""
+        response = self.client.get(self.url, {'q': '2024-01'})
+        content = response.content.decode()
+        region_pos = content.find('id="results-region"')
+        chips_pos  = content.find('class="filter-chips"')
+        self.assertGreater(chips_pos, region_pos,
+            'filter-chips must appear after the results-region opening tag '
+            '(i.e. inside results-region)')
+
+    def test_filter_bar_outside_results_region(self):
+        """finance-history-filters must appear before results-region in the HTML."""
+        response = self.client.get(self.url)
+        content = response.content.decode()
+        filter_bar_pos = content.find('finance-history-filters')
+        region_pos = content.find('id="results-region"')
+        self.assertGreater(region_pos, filter_bar_pos,
+            'finance-history-filters must appear before results-region '
+            '(not nested inside it)')

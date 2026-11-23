@@ -181,11 +181,17 @@ class FinancePrintQueryCountTest(TestCase):
       - record.ending_coh  → calls running_total → calls cash_sales (1 more)
     Total cash-sales queries: 5.  After OPT-1 + OPT-3: 1.
 
-    We assert the total query count for the entire view is ≤ 5:
+    We assert the total query count for the entire view is ≤ 9:
+      1  session SELECT (SessionMiddleware)
+      1  user SELECT (AuthenticationMiddleware)
+      1  MFA device lookup (MFAEnforcementMiddleware)
       1  get_object_or_404 (PK lookup)
       1  _get_cash_sales_for_date (OPT-1: single aggregate)
-      1  session / auth (Django middleware)
-      ≤2 misc (e.g. AuditLog, messages framework)
+      1  _get_gcash_sales_for_date (single aggregate)
+      3  idle-timeout session UPDATE (savepoint + UPDATE + release, first
+         request in an activity window)
+    The count is independent of the number of orders (see
+    test_query_count_same_regardless_of_order_volume).
     """
 
     def setUp(self):
@@ -201,11 +207,12 @@ class FinancePrintQueryCountTest(TestCase):
         with CaptureQueriesContext(connection) as ctx:
             resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
-        # At most 8 queries total (generous upper bound to allow for session,
-        # auth, and Django internals; the important thing is we are NOT
-        # issuing O(N) queries for N orders).
-        self.assertLessEqual(len(ctx), 8, (
-            f"finance_print issued {len(ctx)} queries — expected ≤ 8.\n"
+        # At most 9 queries total: the authenticated staff request includes
+        # one MFA device lookup from MFAEnforcementMiddleware, plus the
+        # idle-timeout session write (savepoint/update/release) on the first
+        # request in a window. The count must not grow with order volume.
+        self.assertLessEqual(len(ctx), 9, (
+            f"finance_print issued {len(ctx)} queries — expected ≤ 9.\n"
             + '\n'.join(q['sql'][:120] for q in ctx)
         ))
 
@@ -218,8 +225,8 @@ class FinancePrintQueryCountTest(TestCase):
         with CaptureQueriesContext(connection) as ctx:
             resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
-        self.assertLessEqual(len(ctx), 8,
-            f"finance_print with 100 orders issued {len(ctx)} queries — expected ≤ 8.")
+        self.assertLessEqual(len(ctx), 9,
+            f"finance_print with 100 orders issued {len(ctx)} queries — expected ≤ 9.")
 
     def test_financial_values_correct_after_opt3(self):
         """OPT-3 must not change the numbers displayed on the print report."""

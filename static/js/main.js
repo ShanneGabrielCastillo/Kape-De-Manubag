@@ -783,8 +783,13 @@ window.POS = {
   _checkoutSuccess: false,
   // Live stock snapshot keyed by product id, kept fresh by the realtime
   // inventory_changed event. Lazily seeded from the product cards' data-stock
-  // attributes on first use.
+  // attributes on first use. Values are AVAILABLE UNITS (Phase 3
+  // mode-aware contract: legacy = finished-goods count; ingredient =
+  // plan-derived units) — never the frozen legacy stock field.
   _stock: {},
+  // Tracking mode per product id ('legacy' | 'ingredient' | null), from
+  // realtime payloads / initial render, so consumers can branch safely.
+  _mode: {},
 
   clear() {
     this.items = [];
@@ -798,6 +803,10 @@ window.POS = {
     if (this._stock[id] === undefined) {
       const el = document.querySelector(`.pos-item[data-product-id="${id}"]`);
       this._stock[id] = el ? parseInt(el.dataset.stock || '0', 10) : 0;
+      // Seed the mode alongside the units: data-stock on ingredient
+      // cards is ALREADY the derived availability (cashier_pos renders
+      // ingredient_units there), so both ledgers share one semantics.
+      if (el && el.dataset.trackingMode) this._mode[id] = el.dataset.trackingMode;
     }
     return this._stock[id];
   },
@@ -1018,10 +1027,26 @@ window.POS = {
   _stockFlushTimer: null,
 
   updateStock(data) {
+    // Phase 3 mode-aware contract, 7D-2B: `available_units` is the only
+    // availability authority (plan-derived units; non-ingredient products
+    // broadcast the guard payload with units 0). The pre-Phase-3 frozen-stock
+    // fallback was removed with the legacy branches.
+    // Malformed events are dropped rather than zeroing availability.
     const id = String(data.product_id);
-    this._stock[id] = data.stock_quantity;
+    if (id === 'undefined' || id === 'null') return;
+    let units;
+    if (typeof data.available_units === 'number' &&
+        Number.isFinite(data.available_units) && data.available_units >= 0) {
+      units = data.available_units;
+    } else {
+      // Missing/invalid availability: keep the current snapshot, ignore
+      // the event (fail safe — never set availability to 0).
+      return;
+    }
+    this._stock[id] = units;
+    this._mode[id] = data.inventory_tracking_mode || this._mode[id] || null;
     if (!this._pendingStock) this._pendingStock = {};
-    this._pendingStock[id] = data;
+    this._pendingStock[id] = { ...data, available_units: units };
     if (this._stockFlushTimer !== null) return;
     this._stockFlushTimer = setTimeout(() => this._flushStockUpdates(), 50);
   },
@@ -1038,11 +1063,13 @@ window.POS = {
     // it never mutates the buffer, so a plain iteration is safe.
     Object.keys(pending).forEach(id => {
       const data = pending[id];
-      const stock = data.stock_quantity;
+      const stock = data.available_units;
 
-      const orderable = !!(data.is_active && data.is_available && stock > 0);
+      const orderable = !!(data.is_active && data.is_available &&
+                           data.sellable !== false && stock > 0);
       document.querySelectorAll(`.pos-item[data-product-id="${id}"]`).forEach(el => {
         el.dataset.stock = stock;
+        if (data.inventory_tracking_mode) el.dataset.trackingMode = data.inventory_tracking_mode;
         el.classList.toggle('pos-item--out', !orderable);
         if (orderable) delete el.dataset.out;
         else el.dataset.out = '1';
@@ -1063,12 +1090,19 @@ window.POS = {
   },
 
   _renderStockBadge(el, data) {
-    const stock = data.stock_quantity;
-    const threshold = data.low_stock_threshold || 10;
+    // 7D-2B: badge rendering is ingredient-only — the legacy threshold
+    // branch was removed with the legacy card branches (unreachable since
+    // rollback retirement, Phase 7D-2A). Non-ingredient payloads (the
+    // guard payload) render no badge: such products never appear on the
+    // POS grid. `available_units` is the display quantity.
+    const stock = data.available_units;
     let text = null, cls = null;
-    if (stock <= 0) { text = 'Out of Stock'; cls = 'stock-badge--out'; }
-    else if (stock <= 5) { text = `${stock} left`; cls = 'stock-badge--critical'; }
-    else if (stock <= threshold) { text = `${stock} left`; cls = 'stock-badge--low'; }
+    if (data.inventory_tracking_mode === 'ingredient') {
+      if (data.configuration_complete === false) {
+        text = 'Config incomplete'; cls = 'stock-badge--critical';
+      } else if (stock <= 0) { text = 'Out of Stock'; cls = 'stock-badge--out'; }
+      else if (stock <= 5) { text = `${stock} left`; cls = 'stock-badge--critical'; }
+    }
 
     let badge = el.querySelector('.stock-badge');
     if (!text) {

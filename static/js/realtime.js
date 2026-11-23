@@ -42,11 +42,11 @@ window.RealtimeConnection = (function () {
     eventSource.addEventListener('status_changed', (e) => {
       dispatch('status_changed', JSON.parse(e.data));
     });
-    eventSource.addEventListener('inventory_low', (e) => {
-      dispatch('inventory_low', JSON.parse(e.data));
-    });
     eventSource.addEventListener('inventory_changed', (e) => {
       dispatch('inventory_changed', JSON.parse(e.data));
+    });
+    eventSource.addEventListener('ingredient_low', (e) => {
+      dispatch('ingredient_low', JSON.parse(e.data));
     });
     eventSource.addEventListener('gcash_submitted', (e) => {
       dispatch('gcash_submitted', JSON.parse(e.data));

@@ -197,25 +197,24 @@
       <div class="pos-grid">
         {% for product in cat.products.all %}
         {% if product.is_available and product.is_active %}
-        {# Phase 8B: ingredient products gate on derived availability;      #}
-        {# legacy products keep the stock_quantity gate.                    #}
-        <div class="pos-item {% if product.inventory_tracking_mode == 'ingredient' and not product.ingredient_sellable %}pos-item--out{% elif product.stock_quantity == 0 %}pos-item--out{% endif %}"
-             {% if product.inventory_tracking_mode == 'ingredient' and not product.ingredient_sellable %}
-             onclick="showToast('{{ product.name|escapejs }} is out of stock', 'error')"
-             {% elif product.stock_quantity == 0 %}
+        {# Phase 8B/7B-2, 7D-2B: sellability derives from the ingredient     #}
+        {# ledger only — the legacy stock_quantity card branches were        #}
+        {# removed (unreachable since rollback retirement, Phase 7D-2A).     #}
+        {# A non-ingredient product renders NO card (defensive: none can     #}
+        {# exist through supported workflows).                                #}
+        {% if product.inventory_tracking_mode == 'ingredient' %}
+        {% with ingredient_sellable=product.ingredient_sellable %}
+        <div class="pos-item {% if not ingredient_sellable %}pos-item--out{% endif %}"
+             {% if not ingredient_sellable %}
              onclick="showToast('{{ product.name|escapejs }} is out of stock', 'error')"
              {% else %}
              onclick="handlePosAdd({{ product.pk }}, '{{ product.name|escapejs }}', {{ product.price }}, this)"
              {% endif %}
              data-product-id="{{ product.pk }}" data-name="{{ product.name|escape }}" data-base-price="{{ product.price }}"
              data-has-sizes="{% if product.has_sizes %}1{% else %}0{% endif %}"
-             {% if product.inventory_tracking_mode == 'ingredient' %}
+             data-tracking-mode="{{ product.inventory_tracking_mode }}"
              data-stock="{{ product.ingredient_units }}"
-             {% if not product.ingredient_sellable %}data-out="1"{% endif %}
-             {% else %}
-             data-stock="{{ product.stock_quantity }}"
-             {% if product.stock_quantity == 0 %}data-out="1"{% endif %}
-             {% endif %}
+             {% if not ingredient_sellable %}data-out="1"{% endif %}
              {% if product.has_sizes %}
              data-price-medium="{{ product.price_medium|default:product.price }}"
              data-price-large="{{ product.price_large|default:product.price }}"
@@ -225,25 +224,17 @@
             {% product_image product alt=product.name %}
           </div>
           <div class="item-name">{{ product.name }}</div>
-          {% if product.inventory_tracking_mode == 'ingredient' %}
-            {% if not product.ingredient_complete %}
-            <span class="stock-badge stock-badge--critical">Configuration incomplete</span>
-            {% elif product.ingredient_units == 0 %}
-            <span class="stock-badge stock-badge--out">Out of Stock</span>
-            {% else %}
-            <span class="stock-badge stock-badge--low">{{ product.ingredient_units }} available</span>
-            {% endif %}
+          {% if not product.ingredient_complete %}
+          <span class="stock-badge stock-badge--critical">Configuration incomplete</span>
+          {% elif product.ingredient_units == 0 %}
+          <span class="stock-badge stock-badge--out">Out of Stock</span>
           {% else %}
-            {% if product.stock_quantity == 0 %}
-            <span class="stock-badge stock-badge--out">Out of Stock</span>
-            {% elif product.stock_status == 'critical' %}
-            <span class="stock-badge stock-badge--critical">{{ product.stock_quantity }} left</span>
-            {% elif product.stock_status == 'low' %}
-            <span class="stock-badge stock-badge--low">{{ product.stock_quantity }} left</span>
-            {% endif %}
+          <span class="stock-badge stock-badge--low">{{ product.ingredient_units }} available</span>
           {% endif %}
           <div class="item-price">₱{{ product.price }}</div>
         </div>
+        {% endwith %}
+        {% endif %}
         {% endif %}
         {% endfor %}
       </div>
