@@ -19,8 +19,14 @@
     {% if recipe.status == 'draft' %}
     <a href="{% url 'inventory:recipe_edit' recipe.pk %}" class="btn btn-outline">Edit Header</a>
     <a href="{% url 'inventory:recipe_approve' recipe.pk %}" class="btn btn-primary">Approve</a>
+    {% if user.is_admin_user %}
+    <a href="{% url 'inventory:recipe_delete' recipe.pk %}" class="btn btn-outline" style="color:#e74c3c;border-color:#e74c3c">Delete</a>
+    {% endif %}
     {% elif recipe.status == 'approved' %}
-    <a href="{% url 'inventory:recipe_retire' recipe.pk %}" class="btn btn-outline" style="color:#e74c3c;border-color:#e74c3c">Retire</a>
+    <a href="{% url 'inventory:recipe_revision_create' recipe.pk %}" class="btn btn-outline">New Revision</a>
+    {% if user.is_admin_user %}
+    <a href="{% url 'inventory:recipe_archive' recipe.pk %}" class="btn btn-outline" style="color:#e74c3c;border-color:#e74c3c">Archive</a>
+    {% endif %}
     {% endif %}
   </div>
 </div>
@@ -50,7 +56,7 @@
   {% if items %}
   <div class="table-wrapper">
     <table class="table">
-      <thead><tr><th>Ingredient</th><th>Base Unit</th><th>Qty per Unit</th>{% if recipe.status == 'draft' %}<th>Remove</th>{% endif %}</tr></thead>
+      <thead><tr><th>Ingredient</th><th>Base Unit</th><th>Qty per Unit</th>{% if recipe.status == 'draft' %}<th>Actions</th>{% endif %}</tr></thead>
       <tbody>
         {% for ri in items %}
         <tr>
@@ -59,10 +65,13 @@
           <td>{{ ri.quantity }}</td>
           {% if recipe.status == 'draft' %}
           <td>
-            <form method="post" action="{% url 'inventory:recipe_item_delete' recipe.pk ri.pk %}" style="display:inline">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-sm" style="color:#e74c3c;background:none;border:1px solid #e74c3c" onclick="return confirm('Remove this ingredient?')">Remove</button>
-            </form>
+            <div style="display:flex;gap:.35rem">
+              <a href="{% url 'inventory:recipe_item_edit' recipe.pk ri.pk %}" class="btn btn-sm btn-outline">Edit</a>
+              <form method="post" action="{% url 'inventory:recipe_item_delete' recipe.pk ri.pk %}" style="display:inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm" style="color:#e74c3c;background:none;border:1px solid #e74c3c" onclick="return confirm('Remove this ingredient?')">Remove</button>
+              </form>
+            </div>
           </td>
           {% endif %}
         </tr>

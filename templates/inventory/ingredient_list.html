@@ -1,13 +1,13 @@
 {% extends "base_admin.html" %}
-{% block page_title %}Ingredients & Packaging{% endblock %}
+{% block page_title %}Ingredients Inventory{% endblock %}
 
 {% block content %}
 
 {# ── Page header ──────────────────────────────────────────────────────────── #}
 <div class="page-header">
   <div>
-    <h1 class="page-title">Ingredients &amp; Packaging</h1>
-    <p class="page-subtitle">Track stock levels for ingredients and packaging materials</p>
+    <h1 class="page-title">Ingredients Inventory</h1>
+    <p class="page-subtitle">Track stock levels for ingredients consumed during food and beverage preparation.</p>
   </div>
   <a href="{% url 'inventory:ingredient_create' %}" class="btn btn-primary">
     <i data-lucide="plus" class="btn-icon" aria-hidden="true"></i>
@@ -20,20 +20,8 @@
   <div class="stat-card">
     <div class="stat-label">Total Items</div>
     <div class="stat-value">{{ total_count }}</div>
-    <div class="stat-sub">Ingredients &amp; packaging</div>
+    <div class="stat-sub">Ingredients</div>
     <div class="stat-icon"><i data-lucide="flask-conical"></i></div>
-  </div>
-  <div class="stat-card blue">
-    <div class="stat-label">Ingredients</div>
-    <div class="stat-value">{{ ingredient_count }}</div>
-    <div class="stat-sub">Consumed during preparation</div>
-    <div class="stat-icon"><i data-lucide="coffee"></i></div>
-  </div>
-  <div class="stat-card green">
-    <div class="stat-label">Packaging</div>
-    <div class="stat-value">{{ packaging_count }}</div>
-    <div class="stat-sub">Used for serving and take-out</div>
-    <div class="stat-icon"><i data-lucide="package"></i></div>
   </div>
   <div class="stat-card {% if low_stock_count %}red{% endif %}">
     <div class="stat-label">Low Stock</div>
@@ -51,17 +39,12 @@
            placeholder="Search by name…"
            class="form-control"
            aria-label="Search ingredients">
-    <select name="type" id="ing-type" class="form-control" aria-label="Filter by type">
-      <option value="">All Types</option>
-      <option value="ingredient" {% if type_filter == 'ingredient' %}selected{% endif %}>Ingredients</option>
-      <option value="packaging"  {% if type_filter == 'packaging'  %}selected{% endif %}>Packaging</option>
-    </select>
     <select name="status" id="ing-status" class="form-control" aria-label="Filter by status">
       <option value="">All Statuses</option>
       <option value="active"   {% if status_filter == 'active'   %}selected{% endif %}>Active</option>
       <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>Inactive</option>
     </select>
-    {% if q or type_filter or status_filter %}
+    {% if q or status_filter %}
       <a href="{% url 'inventory:ingredient_list' %}" class="btn btn-outline btn-sm">Clear</a>
     {% endif %}
   </form>
@@ -70,7 +53,7 @@
 {# ── Results ──────────────────────────────────────────────────────────────── #}
 <div id="results-region">
 
-{% if low_stock_count and not q and not type_filter and not status_filter %}
+{% if low_stock_count and not q and not status_filter %}
 <div class="alert alert-warning" style="margin-bottom:20px;align-items:flex-start">
   <i data-lucide="triangle-alert" class="status-icon" style="flex-shrink:0;margin-top:2px" aria-hidden="true"></i>
   <div>
@@ -87,7 +70,6 @@
       <thead>
         <tr>
           <th data-role="primary">Name</th>
-          <th data-role="secondary">Type</th>
           <th data-role="secondary">Unit</th>
           <th data-role="amount">On Hand</th>
           <th data-role="amount">Reserved</th>
@@ -105,13 +87,6 @@
             {{ item.name }}
             {% if item.description %}
               <div style="font-weight:400;font-size:0.78rem;color:#aaa;margin-top:2px">{{ item.description|truncatechars:60 }}</div>
-            {% endif %}
-          </td>
-          <td>
-            {% if item.item_type == 'ingredient' %}
-              <span class="badge badge-preparing">Ingredient</span>
-            {% else %}
-              <span class="badge badge-muted">Packaging</span>
             {% endif %}
           </td>
           <td style="font-size:0.9rem;color:#666">{{ item.get_base_unit_display }}</td>
@@ -142,17 +117,17 @@
         </tr>
         {% empty %}
         <tr>
-          <td colspan="9" style="text-align:center;padding:48px 32px">
-            {% if q or type_filter or status_filter %}
+          <td colspan="8" style="text-align:center;padding:48px 32px">
+            {% if q or status_filter %}
               <div style="color:#aaa;font-size:0.95rem">No items match the current filters.</div>
               <a href="{% url 'inventory:ingredient_list' %}" class="btn btn-outline" style="margin-top:16px">Clear filters</a>
             {% else %}
               <div style="margin-bottom:12px">
                 <i data-lucide="flask-conical" style="width:48px;height:48px;color:#ddd;display:block;margin:0 auto 12px" aria-hidden="true"></i>
               </div>
-              <div style="font-weight:600;font-size:1rem;margin-bottom:8px">No ingredients or packaging yet</div>
+              <div style="font-weight:600;font-size:1rem;margin-bottom:8px">No ingredients yet</div>
               <div style="color:#aaa;font-size:0.9rem;margin-bottom:20px">
-                Add the ingredients and packaging materials used to prepare your menu items.
+                Add the ingredients used to prepare your food and beverage menu items.
               </div>
               <a href="{% url 'inventory:ingredient_create' %}" class="btn btn-primary">
                 <i data-lucide="plus" class="btn-icon" aria-hidden="true"></i>
@@ -176,7 +151,6 @@
   'use strict';
 
   var searchInput  = document.getElementById('ing-search');
-  var typeSelect   = document.getElementById('ing-type');
   var statusSelect = document.getElementById('ing-status');
   var resultsRegion = document.getElementById('results-region');
   if (!searchInput || !resultsRegion) return;
@@ -200,7 +174,6 @@
     var params = new URLSearchParams();
     var q = searchInput.value.trim();
     if (q) params.set('q', q);
-    if (typeSelect   && typeSelect.value)   params.set('type',   typeSelect.value);
     if (statusSelect && statusSelect.value) params.set('status', statusSelect.value);
     var qs = params.toString();
     return window.location.pathname + (qs ? '?' + qs : '');
@@ -240,18 +213,15 @@
     timer = setTimeout(function () { fetchResults(url, 'push'); }, 350);
   });
 
-  function onDropdownChange() {
+  if (statusSelect) statusSelect.addEventListener('change', function () {
     clearTimeout(timer);
     fetchResults(buildUrl(), 'push');
-  }
-  if (typeSelect)   typeSelect.addEventListener('change', onDropdownChange);
-  if (statusSelect) statusSelect.addEventListener('change', onDropdownChange);
+  });
 
   window.addEventListener('popstate', function (e) {
     var url = (e.state && e.state.url) ? e.state.url : window.location.href;
     var params = new URLSearchParams((url.split('?')[1] || ''));
     searchInput.value = params.get('q') || '';
-    if (typeSelect)   typeSelect.value   = params.get('type')   || '';
     if (statusSelect) statusSelect.value = params.get('status') || '';
     fetchResults(url, 'none');
   });

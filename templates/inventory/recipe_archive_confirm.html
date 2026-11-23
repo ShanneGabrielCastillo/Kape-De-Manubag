@@ -1,0 +1,35 @@
+{% extends "base_admin.html" %}
+{% block page_title %}Archive Recipe{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Archive Recipe</h1>
+    <p class="page-subtitle">{{ recipe.product.name }} — {{ recipe.get_size_display }} / {{ recipe.get_order_type_scope_display }} — Rev {{ recipe.revision }}</p>
+  </div>
+  <a href="{% url 'inventory:recipe_detail' recipe.pk %}" class="btn btn-outline">
+    <i data-lucide="arrow-left" class="btn-icon" aria-hidden="true"></i>
+    Back
+  </a>
+</div>
+
+{% if messages %}
+  {% for message in messages %}
+  <div class="alert alert-{{ message.tags }}" role="alert">{{ message }}</div>
+  {% endfor %}
+{% endif %}
+
+<div class="card" style="max-width:480px">
+  <div class="card-body">
+    <p style="margin-bottom:.75rem">Are you sure you want to archive this approved recipe? Archived recipes are no longer used for new order calculations but their ingredient lines, approval details and revision history are kept.</p>
+    <p style="margin-bottom:1.5rem">An active ingredient-tracked product must keep an approved recipe. Approve a replacement first unless the product is inactive.</p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      <div style="display:flex;gap:.5rem">
+        <button type="submit" class="btn" style="background:#e74c3c;color:#fff;border-color:#e74c3c">Yes, archive</button>
+        <a href="{% url 'inventory:recipe_detail' recipe.pk %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

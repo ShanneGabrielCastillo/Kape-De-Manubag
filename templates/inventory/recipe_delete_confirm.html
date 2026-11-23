@@ -1,0 +1,35 @@
+{% extends "base_admin.html" %}
+{% block page_title %}Delete Draft Recipe{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Delete Draft Recipe</h1>
+    <p class="page-subtitle">{{ recipe.product.name }} — {{ recipe.get_size_display }} / {{ recipe.get_order_type_scope_display }} — Rev {{ recipe.revision }}</p>
+  </div>
+  <a href="{% url 'inventory:recipe_detail' recipe.pk %}" class="btn btn-outline">
+    <i data-lucide="arrow-left" class="btn-icon" aria-hidden="true"></i>
+    Back
+  </a>
+</div>
+
+{% if messages %}
+  {% for message in messages %}
+  <div class="alert alert-{{ message.tags }}" role="alert">{{ message }}</div>
+  {% endfor %}
+{% endif %}
+
+<div class="card" style="max-width:480px">
+  <div class="card-body">
+    <p style="margin-bottom:.75rem">This draft has {{ item_count }} ingredient line{{ item_count|pluralize }}. Deleting it permanently removes the draft recipe and all of its ingredient lines.</p>
+    <p style="margin-bottom:1.5rem">Only unapproved drafts can be deleted. This cannot be undone.</p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      <div style="display:flex;gap:.5rem">
+        <button type="submit" class="btn" style="background:#e74c3c;color:#fff;border-color:#e74c3c">Yes, delete draft</button>
+        <a href="{% url 'inventory:recipe_detail' recipe.pk %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

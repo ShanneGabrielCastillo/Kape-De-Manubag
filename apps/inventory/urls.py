@@ -7,7 +7,13 @@ urlpatterns = [
     # ── Legacy product inventory ──────────────────────────────────────────────
     path('', views.inventory_list, name='list'),
     path('<int:pk>/restock/', views.restock_product, name='restock'),
-    path('log/', views.inventory_log, name='log'),
+    # ── Stock movements ───────────────────────────────────────────────────────
+    # Phase 1.1: /inventory/log/ now shows the CURRENT ingredient/packaging
+    # movement history (IngredientMovementLog). The legacy finished-product
+    # history stays available read-only at /inventory/log/legacy/ so existing
+    # bookmarks keep working without merging the two datasets.
+    path('log/', views.movement_log, name='log'),
+    path('log/legacy/', views.legacy_inventory_log, name='legacy_log'),
 
     # ── Phase 2B-A: ingredient / packaging inventory ──────────────────────────
     path('ingredients/', views.ingredient_list, name='ingredient_list'),
@@ -35,6 +41,10 @@ urlpatterns = [
     path('recipes/<int:pk>/edit/', views.recipe_edit, name='recipe_edit'),
     path('recipes/<int:pk>/approve/', views.recipe_approve, name='recipe_approve'),
     path('recipes/<int:pk>/retire/', views.recipe_retire, name='recipe_retire'),
+    path('recipes/<int:pk>/revision/', views.recipe_revision_create, name='recipe_revision_create'),
+    path('recipes/<int:pk>/archive/', views.recipe_archive, name='recipe_archive'),
+    path('recipes/<int:pk>/delete/', views.recipe_delete, name='recipe_delete'),
+    path('recipes/<int:pk>/items/<int:item_pk>/edit/', views.recipe_item_edit, name='recipe_item_edit'),
     path('recipes/<int:pk>/items/<int:item_pk>/delete/', views.recipe_item_delete, name='recipe_item_delete'),
 
     # ── Phase 4B-5: packaging profile management ──────────────────────────────

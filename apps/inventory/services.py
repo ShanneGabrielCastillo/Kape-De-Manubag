@@ -1681,6 +1681,339 @@ def retire_recipe(recipe_id):
     return recipe
 
 
+def archive_recipe(recipe_id):
+    """
+    Archive (retire) an approved Recipe using the existing ``retired`` status.
+
+    Rev 3 §H.9 lock order: Product.  Recipe rows are not locked; the Product
+    row is the configuration lock and is re-read/validated after acquisition.
+
+    Archiving is allowed when:
+      - the product is in legacy inventory mode;
+      - a replacement approved recipe exists for the same (product, size,
+        order-type scope); or
+      - the product is inactive (``is_active=False``), so no new orders can
+        be placed for it.
+
+    An active ingredient-tracked product can never lose its last approved
+    recipe: that would make resolve_plan() fail for future orders.
+
+    The recipe row, its ingredient lines, approval metadata and revision
+    number are preserved; ``resolve_plan()`` ignores retired rows.
+
+    Returns the archived Recipe.
+    """
+    from apps.inventory.models import Recipe
+    from apps.menu.models import Product
+
+    with transaction.atomic():
+        # Read the Recipe WITHOUT select_for_update — Rev 3 §H.9: Recipe rows
+        # are not locked.  The Product lock (acquired next) serialises writers.
+        recipe = Recipe.objects.get(pk=recipe_id)
+
+        if recipe.status == Recipe.STATUS_RETIRED:
+            raise RecipeConfigError('This recipe is already archived.')
+        if recipe.status == Recipe.STATUS_DRAFT:
+            raise RecipeConfigError(
+                'Draft recipes are not archived — delete them instead.'
+            )
+
+        # ── Level 2: Lock the Product row (Rev 3 §H.9) ───────────────────────
+        product = Product.objects.select_for_update().get(pk=recipe.product_id)
+
+        # ── Post-lock TOCTOU guard ─────────────────────────────────────────────
+        # No select_for_update() on Recipe — Rev 3 §H.9: Recipe rows not locked.
+        recipe.refresh_from_db(fields=['status'])
+        if recipe.status == Recipe.STATUS_RETIRED:
+            raise RecipeConfigError('This recipe is already archived.')
+        if recipe.status == Recipe.STATUS_DRAFT:
+            raise RecipeConfigError(
+                'Draft recipes are not archived — delete them instead.'
+            )
+        if recipe.status != Recipe.STATUS_APPROVED:
+            raise RecipeConfigError(
+                f'Recipe status changed while waiting for the configuration lock: '
+                f'found "{recipe.status}". Cannot archive.'
+            )
+
+        # Rev 3 §H.9: an ingredient-mode product may only lose its approved
+        # recipe when a replacement exists (or the product itself is inactive,
+        # so no new orders can resolve a plan).
+        if product.inventory_tracking_mode == Product.INVENTORY_TRACKING_INGREDIENT:
+            replacement = Recipe.objects.filter(
+                product=product,
+                size=recipe.size,
+                order_type_scope=recipe.order_type_scope,
+                status=Recipe.STATUS_APPROVED,
+            ).exclude(pk=recipe.pk).exists()
+            if not replacement and product.is_active:
+                raise RecipeConfigError(
+                    'Cannot archive the only approved recipe for an active '
+                    'ingredient-tracked product without a replacement. '
+                    'Approve a new revision first, or deactivate the product.'
+                )
+
+        recipe.status = Recipe.STATUS_RETIRED
+        recipe.save(update_fields=['status', 'updated_at'])
+
+    return recipe
+
+
+def create_recipe_revision(recipe_id, user=None):
+    """
+    Create a new draft revision copied from an approved Recipe.
+
+    Rev 3 §H.9 lock order: Product.
+
+    The source recipe is read without a row lock (Recipe rows are not locked
+    by configuration writers); the Product lock serialises this copy against
+    every other configuration writer for the product.
+
+    Validation (after the Product lock is acquired):
+      - The source recipe must still be approved.
+      - The next revision is ``max(revision) + 1`` across all statuses
+        (draft, approved, retired) for the same (product, size, scope), so a
+        revision number is never reused.
+
+    The new draft copies the header and every ingredient line.  Approval
+    metadata (``approved_by``, ``approved_at``, ``approval_note``) is left
+    empty.  The source approved recipe is not modified.
+
+    Parameters
+    ----------
+    recipe_id : int
+    user : CustomUser, optional
+        The acting user.  Accepted for symmetry with the other services; the
+        audit entry is written by the calling view.
+
+    Returns
+    -------
+    Recipe  The new draft revision.
+
+    Raises
+    ------
+    RecipeConfigError
+    """
+    from django.db.models import Max
+
+    from apps.inventory.models import Recipe, RecipeItem
+    from apps.menu.models import Product
+
+    with transaction.atomic():
+        recipe = Recipe.objects.get(pk=recipe_id)
+
+        if recipe.status == Recipe.STATUS_RETIRED:
+            raise RecipeConfigError(
+                'Cannot create a revision from an archived recipe. '
+                'Create a new recipe header instead.'
+            )
+        if recipe.status != Recipe.STATUS_APPROVED:
+            raise RecipeConfigError(
+                'Only approved recipes can be revised. A draft can be edited '
+                'in place before it is approved.'
+            )
+
+        # ── Level 2: Lock the Product row (Rev 3 §H.9) ───────────────────────
+        Product.objects.select_for_update().get(pk=recipe.product_id)
+
+        # ── Post-lock TOCTOU guard ────────────────────────────────────────────
+        recipe.refresh_from_db(fields=['status', 'size', 'order_type_scope', 'revision'])
+        if recipe.status != Recipe.STATUS_APPROVED:
+            raise RecipeConfigError(
+                'Recipe status changed while waiting for the configuration lock: '
+                f'found "{recipe.status}". Cannot create a revision.'
+            )
+
+        latest_revision = (
+            Recipe.objects
+            .filter(
+                product_id=recipe.product_id,
+                size=recipe.size,
+                order_type_scope=recipe.order_type_scope,
+            )
+            .aggregate(latest=Max('revision'))['latest']
+        ) or 0
+
+        draft = Recipe.objects.create(
+            product_id=recipe.product_id,
+            size=recipe.size,
+            order_type_scope=recipe.order_type_scope,
+            status=Recipe.STATUS_DRAFT,
+            revision=latest_revision + 1,
+        )
+
+        source_items = list(
+            RecipeItem.objects
+            .filter(recipe=recipe)
+            .values_list('inventory_item_id', 'quantity')
+        )
+        if source_items:
+            RecipeItem.objects.bulk_create([
+                RecipeItem(recipe=draft, inventory_item_id=item_id, quantity=quantity)
+                for item_id, quantity in source_items
+            ])
+
+    return draft
+
+
+def delete_draft_recipe(recipe_id):
+    """
+    Safely delete a draft Recipe and its ingredient lines.
+
+    Rev 3 §H.9 lock order: Product.
+
+    Only drafts may be deleted.  Approved and retired recipes are historical
+    configuration and are never removed.  Drafts are never selected by
+    ``resolve_plan()``, so they cannot be referenced by order reservations;
+    the explicit reservation check below is defence in depth and also keeps
+    the operation safe if that invariant ever changes.
+
+    Returns a dict describing the deleted recipe, captured before deletion so
+    the caller can write an audit entry referencing the now-missing row.
+
+    Raises
+    ------
+    RecipeConfigError
+    """
+    from django.db.models.deletion import ProtectedError
+
+    from apps.inventory.models import Recipe
+    from apps.menu.models import Product
+
+    with transaction.atomic():
+        recipe = Recipe.objects.select_related('product').get(pk=recipe_id)
+
+        if recipe.status == Recipe.STATUS_APPROVED:
+            raise RecipeConfigError(
+                'Approved recipes cannot be deleted. Archive it instead.'
+            )
+        if recipe.status == Recipe.STATUS_RETIRED:
+            raise RecipeConfigError(
+                'Archived recipes cannot be deleted — they are retained as history.'
+            )
+        if recipe.status != Recipe.STATUS_DRAFT:
+            raise RecipeConfigError(
+                f'Only draft recipes can be deleted (found "{recipe.status}").'
+            )
+
+        # ── Level 2: Lock the Product row (Rev 3 §H.9) ───────────────────────
+        Product.objects.select_for_update().get(pk=recipe.product_id)
+
+        # ── Post-lock TOCTOU guard ────────────────────────────────────────────
+        recipe.refresh_from_db(fields=['status'])
+        if recipe.status != Recipe.STATUS_DRAFT:
+            raise RecipeConfigError(
+                'Recipe status changed while waiting for the configuration lock: '
+                f'found "{recipe.status}". Only drafts can be deleted.'
+            )
+
+        # ── Dependency check: historical order reservations ──────────────────
+        from apps.orders.models import OrderIngredientReservationItem
+
+        if OrderIngredientReservationItem.objects.filter(source_recipe_id=recipe.pk).exists():
+            raise RecipeConfigError(
+                'This recipe is referenced by historical order reservations and '
+                'cannot be deleted. Archive it instead.'
+            )
+
+        info = {
+            'pk':             recipe.pk,
+            'product_name':   recipe.product.name,
+            'size':           recipe.size,
+            'size_display':   recipe.get_size_display(),
+            'scope':          recipe.order_type_scope,
+            'scope_display':  recipe.get_order_type_scope_display(),
+            'revision':       recipe.revision,
+            'repr':           str(recipe),
+        }
+
+        try:
+            recipe.delete()
+        except ProtectedError:
+            raise RecipeConfigError(
+                'This recipe is referenced by other records and cannot be deleted.'
+            )
+
+    return info
+
+
+def update_recipe_item(recipe_id, item_id, inventory_item, quantity):
+    """
+    Update one ingredient line on a draft Recipe.
+
+    Rev 3 §H.9 lock order: Product → InventoryItem.
+
+    The Product lock serialises this write against approval and against order
+    placement.  The replacement ingredient must be an active ingredient-type
+    item, the quantity must be positive, and the line must belong to the given
+    recipe.  Approved and retired recipes are immutable.
+
+    Returns the updated RecipeItem.
+
+    Raises
+    ------
+    RecipeConfigError
+    """
+    from apps.inventory.models import InventoryItem, Recipe, RecipeItem
+    from apps.menu.models import Product
+
+    quantity = quantity if quantity is not None else 0
+    if quantity <= 0:
+        raise RecipeConfigError('Quantity must be greater than zero.')
+
+    with transaction.atomic():
+        recipe = Recipe.objects.get(pk=recipe_id)
+        if recipe.status != Recipe.STATUS_DRAFT:
+            raise RecipeConfigError(
+                'Ingredient lines can only be edited on a draft recipe.'
+            )
+
+        # ── Level 2: Lock the Product row (Rev 3 §H.9) ───────────────────────
+        Product.objects.select_for_update().get(pk=recipe.product_id)
+
+        # ── Post-lock TOCTOU guard ────────────────────────────────────────────
+        recipe.refresh_from_db(fields=['status'])
+        if recipe.status != Recipe.STATUS_DRAFT:
+            raise RecipeConfigError(
+                'Recipe status changed while waiting for the configuration lock: '
+                f'found "{recipe.status}". Ingredient lines are immutable once approved.'
+            )
+
+        ri = RecipeItem.objects.get(pk=item_id, recipe=recipe)
+
+        # ── Level 3: Lock the replacement InventoryItem ──────────────────────
+        locked_item = (
+            InventoryItem.objects
+            .select_for_update()
+            .get(pk=inventory_item.pk)
+        )
+        if not locked_item.is_active:
+            raise RecipeConfigError(
+                f'Ingredient "{locked_item.name}" is inactive and cannot be added to a recipe.'
+            )
+        if locked_item.item_type != InventoryItem.ITEM_TYPE_INGREDIENT:
+            raise RecipeConfigError(
+                f'"{locked_item.name}" is a packaging item, not an ingredient.'
+            )
+
+        if (
+            RecipeItem.objects
+            .filter(recipe=recipe, inventory_item=locked_item)
+            .exclude(pk=ri.pk)
+            .exists()
+        ):
+            raise RecipeConfigError(
+                f'"{locked_item.name}" already has a line in this recipe. '
+                'Edit the existing line instead.'
+            )
+
+        ri.inventory_item = locked_item
+        ri.quantity = quantity
+        ri.save(update_fields=['inventory_item', 'quantity'])
+
+    return ri
+
+
 # ── Packaging profile services ────────────────────────────────────────────────
 
 def approve_packaging_profile(profile_id, approved_by, approval_note):

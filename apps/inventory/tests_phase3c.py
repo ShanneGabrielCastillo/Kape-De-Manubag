@@ -426,8 +426,11 @@ class Phase33RegressionTests(TestCase):
         self.client.force_login(self.admin)
 
     def test_legacy_inventory_list_accessible(self):
+        # Phase 7B-3A: retired page — the URL redirects to the ingredient list.
         from django.urls import reverse as r
-        self.assertEqual(self.client.get(r('inventory:list')).status_code, 200)
+        response = self.client.get(r('inventory:list'))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], r('inventory:ingredient_list'))
 
     def test_ingredient_list_accessible(self):
         from django.urls import reverse as r
@@ -684,3 +687,153 @@ class PurchaseSecurityTests(TestCase):
             self.assertEqual(spi.conversion_factor, self.uc.conversion_factor)
             self.assertNotEqual(spi.conversion_factor, Decimal('9999999.0000'))
             self.assertEqual(spi.base_quantity, Decimal('1000.000'))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 10. Security — stored/reflected XSS in the purchase form JSON embed (C-2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class PurchaseOutputEncodingTests(TestCase):
+    """
+    Finding C-2: the purchase form embedded its JS data with ``|safe``:
+
+        var ITEMS   = {{ items_json|safe }};
+        var INITIAL = {{ line_initial_json|safe }};
+
+    A value containing ``</script>`` closed the block early, so the rest of
+    the value was parsed as markup/script.  ``ITEMS`` carries stored DB text
+    (InventoryItem.name, UnitConversion.purchase_unit) and ``INITIAL`` carries
+    submitted line notes — hence both stored and reflected injection.
+
+    The fix uses Django's ``json_script`` filter, which escapes ``<``, ``>``
+    and ``&`` as JSON unicode escapes while preserving the data exactly.  These
+    tests lock in the encoding and the legitimate behaviour.
+    """
+
+    BREAKOUT = '</script><img src=x onerror=alert(1)>'
+
+    def setUp(self):
+        self.admin = _user('xss_admin', 'admin')
+        self.client.force_login(self.admin)
+        self.item = _item('XSS Coffee', 'g')
+        self.uc   = _uc(self.item, 'kg', Decimal('1000.0000'))
+
+    def _post(self, *, notes='', line_note='', qty='1.000'):
+        import uuid
+        return self.client.post(CREATE_URL, {
+            'purchase_date':   '2026-11-15',
+            'notes':           notes,
+            'idempotency_key': str(uuid.uuid4()),
+            'lines[0][inventory_item_id]': str(self.item.pk),
+            'lines[0][purchase_unit_id]':  str(self.uc.pk),
+            'lines[0][purchase_quantity]': qty,
+            'lines[0][note]':              line_note,
+        })
+
+    # ── Legitimate input keeps working ───────────────────────────────────────
+
+    def test_legitimate_purchase_still_succeeds(self):
+        """Normal purchase submission is unchanged by the encoding fix."""
+        response = self._post(
+            notes='Supplier: Juan Coffee',
+            line_note='Invoice 12345 — delivered in full',
+            qty='2.000',
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(StockPurchase.objects.count(), 1)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.on_hand_quantity, Decimal('2000.000'))
+
+        movement = IngredientMovementLog.objects.get(inventory_item=self.item)
+        self.assertEqual(movement.note, 'Invoice 12345 — delivered in full')
+
+    def test_legitimate_header_notes_display_escaped_and_unmodified(self):
+        """Angles/ampersands in legitimate notes are stored verbatim and
+        rendered escaped on the detail page — no characters are stripped."""
+        notes = "Supplier: Juan's Coffee & Tea <main branch>"
+        response = self._post(notes=notes)
+        self.assertEqual(response.status_code, 302)
+
+        purchase = StockPurchase.objects.get()
+        self.assertEqual(purchase.notes, notes)  # stored verbatim
+
+        detail = self.client.get(_detail_url(purchase.pk))
+        self.assertEqual(detail.status_code, 200)
+        self.assertContains(detail, '&lt;main branch&gt;')
+        self.assertNotContains(detail, '<main branch>')
+
+    def test_legitimate_line_note_preserved_on_validation_re_render(self):
+        """A rejected submission still echoes the line note into the JS data,
+        so the operator does not have to retype it."""
+        response = self._post(line_note='Invoice 12345 & seal intact', qty='-1.000')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'purchase-initial-lines-data')
+        # '&' is preserved verbatim, encoded for the HTML context as \u0026.
+        self.assertContains(response, 'Invoice 12345 \\u0026 seal intact')
+
+    # ── Reflected vector: submitted line note on re-render ───────────────────
+
+    def test_line_note_script_breakout_is_not_markup_on_re_render(self):
+        """A submitted </script>… line note must not terminate the script block.
+
+        The note is still present as data (escaped), so the operator's input
+        is preserved rather than silently deleted.
+        """
+        response = self._post(line_note=self.BREAKOUT, qty='-1.000')
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+
+        self.assertNotIn('</script><img', content)
+        self.assertNotIn('<img src=x', content)
+        # json_script escapes '<' as \u003C — the payload survives as inert data.
+        self.assertIn('\\u003C/script\\u003E', content)
+        self.assertIn('onerror=alert(1)', content)
+
+    # ── Stored vector: item name from the database ──────────────────────────
+
+    def test_stored_item_name_breakout_is_not_markup(self):
+        """A stored InventoryItem.name containing </script> is embedded safely
+        on every GET of the purchase form (this is the stored-XSS path)."""
+        evil = _item('Coffee' + self.BREAKOUT, 'g')
+        _uc(evil, 'kg', Decimal('1000.0000'))
+
+        response = self.client.get(CREATE_URL)
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+
+        self.assertNotIn('</script><img', content)
+        self.assertNotIn('<img src=x', content)
+        self.assertIn('\\u003C/script\\u003E', content)
+
+    # ── Stored vector: purchase notes shown after saving ────────────────────
+
+    def test_stored_purchase_notes_render_escaped_in_list_and_detail(self):
+        """Notes saved through the form are escaped on later views (list and
+        detail), so revisiting a malicious purchase cannot execute markup."""
+        purchase = StockPurchase.objects.create(
+            purchase_date=datetime.date(2026, 11, 15),
+            idempotency_key='xss-notes-key-001',
+            notes=self.BREAKOUT,
+        )
+
+        for url in (_detail_url(purchase.pk), LIST_URL):
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 200)
+            content = response.content.decode()
+            self.assertNotIn('<img src=x', content)
+            self.assertIn('&lt;img src=x', content)
+
+    # ── The safe JSON embed itself ──────────────────────────────────────────
+
+    def test_js_data_is_embedded_as_json_script_elements(self):
+        """Both payloads use Django's json_script sink, not a |safe literal."""
+        response = self.client.get(CREATE_URL)
+        self.assertContains(
+            response,
+            '<script id="purchase-items-data" type="application/json">',
+        )
+        self.assertContains(
+            response,
+            '<script id="purchase-initial-lines-data" type="application/json">',
+        )
+        self.assertNotContains(response, 'var ITEMS    = [')

@@ -1,0 +1,156 @@
+{% comment %}
+Shared client-side filtering for the stock-movement lists.
+
+Used by:
+  * inventory/movement_log.html — current ingredient/packaging movements
+  * inventory/log.html          — legacy finished-product history
+
+Markup contract:
+  * #log-search             optional text input, always sent as ``q``
+  * select[data-log-filter] filter dropdowns; ``data-param`` is the query key
+  * #results-region         wrapper whose contents the fetch response replaces
+  * pagination links        carry ``data-page`` and are intercepted here
+
+The server still validates every query parameter; this script is a UX layer
+only and never builds a request that could mutate data (always GET).
+{% endcomment %}
+<script>
+(function () {
+  'use strict';
+
+  var resultsRegion = document.getElementById('results-region');
+  var searchInput = document.getElementById('log-search');
+  var filterSelects = Array.prototype.slice.call(
+    document.querySelectorAll('select[data-log-filter]'));
+  if (!resultsRegion) return;
+  if (!searchInput && !filterSelects.length) return;
+
+  // Seed the initial history entry with a state object so popstate always
+  // has e.state.url (fixes Back navigation from pre-filtered URLs).
+  history.replaceState({ url: window.location.href }, '', window.location.href);
+
+  var form = searchInput ? searchInput.closest('form') : null;
+  var submitBtn = form && form.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.remove();
+
+  // Prevent implicit form submission (Enter key) from causing a full-page
+  // navigation. Without this, pressing Enter in the search input submits the
+  // GET form normally, reloading the page and destroying input focus.
+  if (form) {
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      clearTimeout(debounceTimer);
+      fetchResults(buildUrl(), 'push');
+    });
+  }
+
+  var controller = null;
+  var seq = 0;
+  var debounceTimer = null;
+
+  function fetchResults(url, historyMode) {
+    // historyMode: 'push' | 'replace' | 'none'
+    // History API is called BEFORE fetch so that a pagination click after a
+    // debounced search does not push a second entry (fixing double-pushState).
+    if (historyMode === 'push') history.pushState({ url: url }, '', url);
+    else if (historyMode === 'replace') history.replaceState({ url: url }, '', url);
+
+    if (controller) controller.abort();
+    controller = new AbortController();
+    var mySeq = ++seq;
+
+    fetch(url, { signal: controller.signal, credentials: 'same-origin' })
+      .then(function (resp) {
+        if (mySeq !== seq) return null;
+        var finalPath = resp.url ? (new URL(resp.url, window.location.href)).pathname : '';
+        if (finalPath === '/accounts/login/' || finalPath.indexOf('/accounts/login') === 0) {
+          showError('Session expired. Please reload.');
+          return null;
+        }
+        if (!resp.ok || !(resp.headers.get('content-type') || '').includes('text/html')) {
+          showError('Could not load results. Please try again.');
+          return null;
+        }
+        return resp.text();
+      })
+      .then(function (html) {
+        if (!html || mySeq !== seq) return;
+        var doc = (new DOMParser()).parseFromString(html, 'text/html');
+        var newRegion = doc.getElementById('results-region');
+        if (!newRegion) return;
+        resultsRegion.innerHTML = newRegion.innerHTML;
+        // Rebuild responsive mobile cards for the newly injected table rows.
+        // initResponsiveTables is always available (loaded by responsive-tables.js
+        // before this inline script runs).
+        if (typeof window.initResponsiveTables === 'function') {
+          window.initResponsiveTables();
+        }
+      })
+      .catch(function (err) {
+        if (err && err.name === 'AbortError') return;
+        showError('Could not load results. Please try again.');
+      });
+  }
+
+  function showError(msg) {
+    var existing = resultsRegion.querySelector('.fetch-error-banner');
+    if (existing) existing.remove();
+    var div = document.createElement('div');
+    div.className = 'fetch-error-banner';
+    div.setAttribute('role', 'alert');
+    div.style.cssText = 'padding:12px;margin-bottom:12px;background:#fff3cd;border:1px solid #ffc107;border-radius:6px;color:#856404;display:flex;justify-content:space-between;align-items:center';
+    div.innerHTML = '<span>' + msg + '</span><button onclick="this.parentNode.remove()" style="background:none;border:none;cursor:pointer;font-size:1.2rem" aria-label="Dismiss">&times;</button>';
+    resultsRegion.prepend(div);
+  }
+
+  function buildUrl() {
+    var params = new URLSearchParams();
+    var q = searchInput ? searchInput.value.trim() : '';
+    if (q) params.set('q', q);
+    filterSelects.forEach(function (sel) {
+      if (sel.value) params.set(sel.dataset.param || sel.name, sel.value);
+    });
+    var qs = params.toString();
+    return window.location.pathname + (qs ? '?' + qs : '');
+  }
+
+  if (searchInput) {
+    searchInput.addEventListener('input', function () {
+      clearTimeout(debounceTimer);
+      var url = buildUrl();
+      history.replaceState({ url: url }, '', url);
+      debounceTimer = setTimeout(function () {
+        fetchResults(url, 'push');
+      }, 350);
+    });
+  }
+
+  function onDropdownChange() {
+    clearTimeout(debounceTimer);
+    fetchResults(buildUrl(), 'push');
+  }
+  filterSelects.forEach(function (sel) {
+    sel.addEventListener('change', onDropdownChange);
+  });
+
+  resultsRegion.addEventListener('click', function (e) {
+    var link = e.target.closest('a.page-link');
+    if (!link) return;
+    try {
+      if (new URL(link.href).origin !== window.location.origin) return;
+    } catch (_) { return; }
+    e.preventDefault();
+    fetchResults(link.href, 'push');
+  });
+
+  window.addEventListener('popstate', function (e) {
+    var url = (e.state && e.state.url) ? e.state.url : window.location.href;
+    var params = new URLSearchParams(url.split('?')[1] || '');
+    if (searchInput) searchInput.value = params.get('q') || '';
+    filterSelects.forEach(function (sel) {
+      sel.value = params.get(sel.dataset.param || sel.name) || '';
+    });
+    fetchResults(url, 'none');
+  });
+})();
+</script>

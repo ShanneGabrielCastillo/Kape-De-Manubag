@@ -1,0 +1,108 @@
+{% extends "base_admin.html" %}
+{% block page_title %}Stock Movements{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Stock Movements</h1>
+    <p class="page-subtitle">
+      Ingredient and packaging stock movement history, newest first.
+      <a href="{% url 'inventory:legacy_log' %}">Legacy finished-product history</a>.
+    </p>
+  </div>
+</div>
+<div class="filter-bar">
+  <form method="get" id="log-filter-form" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;min-width:0">
+    <input id="log-search" type="text" name="q" value="{{ q }}" placeholder="Search item, order or reason..." class="form-control">
+    <select id="log-type-filter" name="type" class="form-control" style="min-width:200px" data-log-filter data-param="type">
+      <option value="">All Movement Types</option>
+      {% for val, label in type_choices %}
+        <option value="{{ val }}"{% if type_filter == val %} selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <select id="log-kind-filter" name="kind" class="form-control" style="min-width:170px" data-log-filter data-param="kind">
+      <option value="">All Item Types</option>
+      {% for val, label in kind_choices %}
+        <option value="{{ val }}"{% if kind_filter == val %} selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <button id="log-search-btn" type="submit" class="btn btn-primary">Search</button>
+    {% if q or type_filter or kind_filter %}
+      <a href="{% url 'inventory:log' %}" class="btn btn-outline">Clear</a>
+    {% endif %}
+  </form>
+</div>
+<div id="results-region">
+<div class="card">
+  <div class="table-wrapper">
+    <table class="table-inv-log" data-mobile-cards="true">
+      <thead><tr><th data-role="date">Date</th><th data-role="primary">Item</th><th data-role="secondary">Item Type</th><th data-role="status">Movement</th><th data-role="amount">Quantity</th><th data-role="secondary">Unit</th><th data-role="secondary">Reference</th><th data-role="secondary">Reason</th><th data-role="secondary">By</th></tr></thead>
+      <tbody>
+        {% for movement in movements %}
+        <tr>
+          <td style="font-size:0.8rem;color:#aaa">{{ movement.created_at|date:"M d, Y g:i A" }}</td>
+          <td style="font-weight:600">{{ movement.item_name }}</td>
+          <td>
+            <span class="badge {% if movement.inventory_item.item_type == 'packaging' %}badge-preparing{% else %}badge-muted{% endif %}">{{ movement.inventory_item.get_item_type_display }}</span>
+          </td>
+          <td>
+            <span class="badge {% if movement.movement_type == 'purchase' %}badge-ready{% elif movement.movement_type == 'wastage' %}badge-cancelled{% else %}badge-muted{% endif %}">{{ movement.get_movement_type_display }}</span>
+          </td>
+          <td style="font-weight:700;color:{% if movement.on_hand_delta > 0 %}var(--green-success){% elif movement.on_hand_delta < 0 %}var(--red-accent){% else %}#999{% endif %}">
+            {% if movement.on_hand_delta %}
+              {% if movement.on_hand_delta > 0 %}+{% endif %}{{ movement.on_hand_delta }}
+            {% elif movement.reserved_delta %}
+              <span style="color:#999">reserved {% if movement.reserved_delta > 0 %}+{% endif %}{{ movement.reserved_delta }}</span>
+            {% else %}0{% endif %}
+          </td>
+          <td>{{ movement.base_unit }}</td>
+          <td style="font-size:0.85rem">
+            {% if movement.order_number %}Order {{ movement.order_number }}
+            {% elif movement.purchase_item_id %}Purchase #{{ movement.purchase_item.purchase_id }}
+            {% else %}—{% endif %}
+          </td>
+          <td style="font-size:0.85rem">{{ movement.reason_code|default:"—" }}{% if movement.note %}<div style="color:#aaa;font-size:0.75rem">{{ movement.note }}</div>{% endif %}</td>
+          <td>{{ movement.performed_by.username|default:"System" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9" style="text-align:center;color:#aaa;padding:32px">
+          {% if q or type_filter or kind_filter %}
+            No stock movements match the current filters.
+          {% else %}
+            No stock movements have been recorded yet.
+          {% endif %}
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if movements.has_other_pages %}
+<div class="pagination">
+  {% if movements.has_previous %}
+  <a href="?page={{ movements.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if type_filter %}&type={{ type_filter }}{% endif %}{% if kind_filter %}&kind={{ kind_filter }}{% endif %}"
+     data-page="{{ movements.previous_page_number }}"
+     class="page-link">‹ Prev</a>
+  {% endif %}
+  {% for num in movements.paginator.page_range %}
+    {% if movements.number == num %}
+    <span class="page-link active">{{ num }}</span>
+    {% elif num > movements.number|add:'-3' and num < movements.number|add:'3' %}
+    <a href="?page={{ num }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if type_filter %}&type={{ type_filter }}{% endif %}{% if kind_filter %}&kind={{ kind_filter }}{% endif %}"
+       data-page="{{ num }}"
+       class="page-link">{{ num }}</a>
+    {% endif %}
+  {% endfor %}
+  {% if movements.has_next %}
+  <a href="?page={{ movements.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if type_filter %}&type={{ type_filter }}{% endif %}{% if kind_filter %}&kind={{ kind_filter }}{% endif %}"
+     data-page="{{ movements.next_page_number }}"
+     class="page-link">Next ›</a>
+  {% endif %}
+</div>
+{% endif %}
+</div>{# /results-region #}
+{% endblock %}
+
+{% block extra_js %}
+{% include "inventory/_log_autosearch.html" %}
+{% endblock extra_js %}

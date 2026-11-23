@@ -3,20 +3,27 @@ apps/inventory/forms.py
 =======================
 Forms for the ingredient inventory management screens.
 
-Phase 2B-A: InventoryItemForm for creating and editing InventoryItem records.
+Phase 2B-A: IngredientItemForm for creating ingredient InventoryItem records.
+Phase 2B-C: PackagingItemForm for creating packaging InventoryItem records.
 Phase 2B-B+: Additional forms (adjustment, wastage) will be added here.
 
 Authorization: all form-bearing views use @cashier_or_admin_required.
 """
 
 from django import forms
+from django.db.models import Q
 
 from .models import InventoryItem
 
 
-class InventoryItemForm(forms.ModelForm):
+class IngredientItemForm(forms.ModelForm):
     """
-    Create or edit an InventoryItem (ingredient or packaging material).
+    Create an InventoryItem whose item_type is always 'ingredient'.
+
+    item_type is not exposed to the user — it is pinned to 'ingredient' on the
+    form instance and re-checked on POST. A request that submits any other
+    item_type is rejected, so packaging items cannot be created through the
+    ingredient endpoint.
 
     Only the fields that staff can set at creation time are exposed.
     Fields managed by the system (reserved_quantity, created_at, updated_at)
@@ -29,7 +36,6 @@ class InventoryItemForm(forms.ModelForm):
         model = InventoryItem
         fields = [
             'name',
-            'item_type',
             'base_unit',
             'on_hand_quantity',
             'low_stock_threshold',
@@ -39,10 +45,9 @@ class InventoryItemForm(forms.ModelForm):
         widgets = {
             'name': forms.TextInput(attrs={
                 'class': 'form-control',
-                'placeholder': 'e.g. Coffee Powder, Oat Milk, Medium Cup',
+                'placeholder': 'e.g. Coffee Powder, Oat Milk, Sugar Syrup',
                 'autofocus': True,
             }),
-            'item_type': forms.Select(attrs={'class': 'form-control'}),
             'base_unit': forms.Select(attrs={'class': 'form-control'}),
             'on_hand_quantity': forms.NumberInput(attrs={
                 'class': 'form-control',
@@ -65,7 +70,6 @@ class InventoryItemForm(forms.ModelForm):
         }
         labels = {
             'name': 'Item Name',
-            'item_type': 'Item Type',
             'base_unit': 'Base Unit',
             'on_hand_quantity': 'Initial On-Hand Quantity',
             'low_stock_threshold': 'Low-Stock Alert Threshold',
@@ -74,16 +78,34 @@ class InventoryItemForm(forms.ModelForm):
         }
         help_texts = {
             'name': 'Unique name. Case-insensitive — "Rice" and "rice" are the same item.',
-            'item_type': 'Ingredients are consumed during preparation. Packaging materials are used for serving.',
             'base_unit': (
                 'The base unit for all stock quantities. '
-                'Once movements are recorded this cannot be changed. '
+                'Once stock, movement history, or dependent recipe, packaging, '
+                'conversion, purchase, or reservation records exist, this cannot '
+                'be changed. '
                 'Use g (grams) for solid ingredients, ml for liquids, pcs for discrete items.'
             ),
             'on_hand_quantity': 'Starting stock. Enter 0 to begin tracking without initial stock.',
             'low_stock_threshold': 'You will see a low-stock alert when available quantity falls at or below this value.',
             'is_active': 'Inactive items are hidden from ingredient selection screens.',
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # item_type is not a form field; pin it on the instance so both model
+        # validation and save() persist an ingredient.
+        self.instance.item_type = InventoryItem.ITEM_TYPE_INGREDIENT
+
+    def clean(self):
+        """Reject a POST that tries to dictate a non-ingredient item_type."""
+        cleaned_data = super().clean()
+        submitted_type = (self.data.get('item_type') or '').strip()
+        if submitted_type and submitted_type != InventoryItem.ITEM_TYPE_INGREDIENT:
+            raise forms.ValidationError(
+                'This form only creates ingredient items. '
+                'Use Packaging Inventory to add packaging materials.'
+            )
+        return cleaned_data
 
     def clean_on_hand_quantity(self):
         """
@@ -316,7 +338,9 @@ class PackagingItemForm(forms.Form):
         widget=forms.Select(attrs={'class': 'form-control'}),
         help_text=(
             'The unit for all stock quantities. '
-            'Once movements are recorded this cannot be changed. '
+            'Once stock, movement history, or dependent recipe, packaging, '
+            'conversion, purchase, or reservation records exist, this cannot '
+            'be changed. '
             'Packaging materials are typically counted in pcs.'
         ),
     )
@@ -370,6 +394,17 @@ class PackagingItemForm(forms.Form):
         widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         help_text='Inactive items are hidden from packaging selection screens.',
     )
+
+    def clean(self):
+        """Reject a POST that tries to dictate a non-packaging item_type."""
+        cleaned_data = super().clean()
+        submitted_type = (self.data.get('item_type') or '').strip()
+        if submitted_type and submitted_type != InventoryItem.ITEM_TYPE_PACKAGING:
+            raise forms.ValidationError(
+                'This form only creates packaging items. '
+                'Use Ingredients Inventory to add ingredients.'
+            )
+        return cleaned_data
 
     def clean_on_hand_quantity(self):
         from decimal import Decimal
@@ -656,12 +691,19 @@ class RecipeItemForm(forms.ModelForm):
     def __init__(self, *args, recipe=None, **kwargs):
         super().__init__(*args, **kwargs)
         self._recipe = recipe
-        # Only show active ingredient-type items.
-        self.fields['inventory_item'].queryset = (
-            _InventoryItem.objects
-            .filter(item_type=_InventoryItem.ITEM_TYPE_INGREDIENT, is_active=True)
-            .order_by('name')
+        # Only show active ingredient-type items.  When editing an existing
+        # line, keep its current ingredient selectable even if it has since
+        # been deactivated, so opening the edit form cannot silently swap the
+        # ingredient for the first active option.
+        item_qs = _InventoryItem.objects.filter(
+            item_type=_InventoryItem.ITEM_TYPE_INGREDIENT, is_active=True,
         )
+        if self.instance and self.instance.pk and self.instance.inventory_item_id:
+            item_qs = _InventoryItem.objects.filter(
+                Q(item_type=_InventoryItem.ITEM_TYPE_INGREDIENT, is_active=True)
+                | Q(pk=self.instance.inventory_item_id)
+            )
+        self.fields['inventory_item'].queryset = item_qs.order_by('name')
 
     def clean_quantity(self):
         qty = self.cleaned_data.get('quantity')

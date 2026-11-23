@@ -5,9 +5,16 @@ from django.db import IntegrityError, transaction
 from django.db.models import Count, DecimalField, ExpressionWrapper, F, Q
 from django.http import JsonResponse
 from django.core.paginator import Paginator
-from .models import InventoryItem, InventoryLog, UnitConversion, StockPurchase, StockPurchaseItem
+from .models import (
+    IngredientMovementLog,
+    InventoryItem,
+    InventoryLog,
+    UnitConversion,
+    StockPurchase,
+    StockPurchaseItem,
+)
 from .forms import (
-    InventoryItemForm,
+    IngredientItemForm,
     AdjustmentForm,
     WastageForm,
     PackagingItemForm,
@@ -25,122 +32,109 @@ from .services import (
     PurchaseLineError,
     record_purchase,
 )
-from apps.menu.models import CRITICAL_STOCK_THRESHOLD, Category, Product
-from apps.accounts.decorators import cashier_or_admin_required
+from apps.menu.models import Product
+from apps.accounts.decorators import admin_required, cashier_or_admin_required
 from apps.audit.services import log_action
 
 
 @login_required
 @cashier_or_admin_required
 def inventory_list(request):
-    base_qs = Product.objects.select_related('category').order_by('stock_quantity')
-
-    # Summary cards always reflect the FULL catalog (computed before filtering)
-    counts = base_qs.aggregate(
-        total=Count('id'),
-        active=Count('id', filter=Q(is_active=True)),
-        low=Count('id', filter=Q(stock_quantity__lte=F('low_stock_threshold'))),
-        critical=Count('id', filter=Q(stock_quantity__lte=CRITICAL_STOCK_THRESHOLD)),
-        out_of_stock=Count('id', filter=Q(stock_quantity=0)),
-    )
-
-    products = base_qs
-
-    q = request.GET.get('q', '').strip()
-    if q:
-        products = products.filter(name__icontains=q)
-
-    category_filter = request.GET.get('category', '').strip()
-    if category_filter:
-        try:
-            products = products.filter(category_id=int(category_filter))
-        except (ValueError, TypeError):
-            category_filter = ''
-
-    stock_status_filter = request.GET.get('stock_status', '').strip()
-    VALID_STOCK_STATUSES = ('out_of_stock', 'critical', 'low', 'ok')
-    if stock_status_filter in VALID_STOCK_STATUSES:
-        if stock_status_filter == 'out_of_stock':
-            products = products.filter(stock_quantity=0)
-        elif stock_status_filter == 'critical':
-            products = products.filter(stock_quantity__lte=CRITICAL_STOCK_THRESHOLD)
-        elif stock_status_filter == 'low':
-            products = products.filter(stock_quantity__lte=F('low_stock_threshold'))
-        elif stock_status_filter == 'ok':
-            products = products.filter(stock_quantity__gt=F('low_stock_threshold'))
-    else:
-        stock_status_filter = ''
-
-    categories = Category.objects.filter(is_active=True).order_by('name')
-
-    return render(request, 'inventory/list.html', {
-        'products': products,
-        'total_count': counts['total'],
-        'active_count': counts['active'],
-        'low_stock_count': counts['low'],
-        'critical_stock_count': counts['critical'],
-        'out_of_stock_count': counts['out_of_stock'],
-        'search': q,
-        'category_filter': category_filter,
-        'stock_status_filter': stock_status_filter,
-        'categories': categories,
-    })
+    # Phase 7B-3A: the legacy finished-product stock management page is
+    # RETIRED — all active products are ingredient-tracked and their
+    # sellable units come from recipes, not Product.stock_quantity.
+    # The URL is retained as a safe compatibility redirect (staff
+    # bookmarks / the dashboard low-stock card link may still point here):
+    # a redirect shows no stock controls and cannot mutate anything.
+    return redirect('inventory:ingredient_list')
 
 
 @login_required
 @cashier_or_admin_required
 def restock_product(request, pk):
+    # Phase 7B-3A: finished-product (legacy) restocking is RETIRED. The URL
+    # is retained because external consumers (bookmarks, staff tooling)
+    # cannot be ruled out, but every branch is NON-MUTATING:
+    #   POST  -> 410 Gone with an explicit JSON error (never a fake success)
+    #   GET   -> redirect to the ingredient inventory screen
+    # This deliberately does NOT redirect the POST into another
+    # stock-changing endpoint, and does not touch Product.stock_quantity,
+    # InventoryLog, or the audit log.
     product = get_object_or_404(Product, pk=pk)
-    # Phase 8B (Rev 3 §E.3b): legacy restocking is disabled for
-    # ingredient-tracked products — their stock lives in the ingredient
-    # ledger (InventoryItem / IngredientMovementLog), not in the frozen
-    # Product.stock_quantity.
-    if product.inventory_tracking_mode == 'ingredient':
+    if request.method == 'POST':
         return JsonResponse(
             {'success': False,
-             'error': 'This product uses ingredient-based inventory. '
-                      'Restock it through the ingredient inventory screen.'},
-            status=400,
+             'error': 'Finished-product stock restocking has been retired. '
+                      'Manage ingredient and packaging stock from the '
+                      'Ingredients and Packaging inventory pages.'},
+            status=410,
         )
-    if request.method == 'POST':
-        # Non-numeric input falls through to the same 'Invalid quantity'
-        # response used for zero/negative values (a raw int() would 500).
-        try:
-            quantity = int(request.POST.get('quantity', 0))
-        except (TypeError, ValueError):
-            quantity = 0
-        notes = request.POST.get('notes', '')
-        if quantity > 0:
-            # Stock change, inventory log and audit log commit or roll back
-            # together -- a failed log write can never leave stock increased
-            # without a trace.
-            with transaction.atomic():
-                old_qty = product.stock_quantity
-                product.stock_quantity += quantity
-                product.save()
-                InventoryLog.record(
-                    product=product,
-                    action='restock',
-                    source='manual_adjustment',
-                    reason='Restock',
-                    quantity_change=quantity,
-                    quantity_before=old_qty,
-                    quantity_after=product.stock_quantity,
-                    notes=notes,
-                    performed_by=request.user,
-                )
-                log_action(
-                    request.user, 'inventory.restock', product,
-                    detail=f'{quantity:+d} units ({old_qty} -> {product.stock_quantity})',
-                )
-            return JsonResponse({'success': True, 'new_qty': product.stock_quantity})
-        return JsonResponse({'success': False, 'error': 'Invalid quantity'})
-    return redirect('inventory:list')
+    return redirect('inventory:ingredient_list')
 
 
 @login_required
 @cashier_or_admin_required
-def inventory_log(request):
+def movement_log(request):
+    """Stock Movements — current ingredient/packaging movement history.
+
+    Phase 1.1: this is now the destination of the sidebar's Stock Movements
+    link. Ingredient and packaging movements share one append-only model
+    (IngredientMovementLog); each row renders the item's item_type so the two
+    are distinguishable. The legacy finished-product InventoryLog history is
+    NOT merged in here — it stays available read-only at inventory:legacy_log.
+
+    Read-only: no query in this view mutates stock, movements or the audit log.
+    """
+    movements = (
+        IngredientMovementLog.objects
+        .select_related('inventory_item', 'performed_by', 'purchase_item')
+        .order_by('-created_at', '-id')
+    )
+
+    q = request.GET.get('q', '').strip()
+    if q:
+        movements = movements.filter(
+            Q(item_name__icontains=q) |
+            Q(note__icontains=q) |
+            Q(reason_code__icontains=q) |
+            Q(order_number__icontains=q)
+        )
+
+    valid_types = [v for v, _ in IngredientMovementLog.MOVEMENT_TYPE_CHOICES]
+    type_filter = request.GET.get('type', '').strip()
+    if type_filter not in valid_types:
+        type_filter = ''
+    if type_filter:
+        movements = movements.filter(movement_type=type_filter)
+
+    valid_kinds = [v for v, _ in InventoryItem.ITEM_TYPE_CHOICES]
+    kind_filter = request.GET.get('kind', '').strip()
+    if kind_filter not in valid_kinds:
+        kind_filter = ''
+    if kind_filter:
+        movements = movements.filter(inventory_item__item_type=kind_filter)
+
+    paginator = Paginator(movements, 20)
+    movements_page = paginator.get_page(request.GET.get('page', 1))
+    return render(request, 'inventory/movement_log.html', {
+        'movements': movements_page,
+        'q': q,
+        'type_filter': type_filter,
+        'kind_filter': kind_filter,
+        'type_choices': IngredientMovementLog.MOVEMENT_TYPE_CHOICES,
+        'kind_choices': InventoryItem.ITEM_TYPE_CHOICES,
+    })
+
+
+@login_required
+@cashier_or_admin_required
+def legacy_inventory_log(request):
+    """Legacy finished-product stock history (InventoryLog), read-only.
+
+    Phase 1.1: retained so historical finished-product records stay
+    inspectable at inventory:legacy_log. Never shows ingredient/packaging
+    movements, and never mutates the legacy records.
+    """
     logs = InventoryLog.objects.select_related('product', 'performed_by').order_by('-created_at')
     q = request.GET.get('q', '').strip()
     if q:
@@ -186,18 +180,21 @@ def inventory_log(request):
 @cashier_or_admin_required
 def ingredient_list(request):
     """
-    List all InventoryItem records (ingredients and packaging).
+    List InventoryItem records whose item_type is 'ingredient'.
 
-    Summary cards reflect the full catalog before any filter is applied.
-    Supports text search (name icontains) and item_type filter.
+    Packaging items have their own page (packaging_list) and are excluded
+    here at the queryset level, so they can never appear on this page.
+
+    Summary cards reflect the ingredient catalog before any filter is applied.
+    Supports text search (name icontains) and status filter.
     """
-    base_qs = InventoryItem.objects.order_by('item_type', 'name')
+    base_qs = InventoryItem.objects.filter(
+        item_type=InventoryItem.ITEM_TYPE_INGREDIENT
+    ).order_by('name')
 
-    # Summary counts computed on the full queryset before filtering.
+    # Summary counts computed on the full ingredient queryset before filtering.
     counts = base_qs.aggregate(
         total=Count('id'),
-        ingredients=Count('id', filter=Q(item_type='ingredient')),
-        packaging=Count('id', filter=Q(item_type='packaging')),
         inactive=Count('id', filter=Q(is_active=False)),
     )
 
@@ -222,14 +219,6 @@ def ingredient_list(request):
     if q:
         items = items.filter(name__icontains=q)
 
-    # ── Type filter ───────────────────────────────────────────────────────────
-    VALID_TYPES = ('ingredient', 'packaging')
-    type_filter = request.GET.get('type', '').strip()
-    if type_filter not in VALID_TYPES:
-        type_filter = ''
-    if type_filter:
-        items = items.filter(item_type=type_filter)
-
     # ── Active/inactive filter ────────────────────────────────────────────────
     VALID_STATUS = ('active', 'inactive')
     status_filter = request.GET.get('status', '').strip()
@@ -243,12 +232,9 @@ def ingredient_list(request):
     return render(request, 'inventory/ingredient_list.html', {
         'items': items,
         'total_count': counts['total'],
-        'ingredient_count': counts['ingredients'],
-        'packaging_count': counts['packaging'],
         'inactive_count': counts['inactive'],
         'low_stock_count': low_stock_count,
         'q': q,
-        'type_filter': type_filter,
         'status_filter': status_filter,
     })
 
@@ -257,9 +243,13 @@ def ingredient_list(request):
 @cashier_or_admin_required
 def ingredient_create(request):
     """
-    Create a new InventoryItem (ingredient or packaging material).
+    Create a new ingredient InventoryItem.
 
-    GET:  renders an empty InventoryItemForm.
+    The item_type is forced to 'ingredient' server-side — the form does not
+    expose it, and a submitted item_type of anything else is rejected. This
+    prevents creating a packaging material through this endpoint.
+
+    GET:  renders an empty IngredientItemForm.
     POST: validates, saves, audits, and redirects to ingredient_list.
 
     Uses the model's built-in full_clean() validation so all DB constraints
@@ -267,7 +257,7 @@ def ingredient_create(request):
     surface as user-friendly form errors rather than 500 errors.
     """
     if request.method == 'POST':
-        form = InventoryItemForm(request.POST)
+        form = IngredientItemForm(request.POST)
         if form.is_valid():
             try:
                 with transaction.atomic():
@@ -291,7 +281,7 @@ def ingredient_create(request):
                 )
                 return render(request, 'inventory/ingredient_form.html', {
                     'form': form,
-                    'title': 'Add Ingredient / Packaging',
+                    'title': 'Add Ingredient',
                 })
             messages.success(
                 request,
@@ -299,11 +289,11 @@ def ingredient_create(request):
             )
             return redirect('inventory:ingredient_list')
     else:
-        form = InventoryItemForm()
+        form = IngredientItemForm()
 
     return render(request, 'inventory/ingredient_form.html', {
         'form': form,
-        'title': 'Add Ingredient / Packaging',
+        'title': 'Add Ingredient',
     })
 
 
@@ -715,7 +705,7 @@ def purchase_create(request):
 
     Form data preservation on validation failure:
     - Header form fields (date, notes) are preserved via bound form data.
-    - Line data is passed back through 'line_initial_json' so the JS can
+    - Line data is passed back through 'line_initial' so the JS can
       reinstate item, unit, and quantity selections.
     - Errors are displayed per-line using messages.
     """
@@ -844,7 +834,6 @@ def purchase_create(request):
 
 def _render_purchase_create(request, header_form, line_forms, idempotency_key):
     """Shared render helper for the purchase creation page."""
-    import json
 
     # Build the items+conversions data for the JS to populate dropdowns.
     items = (
@@ -893,11 +882,14 @@ def _render_purchase_create(request, header_form, line_forms, idempotency_key):
                                   for e in errs],
         })
 
+    # Pass these as Python objects: the template embeds them with Django's
+    # ``json_script`` filter, which produces HTML-safe JSON.  Never embed
+    # user- or DB-controlled text into a <script> block with ``|safe``.
     return render(request, 'inventory/purchase_create.html', {
         'header_form':       header_form,
         'idempotency_key':   idempotency_key,
-        'items_json':        json.dumps(items_data),
-        'line_initial_json': json.dumps(line_initial),
+        'items_data':        items_data,
+        'line_initial':      line_initial,
     })
 
 
@@ -961,7 +953,8 @@ from .forms import (
     ProductPackagingRuleForm,
 )
 from .services import (
-    approve_recipe, retire_recipe,
+    approve_recipe, retire_recipe, archive_recipe,
+    create_recipe_revision, delete_draft_recipe, update_recipe_item,
     approve_packaging_profile, retire_packaging_profile, save_packaging_rule,
     RecipeConfigError, PackagingConfigError,
 )
@@ -1066,8 +1059,30 @@ def recipe_edit(request, pk):
         messages.error(request, 'Only draft recipes can be edited.')
         return redirect('inventory:recipe_detail', pk=pk)
     if request.method == 'POST':
+        # Capture the stored identity before ModelForm validation, which
+        # mutates the bound instance while cleaning.
+        original_product_id = recipe.product_id
+        original_size = recipe.size
+        original_scope = recipe.order_type_scope
         form = RecipeForm(request.POST, instance=recipe)
         if form.is_valid():
+            # Identity fields determine which (product, size, scope) recipe
+            # this row represents.  Changing them after ingredient lines exist
+            # would silently repoint those lines at another product, so the
+            # change is rejected once the draft has lines.
+            identity_changed = (
+                form.cleaned_data['product'].pk != original_product_id
+                or form.cleaned_data['size'] != original_size
+                or form.cleaned_data['order_type_scope'] != original_scope
+            )
+            if identity_changed and recipe.items.exists():
+                form.add_error(None, (
+                    'Product, size and order-type scope cannot be changed once '
+                    'the recipe has ingredient lines. Remove the lines first or '
+                    'create a new recipe.'
+                ))
+                return render(request, 'inventory/recipe_form.html',
+                              {'form': form, 'recipe': recipe, 'title': 'Edit Recipe'})
             try:
                 with transaction.atomic():
                     form.save()
@@ -1148,6 +1163,145 @@ def recipe_retire(request, pk):
             messages.error(request, str(exc))
         return redirect('inventory:recipe_detail', pk=pk)
     return render(request, 'inventory/recipe_retire_confirm.html', {'recipe': recipe})
+
+
+# ── Recipe new revision ───────────────────────────────────────────────────────
+
+@login_required
+@cashier_or_admin_required
+def recipe_revision_create(request, pk):
+    """Create a new draft revision copied from an approved Recipe."""
+    recipe = get_object_or_404(Recipe.objects.select_related('product'), pk=pk)
+    if recipe.status != Recipe.STATUS_APPROVED:
+        messages.error(request, 'Only approved recipes can be revised.')
+        return redirect('inventory:recipe_detail', pk=pk)
+
+    if request.method == 'POST':
+        try:
+            draft = create_recipe_revision(pk, user=request.user)
+        except RecipeConfigError as exc:
+            messages.error(request, str(exc))
+            return redirect('inventory:recipe_detail', pk=pk)
+        log_action(
+            request.user, 'inventory.recipe_revision_create', draft,
+            detail=f'Copied from rev {recipe.revision} of recipe {recipe.pk}',
+        )
+        messages.success(
+            request,
+            f'Draft revision {draft.revision} created. Edit the lines and approve it when ready.',
+        )
+        return redirect('inventory:recipe_detail', pk=draft.pk)
+
+    return render(request, 'inventory/recipe_revision_confirm.html', {'recipe': recipe})
+
+
+# ── Recipe delete (draft only) ────────────────────────────────────────────────
+
+@login_required
+@admin_required
+def recipe_delete(request, pk):
+    """Delete a draft Recipe after confirmation. Admin only."""
+    recipe = get_object_or_404(Recipe.objects.select_related('product'), pk=pk)
+    if recipe.status != Recipe.STATUS_DRAFT:
+        messages.error(request, 'Only draft recipes can be deleted.')
+        return redirect('inventory:recipe_detail', pk=pk)
+
+    if request.method == 'POST':
+        try:
+            info = delete_draft_recipe(pk)
+        except RecipeConfigError as exc:
+            messages.error(request, str(exc))
+            return redirect('inventory:recipe_detail', pk=pk)
+        # The row no longer exists; log against the captured snapshot.
+        log_action(
+            request.user, 'inventory.recipe_delete',
+            object_type='recipe', object_id=str(info['pk']),
+            object_repr=info['repr'],
+            detail=(
+                f'Deleted draft: {info["product_name"]} / {info["size_display"]} / '
+                f'{info["scope_display"]} / rev {info["revision"]}'
+            ),
+        )
+        messages.success(
+            request,
+            f'Draft recipe deleted ({info["product_name"]}, rev {info["revision"]}).',
+        )
+        return redirect('inventory:recipe_list')
+
+    return render(request, 'inventory/recipe_delete_confirm.html', {
+        'recipe':     recipe,
+        'item_count': recipe.items.count(),
+    })
+
+
+# ── Recipe archive ────────────────────────────────────────────────────────────
+
+@login_required
+@admin_required
+def recipe_archive(request, pk):
+    """Archive an approved Recipe (POST confirmation). Admin only."""
+    recipe = get_object_or_404(Recipe.objects.select_related('product'), pk=pk)
+    if recipe.status != Recipe.STATUS_APPROVED:
+        messages.error(request, 'Only approved recipes can be archived.')
+        return redirect('inventory:recipe_detail', pk=pk)
+
+    if request.method == 'POST':
+        try:
+            recipe = archive_recipe(recipe_id=pk)
+            log_action(request.user, 'inventory.recipe_archive', recipe, detail=str(recipe))
+            messages.success(request, f'Recipe archived (rev {recipe.revision}).')
+        except RecipeConfigError as exc:
+            messages.error(request, str(exc))
+        return redirect('inventory:recipe_detail', pk=pk)
+
+    return render(request, 'inventory/recipe_archive_confirm.html', {'recipe': recipe})
+
+
+# ── Recipe item edit ──────────────────────────────────────────────────────────
+
+@login_required
+@cashier_or_admin_required
+def recipe_item_edit(request, pk, item_pk):
+    """Edit one ingredient line on a draft Recipe."""
+    recipe = get_object_or_404(Recipe, pk=pk)
+    if recipe.status != Recipe.STATUS_DRAFT:
+        messages.error(request, 'Ingredient lines can only be edited on a draft recipe.')
+        return redirect('inventory:recipe_detail', pk=pk)
+
+    ri = get_object_or_404(
+        RecipeItem.objects.select_related('inventory_item'),
+        pk=item_pk, recipe=recipe,
+    )
+
+    if request.method == 'POST':
+        form = RecipeItemForm(request.POST, instance=ri, recipe=recipe)
+        if form.is_valid():
+            try:
+                ri = update_recipe_item(
+                    recipe_id=pk,
+                    item_id=item_pk,
+                    inventory_item=form.cleaned_data['inventory_item'],
+                    quantity=form.cleaned_data['quantity'],
+                )
+            except RecipeConfigError as exc:
+                messages.error(request, str(exc))
+                return render(request, 'inventory/recipe_item_form.html', {
+                    'recipe': recipe, 'item': ri, 'form': form,
+                })
+            log_action(
+                request.user, 'inventory.recipe_item_edit', recipe,
+                detail=f'{ri.inventory_item.name} × {ri.quantity}',
+            )
+            messages.success(request, f'Updated {ri.inventory_item.name} line.')
+            return redirect('inventory:recipe_detail', pk=pk)
+    else:
+        form = RecipeItemForm(instance=ri, recipe=recipe)
+
+    return render(request, 'inventory/recipe_item_form.html', {
+        'recipe': recipe,
+        'item':   ri,
+        'form':   form,
+    })
 
 
 # ── Packaging profile list ────────────────────────────────────────────────────

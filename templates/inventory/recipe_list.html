@@ -65,7 +65,20 @@
           </td>
           <td style="font-size:0.85rem">{{ recipe.approved_by.username|default:"—" }}</td>
           <td>
-            <a href="{% url 'inventory:recipe_detail' recipe.pk %}" class="btn btn-sm btn-outline">View</a>
+            <div style="display:flex;gap:.35rem;flex-wrap:wrap">
+              <a href="{% url 'inventory:recipe_detail' recipe.pk %}" class="btn btn-sm btn-outline">View</a>
+              {% if recipe.status == 'draft' %}
+                <a href="{% url 'inventory:recipe_edit' recipe.pk %}" class="btn btn-sm btn-outline">Edit</a>
+                {% if user.is_admin_user %}
+                <a href="{% url 'inventory:recipe_delete' recipe.pk %}" class="btn btn-sm" style="color:#e74c3c;background:none;border:1px solid #e74c3c">Delete</a>
+                {% endif %}
+              {% elif recipe.status == 'approved' %}
+                <a href="{% url 'inventory:recipe_revision_create' recipe.pk %}" class="btn btn-sm btn-outline">New Revision</a>
+                {% if user.is_admin_user %}
+                <a href="{% url 'inventory:recipe_archive' recipe.pk %}" class="btn btn-sm" style="color:#e74c3c;background:none;border:1px solid #e74c3c">Archive</a>
+                {% endif %}
+              {% endif %}
+            </div>
           </td>
         </tr>
         {% empty %}

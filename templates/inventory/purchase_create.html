@@ -131,12 +131,18 @@
 {% endblock %}
 
 {% block extra_js %}
+{# XSS-safe JSON embed: json_script renders <script type="application/json"> elements   #}
+{# whose contents are HTML-safe, so stored item names / line notes cannot break out of   #}
+{# the script context. The JS below reads them back with JSON.parse.                    #}
+{{ items_data|json_script:"purchase-items-data" }}
+{{ line_initial|json_script:"purchase-initial-lines-data" }}
 <script>
 (function () {
   'use strict';
 
-  var ITEMS    = {{ items_json|safe }};
-  var INITIAL  = {{ line_initial_json|safe }};   // previously submitted line data
+  var ITEMS    = JSON.parse(document.getElementById('purchase-items-data').textContent);
+  // For a validation-failure re-render, this holds the previously submitted lines.
+  var INITIAL  = JSON.parse(document.getElementById('purchase-initial-lines-data').textContent);
 
   // Fast-lookup maps.
   var ITEM_MAP = {};
