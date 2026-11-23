@@ -10,17 +10,25 @@ from apps.orders.services import validate_status_transition
 # and must never be modified or deleted through the admin interface.
 _TERMINAL_STATUSES = frozenset({'completed', 'cancelled'})
 
-# All Order fields that are financial snapshots or audit timestamps.
-# Rendered read-only for every order; double-locked for terminal orders.
+# All Order fields that are financial snapshots, inventory-settlement state or
+# audit timestamps.  Rendered read-only for every order; double-locked for
+# terminal orders.
+#
+# stock_deducted records whether the legacy ledger was actually deducted for
+# this order.  restore_inventory_for_order() treats it as the idempotency guard
+# (True means "stock is out and must be restored"), so letting an administrator
+# toggle it could skip restoration or duplicate it.  Only the inventory
+# services (place_order_inventory / restore_inventory_for_order) may write it.
 _ORDER_READONLY_BASE = [
-    'order_number', 'created_at', 'cancelled_at',
+    'order_number', 'created_at', 'cancelled_at', 'stock_deducted',
+    'request_token', 'tracking_token',
 ]
 _ORDER_READONLY_TERMINAL = [
     'order_number', 'customer_name', 'customer_phone', 'table_number',
     'order_type', 'status', 'notes',
     'subtotal', 'discount', 'packaging_fee', 'total',
     'is_paid', 'payment_method', 'amount_paid', 'change_amount',
-    'stock_deducted', 'request_token', 'cashier',
+    'stock_deducted', 'request_token', 'tracking_token', 'cashier',
     'created_at', 'updated_at', 'completed_at', 'cancelled_at',
     'queue_number', 'queued_at', 'ready_at',
 ]
@@ -35,9 +43,16 @@ class OrderItemInline(admin.TabularInline):
     can_delete = False
     # Base set of read-only fields for every order item (snapshot fields that
     # were captured at order time and must never be retroactively altered).
+    #
+    # inventory_mode records which ledger handled this line (legacy
+    # Product.stock_quantity vs ingredient reservations).  Cancellation and
+    # restoration select lines by this value, so changing it would settle the
+    # order against the wrong ledger.  It is a placement-time snapshot and is
+    # written only by the inventory coordinator.
     readonly_fields = [
         'product', 'product_name', 'category_name', 'packaging_eligible',
         'size', 'quantity', 'unit_price', 'subtotal', 'notes',
+        'inventory_mode',
     ]
 
     def has_add_permission(self, request, obj=None):
@@ -90,6 +105,10 @@ class OrderAdmin(admin.ModelAdmin):
     search_fields = ['order_number', 'customer_name']
     inlines = [OrderItemInline]
     readonly_fields = _ORDER_READONLY_BASE
+
+    def has_add_permission(self, request):
+        """Orders must be created through checkout/POS and inventory placement."""
+        return False
 
     # ── Deletion protection ───────────────────────────────────────────────────
     # The pre_delete signal on Order already raises ValidationError for every

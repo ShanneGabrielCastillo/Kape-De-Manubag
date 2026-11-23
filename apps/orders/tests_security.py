@@ -68,7 +68,7 @@ class OrderRateLimitTests(TestCase):
         self.category = Category.objects.create(name='Drinks', slug='drinks')
         self.product = Product.objects.create(
             category=self.category, name='Iced Coffee', price='60.00',
-            stock_quantity=50,
+            stock_quantity=50, inventory_tracking_mode='legacy',
         )
 
     # ── helpers ────────────────────────────────────────────────────────────
@@ -265,7 +265,7 @@ class TrackingTokenTests(TestCase):
         self.category = Category.objects.create(name='Drinks', slug='drinks-tok')
         self.product = Product.objects.create(
             category=self.category, name='Matcha Latte', price='75.00',
-            stock_quantity=20,
+            stock_quantity=20, inventory_tracking_mode='legacy',
         )
 
     def _place_order(self):

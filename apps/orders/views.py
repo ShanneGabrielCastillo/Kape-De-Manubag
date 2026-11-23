@@ -23,7 +23,6 @@ from .forms import CheckoutForm
 from apps.menu.models import Category, Product
 from apps.accounts.decorators import cashier_or_admin_required, admin_required
 from apps.orders.services import (
-    restore_inventory_for_order,
     validate_status_transition,
     calculate_packaging_fee,
     calculate_packaging_fee_for_items,

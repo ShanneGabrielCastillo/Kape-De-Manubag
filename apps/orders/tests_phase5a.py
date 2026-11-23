@@ -10,15 +10,12 @@ Covers:
   2.  inventory_mode is snapshotted from product.inventory_tracking_mode ('ingredient')
   3.  all other snapshot fields are still correct after Phase 5A change
 
-  deduct_inventory_for_order() — narrowed to legacy lines
+  deduct_inventory_for_order() — REMOVED in Phase 7D-1
   ────────────────────────────────────────────────────────
-  4.  deducts stock for legacy-mode items
-  5.  skips ingredient-mode items entirely (no legacy lines → early return)
-  6.  mixed order: deducts only legacy lines, leaves ingredient product untouched
-  7.  aggregate validation: two legacy lines for same product, stock covers total → ok
-  8.  aggregate validation: two legacy lines for same product, stock < total → ValueError
-  9.  idempotency: second call is a no-op when stock_deducted=True
-  10. extra_order_update_fields still forwarded correctly
+  (The function had no runtime caller since Phase 5B Stage B — every view
+  entry point goes through place_order_inventory().  Its behaviors are
+  covered by PlaceOrderInventoryTests below: legacy-only deduction,
+  ingredient-only skip, mixed-order partitioning, and idempotency.)
 
   restore_inventory_for_order() — narrowed + item_quantities param
   ─────────────────────────────────────────────────────────────────
@@ -76,7 +73,6 @@ from apps.menu.models import Category, Product
 from apps.orders.models import Order, OrderItem
 from apps.orders.services import (
     create_order_item,
-    deduct_inventory_for_order,
     place_order_inventory,
     restore_inventory_for_order,
 )
@@ -217,160 +213,20 @@ class CreateOrderItemInventoryModeTests(TestCase):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# 4–10. deduct_inventory_for_order() — narrowed to legacy lines
+# 4–10. deduct_inventory_for_order() — REMOVED in Phase 7D-1
 # ═════════════════════════════════════════════════════════════════════════════
+#
+# The function was retired: it had no runtime caller since Phase 5B Stage B
+# (both order entry points call place_order_inventory(), whose legacy branch
+# applies the same deduction through _apply_inventory_for_order with the
+# same guards).  The behaviors formerly proven here remain covered by
+# PlaceOrderInventoryTests below (legacy-only deduction, ingredient-only
+# skip, mixed-order partitioning, idempotency) and by the Phase 5B
+# reservation/idempotency suites.
 
-class DeductInventoryLegacyNarrowTests(TestCase):
 
-    def _make_order_with_item(self, mode, stock=50, qty=2):
-        prod = _product(mode=mode, stock=stock)
-        order = _order()
-        OrderItem.objects.create(
-            order=order, product=prod,
-            product_name=prod.name, category_name=prod.category.name,
-            packaging_eligible=False,
-            size='none', quantity=qty,
-            unit_price=Decimal('65.00'),
-            subtotal=Decimal('65.00') * qty,
-            inventory_mode=mode,
-        )
-        prod.refresh_from_db()
-        return order, prod
-
-    def test_deducts_legacy_items(self):
-        """Legacy-mode items have stock deducted and stock_deducted=True."""
-        order, prod = self._make_order_with_item(
-            mode=Product.INVENTORY_TRACKING_LEGACY, stock=50, qty=3,
-        )
-        deduct_inventory_for_order(order)
-        prod.refresh_from_db()
-        order.refresh_from_db()
-        self.assertEqual(prod.stock_quantity, 47)
-        self.assertTrue(order.stock_deducted)
-
-    def test_skips_ingredient_only_order(self):
-        """Ingredient-only order: deduct does nothing, stock_deducted stays False."""
-        order, prod = self._make_order_with_item(
-            mode=Product.INVENTORY_TRACKING_INGREDIENT, stock=50, qty=2,
-        )
-        initial_stock = prod.stock_quantity
-        deduct_inventory_for_order(order)
-        prod.refresh_from_db()
-        order.refresh_from_db()
-        self.assertEqual(prod.stock_quantity, initial_stock)
-        self.assertFalse(order.stock_deducted)
-
-    def test_mixed_order_deducts_only_legacy(self):
-        """Mixed order: legacy stock deducted, ingredient product untouched."""
-        legacy_prod = _product(mode=Product.INVENTORY_TRACKING_LEGACY, stock=50)
-        ingr_prod = _product(mode=Product.INVENTORY_TRACKING_INGREDIENT, stock=50)
-        order = _order()
-        OrderItem.objects.create(
-            order=order, product=legacy_prod,
-            product_name=legacy_prod.name, category_name=legacy_prod.category.name,
-            packaging_eligible=False, size='none', quantity=4,
-            unit_price=Decimal('65.00'), subtotal=Decimal('260.00'),
-            inventory_mode=Product.INVENTORY_TRACKING_LEGACY,
-        )
-        OrderItem.objects.create(
-            order=order, product=ingr_prod,
-            product_name=ingr_prod.name, category_name=ingr_prod.category.name,
-            packaging_eligible=False, size='none', quantity=2,
-            unit_price=Decimal('65.00'), subtotal=Decimal('130.00'),
-            inventory_mode=Product.INVENTORY_TRACKING_INGREDIENT,
-        )
-
-        deduct_inventory_for_order(order)
-
-        legacy_prod.refresh_from_db()
-        ingr_prod.refresh_from_db()
-        order.refresh_from_db()
-
-        self.assertEqual(legacy_prod.stock_quantity, 46)  # 50 - 4
-        self.assertEqual(ingr_prod.stock_quantity, 50)    # untouched
-        self.assertTrue(order.stock_deducted)
-
-    def test_aggregate_validation_passes_when_stock_covers_total(self):
-        """Two legacy lines for same product: passes when stock >= sum of quantities."""
-        prod = _product(mode=Product.INVENTORY_TRACKING_LEGACY, stock=10)
-        order = _order()
-        # Two different sizes of the same product
-        OrderItem.objects.create(
-            order=order, product=prod,
-            product_name=prod.name, category_name=prod.category.name,
-            packaging_eligible=False, size='small', quantity=3,
-            unit_price=Decimal('65.00'), subtotal=Decimal('195.00'),
-            inventory_mode=Product.INVENTORY_TRACKING_LEGACY,
-        )
-        OrderItem.objects.create(
-            order=order, product=prod,
-            product_name=prod.name, category_name=prod.category.name,
-            packaging_eligible=False, size='large', quantity=4,
-            unit_price=Decimal('75.00'), subtotal=Decimal('300.00'),
-            inventory_mode=Product.INVENTORY_TRACKING_LEGACY,
-        )
-        # Total requested = 7, stock = 10 → should succeed
-        deduct_inventory_for_order(order)
-        prod.refresh_from_db()
-        self.assertEqual(prod.stock_quantity, 3)
-
-    def test_aggregate_validation_fails_when_stock_below_total(self):
-        """Two legacy lines for same product: raises ValueError when stock < sum."""
-        prod = _product(mode=Product.INVENTORY_TRACKING_LEGACY, stock=5)
-        order = _order()
-        OrderItem.objects.create(
-            order=order, product=prod,
-            product_name=prod.name, category_name=prod.category.name,
-            packaging_eligible=False, size='small', quantity=3,
-            unit_price=Decimal('65.00'), subtotal=Decimal('195.00'),
-            inventory_mode=Product.INVENTORY_TRACKING_LEGACY,
-        )
-        OrderItem.objects.create(
-            order=order, product=prod,
-            product_name=prod.name, category_name=prod.category.name,
-            packaging_eligible=False, size='large', quantity=4,
-            unit_price=Decimal('75.00'), subtotal=Decimal('300.00'),
-            inventory_mode=Product.INVENTORY_TRACKING_LEGACY,
-        )
-        # Total requested = 7, stock = 5 → should fail
-        with self.assertRaises(ValueError):
-            deduct_inventory_for_order(order)
-
-        # Stock must be untouched on failure
-        prod.refresh_from_db()
-        self.assertEqual(prod.stock_quantity, 5)
-
-    def test_idempotency_already_deducted(self):
-        """Second call is a no-op when stock_deducted is already True."""
-        order, prod = self._make_order_with_item(
-            mode=Product.INVENTORY_TRACKING_LEGACY, stock=50, qty=2,
-        )
-        deduct_inventory_for_order(order)
-        # Refresh to get the DB value after the first deduction.
-        prod.refresh_from_db()
-        order.refresh_from_db()
-        stock_after_first = prod.stock_quantity  # 48
-
-        # Second call should be a no-op (stock_deducted=True guards it)
-        deduct_inventory_for_order(order)
-        prod.refresh_from_db()
-        self.assertEqual(prod.stock_quantity, stock_after_first)
-
-    def test_extra_order_update_fields_forwarded(self):
-        """extra_order_update_fields is passed through without error."""
-        order, prod = self._make_order_with_item(
-            mode=Product.INVENTORY_TRACKING_LEGACY, stock=50, qty=1,
-        )
-        # Set a field we can verify was included in the update
-        order.subtotal = Decimal('65.00')
-        order.total = Decimal('65.00')
-        # Should not raise
-        deduct_inventory_for_order(
-            order, extra_order_update_fields=['subtotal', 'total']
-        )
-        order.refresh_from_db()
-        self.assertTrue(order.stock_deducted)
-        self.assertEqual(order.subtotal, Decimal('65.00'))
+# ═════════════════════════════════════════════════════════════════════════════
+# 11–15. restore_inventory_for_order() — narrowed + item_quantities param
 
 
 # ═════════════════════════════════════════════════════════════════════════════

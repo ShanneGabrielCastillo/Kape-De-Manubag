@@ -3,9 +3,9 @@ tests_phase5a_stageb.py
 =======================
 Phase 5A Stage B — Checkout and POS Integration tests.
 
-Verifies that checkout_view and create_pos_order now route all inventory
-operations through place_order_inventory() instead of calling
-deduct_inventory_for_order() directly.
+Verifies that checkout_view and create_pos_order route all inventory
+operations through place_order_inventory().  (They formerly called the
+legacy deduct service directly; that service was removed in Phase 7D-1.)
 
 Coverage:
 

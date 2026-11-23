@@ -246,12 +246,13 @@ def _apply_inventory_for_order(order, items, performed_by, *, deduct,
                                item_quantities=None):
     """Apply one stock movement (deduct or restore) for every order item.
 
-    Shared by :func:`deduct_inventory_for_order` (``deduct=True``) and
-    :func:`restore_inventory_for_order` (``deduct=False``): each item's stock
-    change, its inventory log row and the order's ``stock_deducted`` flag
-    commit or roll back together. ``items`` is passed in so callers fetch the
-    queryset exactly once (and, for deductions, run the pre-flight check on
-    the same rows that get changed).
+    Shared by the legacy branch of :func:`place_order_inventory`
+    (``deduct=True``) and :func:`restore_inventory_for_order`
+    (``deduct=False``): each item's stock change, its inventory log row and
+    the order's ``stock_deducted`` flag commit or roll back together.
+    ``items`` is passed in so callers fetch the queryset exactly once (and,
+    for deductions, run the pre-flight check on the same rows that get
+    changed).
 
     ``extra_order_update_fields`` — optional list of additional field names to
     include in the final ``order.save(update_fields=...)`` call.  Used by
@@ -321,119 +322,13 @@ def _apply_inventory_for_order(order, items, performed_by, *, deduct,
         order.save(update_fields=update_fields)
 
 
-def deduct_inventory_for_order(order, performed_by=None,
-                               extra_order_update_fields=None):
-    """
-    Deduct legacy-ledger stock for all ``inventory_mode='legacy'`` items in
-    an order.
-
-    Phase 5A: narrows to legacy lines only.  Ingredient-mode lines are
-    handled by :func:`place_order_inventory` (called from Stage B+ views).
-
-    Phase 6A: wraps the entire body in its own ``with transaction.atomic()``
-    block so that ``select_for_update()`` is always safe, regardless of
-    whether the caller provides a transaction.  A status guard rejects
-    non-``awaiting_payment`` orders to prevent re-deduction on cancelled
-    orders where ``stock_deducted`` has been set to ``False``.
-
-    Idempotent: does nothing if order.stock_deducted is already True.
-    Raises ValueError if any legacy product has insufficient stock (pre-flight
-    check aggregated by product to handle multiple same-product lines).
-    Raises ValueError if the order is not in ``awaiting_payment`` status.
-
-    ``extra_order_update_fields`` — forwarded to ``_apply_inventory_for_order``
-    so the caller can merge additional order fields into the final UPDATE, saving
-    a DB round-trip.  See ``create_pos_order`` for usage.
-    """
-    # Phase 6A: open our own atomic block so select_for_update() is always
-    # safe.  Django's atomic() is reentrant: if an outer transaction already
-    # exists, this creates a savepoint; if called standalone (as in tests),
-    # it creates a new transaction.
-    with transaction.atomic():
-        from apps.orders.models import Order
-
-        # Retrieve the authoritative, locked Order row.  The caller-supplied
-        # instance may be stale — its in-memory status could still read
-        # 'awaiting_payment' even though the DB row has been cancelled by
-        # another transaction.
-        locked_order = Order.objects.select_for_update().get(pk=order.pk)
-
-        # Phase 6A status guard (Rev3 §H.2 "REQUIRE order.status =
-        # 'awaiting_payment'").  Prevents re-deduction on cancelled,
-        # completed, or ready orders regardless of stock_deducted value.
-        if locked_order.status != 'awaiting_payment':
-            raise ValueError(
-                f'Cannot deduct stock: order status is '
-                f'{locked_order.status}, not awaiting_payment.'
-            )
-
-        if locked_order.stock_deducted:
-            return
-
-        # Phase 6A: carry over caller-supplied extra field values from
-        # the (potentially stale) in-memory instance onto the freshly
-        # retrieved locked instance.  This preserves the
-        # extra_order_update_fields optimization used by create_pos_order:
-        # the caller sets subtotal/packaging_fee/total on their in-memory
-        # order, and this function saves those values together with
-        # stock_deducted in one UPDATE.
-        if extra_order_update_fields:
-            for field in extra_order_update_fields:
-                if hasattr(order, field):
-                    setattr(locked_order, field, getattr(order, field))
-
-        # Phase 5A: restrict to legacy-ledger lines only.
-        from apps.orders.models import OrderItem
-        items = list(
-            locked_order.items
-            .filter(inventory_mode=OrderItem.INVENTORY_MODE_LEGACY)
-            .select_related('product')
-        )
-
-        if not items:
-            # No legacy lines — nothing to deduct; mark deducted only when
-            # there was at least one legacy line (stock_deducted semantics).
-            # With no legacy items the flag stays False; place_order_inventory
-            # (Stage B) will set it when appropriate.
-            return
-
-        # Pre-flight validation — aggregate requested quantities by product pk
-        # to handle the (rare) case of the same product appearing in two
-        # legacy lines at different sizes.  We check the aggregate demand
-        # against the available stock, matching the logic in
-        # place_order_inventory.
-        aggregated: dict = {}
-        for item in items:
-            if item.product is None:
-                continue
-            aggregated[item.product_id] = (
-                aggregated.get(item.product_id, 0) + item.quantity
-            )
-
-        # Validate each product once (using live stock_quantity).
-        checked_products: dict = {}
-        for item in items:
-            if item.product is None:
-                continue
-            pid = item.product_id
-            if pid in checked_products:
-                continue
-            checked_products[pid] = item.product
-            total_requested = aggregated[pid]
-            if item.product.stock_quantity < total_requested:
-                raise ValueError(
-                    f"Insufficient stock for '{item.product.name}'. "
-                    f"Available: {item.product.stock_quantity}, "
-                    f"Requested: {total_requested}"
-                )
-
-        # All checks passed — apply the movement atomically.
-        # Use locked_order so that the stock_deducted flag is written to
-        # the same instance that was validated.
-        _apply_inventory_for_order(
-            locked_order, items, performed_by, deduct=True,
-            extra_order_update_fields=extra_order_update_fields,
-        )
+# Phase 7D-1: ``deduct_inventory_for_order()`` was removed here.  It had no
+# runtime caller since Phase 5B Stage B (views call ``place_order_inventory``,
+# whose legacy branch calls ``_apply_inventory_for_order`` directly with the
+# same guards); only tests exercised it.  Its protection semantics — the
+# ``awaiting_payment`` status guard, the aggregated per-product shortage
+# check, and idempotency via ``stock_deducted`` — all live on inside
+# ``place_order_inventory`` and remain covered by its test battery.
 
 
 def restore_inventory_for_order(order, performed_by=None, item_quantities=None):
@@ -485,9 +380,9 @@ def restore_inventory_for_order(order, performed_by=None, item_quantities=None):
 # Stage B (Phase 5B): add OrderIngredientReservation writes after the
 #   ingredient plan is collected.  No changes to this function's signature.
 #
-# Views (checkout_view, create_pos_order) are NOT changed in Stage A; they
-# continue to call deduct_inventory_for_order() directly until Stage B
-# wires them to place_order_inventory().
+# Views (checkout_view, create_pos_order) have called place_order_inventory()
+# since Stage B.  The former direct service deduct_inventory_for_order() was
+# retired in Phase 7D-1 (no runtime caller).
 # ══════════════════════════════════════════════════════════════════════════════
 
 def place_order_inventory(order_id, actor=None):

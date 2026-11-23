@@ -72,7 +72,15 @@ class ProductAdmin(admin.ModelAdmin):
     prepopulated_fields = {'slug': ('name',)}
     # deactivated_at is set programmatically by deactivate()/activate(); shown
     # read-only so admins cannot backdate or clear it by hand.
-    readonly_fields = ['deactivated_at']
+    readonly_fields = ['deactivated_at', 'inventory_tracking_display']
+    # Phase 8F-2: inventory_tracking_mode is switched ONLY by the audited
+    # cutover service (apps.menu.services.change_inventory_tracking_mode).
+    # Phase 7D-2A: that service now supports legacy→ingredient cutovers only
+    # (ingredient-to-legacy rollback is retired).
+    # Excluding it from the admin form is the server-side guarantee: the field
+    # is never part of the bound form, so a crafted POST cannot change it. The
+    # read-only display below still shows the current mode for reference.
+    exclude = ['inventory_tracking_mode']
     actions = ['deactivate_products', 'activate_products']
 
     # Permanent deletion is disabled for products (see Product.delete and the
@@ -110,7 +118,53 @@ class ProductAdmin(admin.ModelAdmin):
 
     @admin.action(description='Reactivate selected products')
     def activate_products(self, request, queryset):
+        # Phase 7D-4: legacy-tracked products cannot be reactivated. Handle
+        # them per row so one refusal never blocks eligible ingredient
+        # products in the same selection, and audit only real activations.
+        activated = 0
+        blocked = []
         for product in queryset.filter(is_active=False):
-            product.activate()
+            try:
+                product.activate()
+            except ValidationError:
+                blocked.append(product.name)
+                continue
+            activated += 1
             log_action(request.user, 'product.reactivate', product)
-        self.message_user(request, 'Selected products have been reactivated.')
+        if activated:
+            self.message_user(request, f'{activated} product(s) reactivated.')
+        if blocked:
+            self.message_user(
+                request,
+                f'{len(blocked)} legacy-tracked product(s) could not be '
+                f'reactivated: {", ".join(blocked)}. Convert them to '
+                'ingredient tracking or leave them deactivated.',
+                level=messages.ERROR,
+            )
+
+    def get_readonly_fields(self, request, obj=None):
+        """Finished-product stock fields are never editable in the admin.
+
+        For ingredient-tracked products ``stock_quantity`` and
+        ``low_stock_threshold`` are frozen: stock lives in ``InventoryItem`` and
+        ``IngredientMovementLog``. For the remaining legacy-tracked products the
+        authorized staff product form is the stock workflow and records an
+        ``InventoryLog`` row via ``_log_inventory_update()``; the admin has no
+        equivalent logging path, so exposing these fields would change a
+        finished-product balance with no ledger entry.
+
+        Read-only on both add and change. New products keep the model defaults
+        (they are ingredient-tracked and their stock fields are non-authoritative).
+        """
+        fields = list(super().get_readonly_fields(request, obj))
+        fields.extend(['stock_quantity', 'low_stock_threshold'])
+        return fields
+
+    def inventory_tracking_display(self, obj):
+        """Current inventory-tracking mode, shown read-only on the change form.
+
+        Display only — the field itself is excluded from the editable form (see
+        ``exclude`` above), so this cannot be used to change it.
+        """
+        return obj.get_inventory_tracking_mode_display()
+    inventory_tracking_display.short_description = 'Inventory tracking'

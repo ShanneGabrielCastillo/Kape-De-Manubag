@@ -53,6 +53,7 @@ def _product(stock=10):
     return Product.objects.create(
         category=_category(), name=f'Prod6A_{_uid()}',
         price='60.00', stock_quantity=stock,
+        inventory_tracking_mode=Product.INVENTORY_TRACKING_LEGACY,
     )
 
 
@@ -342,7 +343,6 @@ class FKIntegrityTests(TestCase):
 # ═════════════════════════════════════════════════════════════════════════════
 
 from apps.orders.services import (
-    deduct_inventory_for_order,
     on_status_changed,
     place_order_inventory,
     restore_inventory_for_order,
@@ -418,65 +418,12 @@ class PlaceOrderInventoryStatusGuardTests(TestCase):
         self.assertTrue(result['stock_deducted'])
 
 
-# ── deduct_inventory_for_order status guard + transaction ─────────────────────
-
-class DeductInventoryStatusGuardTests(TestCase):
-
-    def setUp(self):
-        self.prod = _product()
-
-    def test_deduct_inventory_for_order_rejects_cancelled_order(self):
-        """Direct call on cancelled order with stock_deducted=False → ValueError."""
-        order = _order()
-        _order_item(order, self.prod, quantity=2)
-        order.status = 'cancelled'
-        order.stock_deducted = False
-        order.save()
-        with self.assertRaises(ValueError) as ctx:
-            deduct_inventory_for_order(order)
-        self.assertIn('cancelled', str(ctx.exception))
-        self.prod.refresh_from_db()
-        self.assertEqual(self.prod.stock_quantity, 10)
-        self.assertEqual(InventoryLog.objects.count(), 0)
-
-    def test_deduct_inventory_for_order_rejects_completed_order(self):
-        order = _order()
-        _order_item(order, self.prod, quantity=2)
-        order.status = 'completed'
-        order.stock_deducted = False
-        order.save()
-        with self.assertRaises(ValueError):
-            deduct_inventory_for_order(order)
-
-    def test_deduct_inventory_for_order_rejects_stale_cancelled_order(self):
-        """Stale in-memory instance (status='awaiting_payment') but DB row is
-        cancelled → ValueError from fresh locked read, no stock change."""
-        order = _order()
-        _order_item(order, self.prod, quantity=2)
-        # Keep a stale in-memory instance
-        stale_order = Order.objects.get(pk=order.pk)
-        # Change DB row to cancelled
-        order.status = 'cancelled'
-        order.stock_deducted = False
-        order.save()
-        # stale_order still has status='awaiting_payment' in memory
-        self.assertEqual(stale_order.status, 'awaiting_payment')
-        with self.assertRaises(ValueError) as ctx:
-            deduct_inventory_for_order(stale_order)
-        self.assertIn('cancelled', str(ctx.exception))
-        self.prod.refresh_from_db()
-        self.assertEqual(self.prod.stock_quantity, 10)
-        self.assertEqual(InventoryLog.objects.count(), 0)
-
-    def test_deduct_inventory_for_order_accepts_awaiting_payment(self):
-        """Valid awaiting_payment order still deducts correctly (regression)."""
-        order = _order()
-        _order_item(order, self.prod, quantity=2)
-        deduct_inventory_for_order(order)
-        self.prod.refresh_from_db()
-        order.refresh_from_db()
-        self.assertEqual(self.prod.stock_quantity, 8)
-        self.assertTrue(order.stock_deducted)
+# ── deduct_inventory_for_order status guard — REMOVED in Phase 7D-1 ──────────
+#
+# The function was retired (no runtime caller since Phase 5B Stage B).  The
+# equivalent ``awaiting_payment`` status-guard semantics for the LIVE entry
+# point are proven by PlaceOrderInventoryStatusGuardTests below (fresh locked
+# Order row, cancelled/completed/stale rejection, awaiting_payment accepted).
 
 
 # ── Restoration mapping (Issue 1 from plan) ──────────────────────────────────

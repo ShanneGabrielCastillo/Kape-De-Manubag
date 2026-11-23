@@ -204,6 +204,7 @@ class MenuAuditTests(TestCase):
         # Create
         response = self.client.post('/manage/categories/create/', {
             'name': 'Snacks', 'icon': 'fries', 'description': '',
+            'category_type': 'other',
             'is_active': 'on', 'is_packaging_required': 'on', 'order': '3',
         })
         self.assertEqual(response.status_code, 302)
@@ -215,6 +216,7 @@ class MenuAuditTests(TestCase):
         # Edit
         response = self.client.post(f'/manage/categories/{category.pk}/edit/', {
             'name': 'Snacks', 'icon': 'fries', 'description': 'Crispy!',
+            'category_type': 'other',
             'is_active': 'on', 'is_packaging_required': 'on', 'order': '3',
         })
         self.assertEqual(response.status_code, 302)
@@ -231,7 +233,8 @@ class MenuAuditTests(TestCase):
 
 
 class InventoryAuditTests(TestCase):
-    """Inventory restocking is logged."""
+    """Phase 7B-3A: legacy restocking is RETIRED — the endpoint must never
+    write an audit entry or an InventoryLog row (410 Gone, non-mutating)."""
 
     def setUp(self):
         self.admin = _create_user('audit_admin', 'admin')
@@ -239,20 +242,23 @@ class InventoryAuditTests(TestCase):
         self.category = Category.objects.create(name='Drinks', slug='drinks')
         self.product = Product.objects.create(
             category=self.category, name='Milk Tea', price='70.00',
-            stock_quantity=10,
+            stock_quantity=10, inventory_tracking_mode='legacy',
         )
 
     def test_restock_is_logged_with_before_after_quantities(self):
+        from apps.inventory.models import InventoryLog
         response = self.client.post(
             f'/inventory/{self.product.pk}/restock/',
             {'quantity': '15', 'notes': 'delivery'},
         )
-        self.assertEqual(response.status_code, 200)
-        entry = AuditLog.objects.get(action='inventory.restock')
-        self.assertEqual(entry.user, self.admin)
-        self.assertEqual(entry.object_id, str(self.product.pk))
-        self.assertIn('+15', entry.detail)
-        self.assertIn('10 -> 25', entry.detail)
+        # Retired: explicit non-success, nothing recorded anywhere.
+        self.assertEqual(response.status_code, 410)
+        self.assertFalse(response.json()['success'])
+        self.assertFalse(
+            AuditLog.objects.filter(action='inventory.restock').exists())
+        self.assertFalse(InventoryLog.objects.exists())
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock_quantity, 10)
 
 
 class FinanceAuditTests(TestCase):
@@ -332,7 +338,7 @@ class ScopeBoundaryTests(TestCase):
         self.category = Category.objects.create(name='Drinks', slug='drinks')
         self.product = Product.objects.create(
             category=self.category, name='Americano', price='50.00',
-            stock_quantity=100,
+            stock_quantity=100, inventory_tracking_mode='legacy',
         )
 
     def test_pos_order_creation_is_not_logged(self):
@@ -370,7 +376,7 @@ class OrderAuditTests(TestCase):
         self.category = Category.objects.create(name='Drinks', slug='drinks-oa')
         self.product = Product.objects.create(
             category=self.category, name='Latte', price='60.00',
-            stock_quantity=50,
+            stock_quantity=50, inventory_tracking_mode='legacy',
         )
 
     def _create_order(self):
@@ -396,9 +402,23 @@ class OrderAuditTests(TestCase):
             {'amount_paid': '100.00', 'payment_method': 'cash'},
         )
         self.assertTrue(response.json()['success'])
-        self.assertEqual(AuditLog.objects.filter(action='order.payment').count(), 1)
+        # Phase 7B-3A.2: payment intentionally records two distinct events —
+        # the payment itself, plus the auto-accept that moves the order to
+        # Preparing. Assert each type once, and assert no duplicates of either.
+        payment_entries = AuditLog.objects.filter(action='order.payment')
+        accepted_entries = AuditLog.objects.filter(action='order.accepted')
+        self.assertEqual(payment_entries.count(), 1)
+        self.assertEqual(accepted_entries.count(), 1)
+        self.assertEqual(
+            AuditLog.objects.filter(
+                action__in=['order.payment', 'order.accepted'],
+            ).count(),
+            2,
+        )
         # No duplicate entries from signals or other paths.
-        self.assertEqual(AuditLog.objects.count(), 1)
+        self.assertEqual(AuditLog.objects.count(), 2)
+        for entry in (payment_entries.get(), accepted_entries.get()):
+            self.assertEqual(entry.object_id, str(order.pk))
 
     def test_payment_audit_detail_contains_method_and_amounts(self):
         order = self._create_order()
@@ -436,18 +456,33 @@ class OrderAuditTests(TestCase):
 
     def test_status_change_creates_exactly_one_audit_entry(self):
         order = self._create_order()
+        # Phase 7B-3A.2: awaiting_payment → preparing requires payment first,
+        # so pay the order and then exercise the next transition.
+        payment = self.client.post(
+            f'/orders/manage/{order.pk}/payment/',
+            {'amount_paid': '100.00', 'payment_method': 'cash'},
+        )
+        self.assertTrue(payment.json()['success'])
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'preparing')
+
+        # Clear the payment + auto-accept entries so only the transition under
+        # test is measured.
         AuditLog.objects.all().delete()
+
         response = self.client.post(
             f'/orders/manage/{order.pk}/status/',
-            {'status': 'preparing'},
+            {'status': 'ready'},
         )
         self.assertTrue(response.json()['success'])
         self.assertEqual(
             AuditLog.objects.filter(action='order.status_changed').count(), 1,
         )
         entry = AuditLog.objects.get(action='order.status_changed')
-        self.assertIn('pending', entry.detail)
         self.assertIn('preparing', entry.detail)
+        self.assertIn('ready', entry.detail)
+        self.assertEqual(entry.object_id, str(order.pk))
+        self.assertEqual(entry.user, self.cashier)
 
     def test_cancel_creates_order_cancel_not_order_status_changed(self):
         order = self._create_order()
@@ -475,15 +510,31 @@ class OrderAuditTests(TestCase):
 
     def test_quick_advance_creates_one_status_changed_entry(self):
         order = self._create_order()
+        # Phase 7B-3A.2: the quick-advance flow only moves preparing → ready and
+        # ready → completed, and only a paid order may reach preparing.
+        payment = self.client.post(
+            f'/orders/manage/{order.pk}/payment/',
+            {'amount_paid': '100.00', 'payment_method': 'cash'},
+        )
+        self.assertTrue(payment.json()['success'])
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'preparing')
+
+        # Clear the payment + auto-accept entries so only the advance is measured.
         AuditLog.objects.all().delete()
+
         response = self.client.post(f'/orders/manage/{order.pk}/advance/')
         self.assertTrue(response.json()['success'])
         self.assertEqual(
             AuditLog.objects.filter(action='order.status_changed').count(), 1,
         )
         entry = AuditLog.objects.get(action='order.status_changed')
-        self.assertIn('pending', entry.detail)
         self.assertIn('preparing', entry.detail)
+        self.assertIn('ready', entry.detail)
+        self.assertEqual(entry.object_id, str(order.pk))
+        self.assertEqual(entry.user, self.cashier)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'ready')
 
 
 # ── Activity Log View Tests ───────────────────────────────────────────────────
@@ -616,27 +667,33 @@ class RegressionTests(TestCase):
         self.category = Category.objects.create(name='Drinks', slug='drinks-rt')
         self.product = Product.objects.create(
             category=self.category, name='Americano', price='55.00',
-            stock_quantity=100,
+            stock_quantity=100, inventory_tracking_mode='legacy',
         )
 
     def test_existing_inventory_log_still_works_after_restock(self):
+        # Phase 7B-3A: restocking is retired — the endpoint answers 410 and
+        # writes NO InventoryLog / AuditLog rows; the historical log itself
+        # remains viewable and recordable via InventoryLog.record().
         from apps.inventory.models import InventoryLog
         self.client.force_login(self.admin)
         response = self.client.post(
             f'/inventory/{self.product.pk}/restock/',
             {'quantity': '10', 'notes': 'test restock'},
         )
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json()['success'])
-        # Both InventoryLog and AuditLog entries must exist.
-        self.assertTrue(
-            InventoryLog.objects.filter(
-                product=self.product, action='restock',
-            ).exists()
+        self.assertEqual(response.status_code, 410)
+        self.assertFalse(response.json()['success'])
+        self.assertFalse(InventoryLog.objects.filter(action='restock').exists())
+        self.assertFalse(AuditLog.objects.filter(action='inventory.restock').exists())
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock_quantity, 100)
+        # The historical log page is still up and can render a manual record.
+        InventoryLog.record(
+            product=self.product, action='restock', source='manual_adjustment',
+            reason='Phase 7B-3A', quantity_change=1,
+            quantity_before=100, quantity_after=101, performed_by=self.admin,
         )
-        self.assertTrue(
-            AuditLog.objects.filter(action='inventory.restock').exists()
-        )
+        page = self.client.get('/inventory/log/')
+        self.assertEqual(page.status_code, 200)
 
     def test_customer_order_stock_deduction_creates_no_order_audit_entries(self):
         """POS order creation is intentionally not logged per scope."""
@@ -676,7 +733,10 @@ class RegressionTests(TestCase):
         self.assertTrue(response.json()['success'])
         order.refresh_from_db()
         self.assertTrue(order.is_paid)
-        self.assertEqual(order.status, 'completed')
+        # Phase 7B-3A.2: payment confirms the order and moves it to Preparing.
+        # Completion is a later lifecycle step (ready → completed), not part of
+        # payment processing.
+        self.assertEqual(order.status, 'preparing')
 
     def test_cancel_order_restores_inventory_and_creates_cancel_audit(self):
         self.client.force_login(self.cashier)
