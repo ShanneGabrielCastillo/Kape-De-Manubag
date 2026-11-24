@@ -910,4 +910,3 @@ class CutoverStockReportTests(TestCase):
             'updated_at': product.updated_at,
         }
         self.assertEqual(before, after)
-
