@@ -82,3 +82,5 @@ test_6a5_output.txt
 final_*.png
 fresh_*.png
 img_section_*.png
+
+test_err.txt
