@@ -29,6 +29,8 @@ db.sqlite3.*.bak
 db.sqlite3.*.bak-shm
 db.sqlite3.*.bak-wal
 staticfiles/
+/postgres_data/
+/runtime/staticfiles/
 media/*
 !media/.gitkeep
 data_export.json

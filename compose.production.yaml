@@ -1,0 +1,122 @@
+# compose.production.yaml — production stack for Kape De Manubag.
+#
+# Usage (on the server, from /home/publicusr/shanne/Kape-De-Manubag):
+#   docker compose -f compose.production.yaml up -d --build
+#   docker compose -f compose.production.yaml logs -f web
+#   docker compose -f compose.production.yaml down
+#
+# Differences from the development compose.yaml:
+#   * PostgreSQL runs as a sibling service instead of db.sqlite3 on the host.
+#   * Gunicorn + collectstatic replace the Django development server.
+#   * Only media/ and runtime/staticfiles/ are bind-mounted; the project
+#     directory is NOT mounted over /app, so the image contents are used.
+#
+# This file does NOT run migrations. Apply them deliberately with:
+#   docker compose -f compose.production.yaml exec web python manage.py migrate
+#
+# Caddy is not part of this file and must not be modified. The app is
+# published on 127.0.0.1:7061 only and Caddy reaches it from the host.
+
+name: kape-de-manubag
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kape-de-manubag:prod
+    container_name: kape-de-manubag-web
+
+    # Application configuration and secrets. Compose reads .env for variable
+    # interpolation AND injects it here; values in `environment` below win
+    # over anything with the same name in .env.
+    env_file: .env
+
+    environment:
+      # Production mode. Overrides DEBUG=True if the shared .env still has it.
+      DEBUG: "False"
+      PORT: "8000"
+      STATIC_ROOT: "/app/runtime/staticfiles"
+      LOG_TO_STDOUT: "1"
+      WEB_CONCURRENCY: "1"
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      # PostgreSQL lives on the Compose network under the hostname `db`.
+      # The :? form makes `docker compose up` fail loudly when any of the
+      # three variables is missing, instead of starting a broken stack.
+      # NOTE: the password is interpolated verbatim into the URL. Use a
+      # password made of URL-safe characters (letters, digits, - _ . ~), or
+      # percent-encode the reserved characters, otherwise dj-database-url
+      # will misparse the credentials.
+      DATABASE_URL: "postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:?POSTGRES_DB is required}"
+
+    # Secrets must never be baked into the image; the Dockerfile already
+    # excludes .env from the build context via .dockerignore.
+    command: >
+      sh -c "python manage.py collectstatic --noinput &&
+      exec gunicorn --config gunicorn.conf.py kape_de_manubag.wsgi:application"
+
+    volumes:
+      - ./media:/app/media
+      - ./runtime/staticfiles:/app/runtime/staticfiles
+
+    ports:
+      - "127.0.0.1:7061:8000"
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/health/', timeout=5)"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+
+    restart: unless-stopped
+
+    networks:
+      - appnet
+
+  db:
+    image: postgres:16-alpine
+    container_name: kape-de-manubag-db
+
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:?POSTGRES_DB is required}"
+      POSTGRES_USER: "${POSTGRES_USER:?POSTGRES_USER is required}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"
+
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+
+    # No `ports:` section on purpose: PostgreSQL is reachable only from
+    # containers on appnet, never from the host or the public internet.
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+    restart: unless-stopped
+
+    networks:
+      - appnet
+
+networks:
+  # A normal bridge network (deliberately NOT internal: the app needs
+  # outbound access to Resend, Cloudinary, Gemini and SMTP relays).
+  # Named explicitly so it does not collide with the development stack's
+  # default network for the same Compose project.
+  appnet:
+    name: kape-de-manubag-prod
+    driver: bridge

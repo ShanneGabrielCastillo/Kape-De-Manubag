@@ -37,6 +37,7 @@ _ENV_KEYS = (
     'SQLITE_PATH',
     'ALLOW_SQLITE_IN_PRODUCTION',
     'LOG_TO_STDOUT',
+    'STATIC_ROOT',
     'GUNICORN_TIMEOUT',
     'WEB_CONCURRENCY',
     'PORT',
@@ -192,7 +193,7 @@ class DatabaseSelectionTests(SimpleTestCase):
         self.assertIn('default', django_settings.DATABASES)
         self.assertEqual(
             django_settings.STORAGES['staticfiles']['BACKEND'],
-            'django.contrib.staticfiles.storage.StaticFilesStorage',
+            'whitenoise.storage.CompressedManifestStaticFilesStorage',
         )
         self.assertIsInstance(django_settings.DEBUG, bool)
 
@@ -253,6 +254,32 @@ class LoggingConfigurationTests(SimpleTestCase):
         for name in ('info_file', 'warning_file', 'error_file'):
             self.assertIn('filename', handlers[name])
         self._assert_unique_handler_references(settings)
+
+
+class StaticFilesAndProxyHeaderTests(SimpleTestCase):
+    def test_default_static_root_is_project_staticfiles(self):
+        settings = _load_settings({'DEBUG': 'True'})
+        self.assertEqual(Path(settings.STATIC_ROOT), PROJECT_ROOT / 'staticfiles')
+
+    def test_custom_static_root_is_respected(self):
+        settings = _load_settings({
+            'DEBUG': 'True',
+            'STATIC_ROOT': '/app/runtime/staticfiles',
+        })
+        self.assertEqual(Path(settings.STATIC_ROOT), Path('/app/runtime/staticfiles'))
+
+    def test_production_configures_proxy_ssl_header(self):
+        settings = _load_settings(_PROD_SQLITE_ENV)
+        self.assertEqual(
+            settings.SECURE_PROXY_SSL_HEADER,
+            ('HTTP_X_FORWARDED_PROTO', 'https'),
+        )
+
+    def test_development_does_not_configure_proxy_ssl_header(self):
+        # The module itself never sets the setting outside production, so
+        # Django's global default (None) applies.
+        settings = _load_settings({'DEBUG': 'True'})
+        self.assertFalse(hasattr(settings, 'SECURE_PROXY_SSL_HEADER'))
 
 
 class GunicornConfigurationTests(SimpleTestCase):

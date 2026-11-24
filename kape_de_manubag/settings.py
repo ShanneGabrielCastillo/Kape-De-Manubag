@@ -234,7 +234,9 @@ USE_TZ = True
 # ── Static files (CSS, JavaScript, Images) ───────────────────────────────────
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+# STATIC_ROOT is overridable so a container can collect into a mounted
+# volume (e.g. /app/runtime/staticfiles) instead of the image filesystem.
+STATIC_ROOT = Path(os.environ.get('STATIC_ROOT', str(BASE_DIR / 'staticfiles')))
 
 # ── Cloudinary — persistent media file storage ───────────────────────────────
 # On Render the local filesystem is ephemeral: uploaded files are lost on
@@ -420,6 +422,12 @@ if not DEBUG:
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
+    # Behind a TLS-terminating reverse proxy the request Django sees is plain
+    # HTTP; trust the proxy's X-Forwarded-Proto header so request.is_secure()
+    # (and CSRF origin checks) reflect the client's real scheme.
+    # SECURE_SSL_REDIRECT is intentionally left off: redirects are the proxy's
+    # job, and forcing them here would break health checks over plain HTTP.
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
 # ── Logging ───────────────────────────────────────────────────────────────────
