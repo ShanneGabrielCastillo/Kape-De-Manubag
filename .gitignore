@@ -58,3 +58,6 @@ htmlcov/
 # Distribution
 *.zip
 *.tar.gz
+
+# AI agent working files and reports
+.agents/

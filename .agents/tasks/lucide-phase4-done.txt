@@ -1,1 +1,0 @@
-Phase 4 complete: all emoji in orders/order_list.html and orders/order_detail.html replaced with Lucide icon elements; reinitLucide calls added after dynamic innerHTML updates.

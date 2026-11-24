@@ -1,1 +1,0 @@
-Phase 8 (Customer Menu) Lucide Icons Migration complete — emojis replaced in menu/index.html and chatbot.js.
