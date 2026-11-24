@@ -64,3 +64,21 @@ htmlcov/
 
 # Local development documentation
 docs/
+
+# Temporary development and debugging files
+check_template.py
+test_settings.py
+test_out.txt
+chk_out.txt
+gdc5b1.txt
+gitlog*.txt
+gl_err.txt
+md.txt
+me.txt
+mig_dry*.txt
+test_6a5_output.txt
+
+# Local UI debugging screenshots
+final_*.png
+fresh_*.png
+img_section_*.png
