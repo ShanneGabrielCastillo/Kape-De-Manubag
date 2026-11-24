@@ -61,3 +61,6 @@ htmlcov/
 
 # AI agent working files and reports
 .agents/
+
+# Local development documentation
+docs/
