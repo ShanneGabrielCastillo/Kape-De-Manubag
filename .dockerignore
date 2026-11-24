@@ -1,14 +1,11 @@
-# .dockerignore — keep secrets, runtime data and host-only clutter out of
+﻿# .dockerignore — keep secrets, runtime data and host-only clutter out of
 # the image build context and its layers.
 
-# ── Secrets: never baked into image layers or build context ─────────────
-# Covers .env and variants such as .env.prod / .env.production. Templates are
-# not needed at runtime, so they are excluded too.
+# Secrets
 .env
 .env.*
 
-# ── Runtime data: provided via the compose bind mount, never copied ──────
-# The existing SQLite database must never be reset, replaced or baked in.
+# Runtime data
 db.sqlite3
 db.sqlite3-shm
 db.sqlite3-wal
@@ -19,7 +16,7 @@ staticfiles/
 logs/
 *.log
 
-# ── Virtual environments (host-only; image installs its own site-packages)
+# Virtual environments
 venv/
 venv_old/
 venv_py314_backup/
@@ -27,7 +24,7 @@ env/
 .venv/
 ENV/
 
-# ── Git and tooling metadata ─────────────────────────────────────────────
+# Git and tooling metadata
 .git
 .gitignore
 .gitattributes
@@ -37,12 +34,12 @@ ENV/
 .freebuff
 .python-version
 
-# ── Python caches ────────────────────────────────────────────────────────
+# Python caches
 __pycache__/
 *.py[cod]
 *$py.class
 
-# ── Local throwaway artifacts ────────────────────────────────────────────
+# Local throwaway artifacts
 test_out.txt
 chk_out.txt
 gitlog.txt
