@@ -45,7 +45,7 @@ ENVIRONMENT VARIABLES
 USAGE
 -----
     python manage.py test apps.menu.tests_phase11_pg \
-        --settings=kape_de_manubag.test_postgres_settings --verbosity=2
+        --settings=kape_de_manubag.postgres_test_settings --verbosity=2
 """
 
 import os
@@ -72,7 +72,7 @@ _missing = [
 ]
 if _missing:
     raise ImproperlyConfigured(
-        'kape_de_manubag.test_postgres_settings requires a PostgreSQL '
+        'kape_de_manubag.postgres_test_settings requires a PostgreSQL '
         'environment; missing or empty variable(s): '
         + ', '.join(_missing)
         + '. This module never falls back to SQLite. Set all of '
@@ -89,7 +89,7 @@ if (
 ):
     raise ImproperlyConfigured(
         f'POSTGRES_DB={_POSTGRES_DB!r} looks like a SQLite database. '
-        'kape_de_manubag.test_postgres_settings must point at a real '
+        'kape_de_manubag.postgres_test_settings must point at a real '
         'PostgreSQL database, never db.sqlite3.'
     )
 
@@ -119,12 +119,12 @@ DATABASES = {
 # ── Belt-and-braces sanity checks (import-time, not runtime) ──────────────────
 if DATABASES['default']['ENGINE'] != POSTGRES_BACKEND:
     raise ImproperlyConfigured(
-        'kape_de_manubag.test_postgres_settings must use '
+        'kape_de_manubag.postgres_test_settings must use '
         f'{POSTGRES_BACKEND}; got {DATABASES["default"]["ENGINE"]!r}.'
     )
 
 if str(DATABASES['default']['NAME']).lower().endswith('.sqlite3'):
     raise ImproperlyConfigured(
-        'kape_de_manubag.test_postgres_settings resolved to a SQLite file '
+        'kape_de_manubag.postgres_test_settings resolved to a SQLite file '
         f'({DATABASES["default"]["NAME"]!r}). Refusing to continue.'
     )

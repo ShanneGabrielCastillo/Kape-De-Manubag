@@ -33,7 +33,7 @@ Use the PostgreSQL-only settings module, which fails at import time unless the
 five POSTGRES_* variables are set (and never falls back to SQLite):
 
     python manage.py test apps.menu.tests_phase11_pg \
-        --settings=kape_de_manubag.test_postgres_settings --verbosity=2
+        --settings=kape_de_manubag.postgres_test_settings --verbosity=2
 
 No PostgreSQL server is required to collect the module — every test
 skips with a clear message on any other backend.  A CI run that intends to

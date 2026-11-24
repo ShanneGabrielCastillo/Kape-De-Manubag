@@ -243,8 +243,8 @@ def _safe_text_cell(ws, row, col, value):
 
 | View | Budget | Composition |
 |---|---|---|
-| `ingredient_usage` | **≤ 3** | 1 grouped aggregation + session/auth machinery (same allowance the dashboard widgets get). No per-row queries — snapshots and values() joins only. |
-| `cancellation_dispositions` | **≤ 3** | 1 grouped aggregation + auth machinery. No per-row queries. |
+| `ingredient_usage` | **≤ 4** | 1 grouped aggregation + session SELECT + user SELECT + MFA device SELECT from `MFAEnforcementMiddleware`. No per-row queries — snapshots and values() joins only. |
+| `cancellation_dispositions` | **≤ 4** | 1 grouped aggregation + session SELECT + user SELECT + MFA device SELECT from `MFAEnforcementMiddleware`. No per-row queries. |
 | `reports_index` | unchanged | Existing OPT-1 budget must keep passing (tests_query_performance.py regression). |
 | `export_excel` | existing + **1** | `.count()` cap check precedes workbook build; row loop unchanged (it already iterates one evaluated queryset). |
 
@@ -439,7 +439,7 @@ shape valid: consumption ⇒ `reserved_delta == on_hand_delta`).
 | IU-11 | `test_empty_state` | no consumption → "No consumption recorded in this period." |
 | IU-12 | `test_no_reconciliation_copy` | page contains the "not a stock reconciliation" note (A10 copy) |
 | IU-13 | `test_unknown_reason_code_fail_visible` | consumption row with `reason_code='weird'` renders under a visible "Weird" label rather than disappearing |
-| IU-14 | `test_query_budget` | with 40 items × 30 movements, `CaptureQueriesContext` count ≤ 3 |
+| IU-14 | `test_query_budget` | with 40 items × 30 movements, `CaptureQueriesContext` count ≤ 4 (includes the MFA device lookup) |
 
 ### 8.2 `apps/reports/tests_cancellation_dispositions.py`
 
@@ -460,7 +460,7 @@ read-only). Ledger values mirror real writes: `ledger` copied from the item's
 | CD-8 | `test_source_labels` | all three `source` values render their display labels |
 | CD-9 | `test_legacy_and_ingredient_both_listed` | one row per ledger → both groups populated |
 | CD-10 | `test_empty_state` | empty range → page-level empty state + per-ledger empty copy |
-| CD-11 | `test_query_budget` | with 40 orders × 3 items cancelled, query count ≤ 3 |
+| CD-11 | `test_query_budget` | with 40 orders × 3 items cancelled, query count ≤ 4 (includes the MFA device lookup) |
 | CD-12 | `test_deterministic_ordering` | two same-name products/rows render in stable order (name, then source) |
 
 ### 8.3 `apps/reports/tests_sales_hardening.py` (H1–H6)
